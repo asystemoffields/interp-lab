@@ -10,7 +10,11 @@ The target workflow:
 
 - Feature ranking from JSONL feature dumps and activation records.
 - Neuronpedia and SAE Lens feature import.
+- Goodfire semantic feature import.
+- Gemma Scope and Qwen-Scope wrappers for named SAE suites.
 - Hugging Face hidden-state activation export.
+- TransformerLens hook-cache activation export.
+- NNsight trace-path activation export.
 - On-demand SAE training for models with no public SAE.
 - Minimal and production SAE presets.
 - Token-level activation collection.
@@ -19,7 +23,11 @@ The target workflow:
 - SAE-latent causal validation through decoder-direction steering.
 - Hidden-dimension ablations and contrast-direction steering.
 - Specificity-aware strength sweeps using negative prompts as side-effect checks.
+- Confidence intervals, control rows, and a `strong_causal_score` for causal evidence.
 - Cross-model feature matching through text, activation, decoder, and causal fingerprints.
+- Attribution graph export from inspection reports.
+- Hugging Face artifact publishing for reports and records.
+- Scale planning for very large model runs.
 - Config-driven runs with manifests for reproducibility.
 
 ## Validated Smoke Path
@@ -49,11 +57,11 @@ The tool aims to be an orchestration layer for interpretability workflows:
 
 ## Near-Term Gaps
 
-- richer activation adapters for TransformerLens, nnsight, and local model wrappers;
 - criterion dataset generation from natural language;
-- causal validation suite with confidence intervals and controls;
 - HTML reports for feature cards and cross-model matches;
 - transfer tests for cross-model feature equivalence.
+- distributed SAE training manifests;
+- remote causal validation workers.
 
 ## Ask
 

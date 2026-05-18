@@ -27,3 +27,7 @@ __all__ = [
     "ToyVerbalizer",
     "Verbalizer",
 ]
+from oracle_sae.adapters.goodfire import GoodfireFeatureProvider
+from oracle_sae.adapters.scope import ScopeFeatureProvider
+
+__all__ = ["GoodfireFeatureProvider", "ScopeFeatureProvider"]

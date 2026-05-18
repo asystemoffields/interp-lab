@@ -12,12 +12,16 @@ from oracle_sae.schema import (
 
 from interp_lab.api import (
     SaeTrainingResult,
+    WrittenGraph,
     WrittenInspection,
     WrittenMatch,
+    attribution_graph,
     compare,
     doctor,
     inspect,
+    publish_hf_artifact,
     run,
+    scale_plan,
     train_sae,
 )
 
@@ -30,13 +34,17 @@ __all__ = [
     "InspectionReport",
     "MatchReport",
     "SaeTrainingResult",
+    "WrittenGraph",
     "WrittenInspection",
     "WrittenMatch",
+    "attribution_graph",
     "compare",
     "doctor",
     "inspect",
+    "publish_hf_artifact",
     "run",
+    "scale_plan",
     "train_sae",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

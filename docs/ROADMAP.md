@@ -18,18 +18,21 @@ The north star:
 
 - `SAELens` provider for public sparse autoencoders.
 - Neuronpedia feature import.
+- Goodfire feature import.
+- Gemma Scope and Qwen-Scope wrappers.
+- TransformerLens activation export.
+- NNsight activation export.
 - Crosscoder feature import.
-- Activation cache import from `TransformerLens` or `nnsight`.
-- Conversion scripts from activation caches to activation records.
 
 ## Milestone 3: Causal Testing
 
 - Intervention records import.
-- Ablation runner.
-- Amplification runner.
-- Activation patching runner.
-- Clamp-to-feature-value runner.
+- Hidden-dimension ablation export.
+- Contrast-direction steering export.
+- SAE-latent steering export.
 - Side-effect suite with unrelated criteria.
+- Control rows and confidence intervals.
+- Attribution graph export.
 
 ## Milestone 4: Natural-Language Oracles
 
@@ -42,6 +45,11 @@ The north star:
 
 - Config files for repeatable runs.
 - Dataset manifests and anchor prompt sets.
+- Streaming activation-record ranking.
+- Scale planning for large model runs.
+- Hugging Face artifact publishing.
 - HTML feature cards.
 - Match calibration against held-out intervention transfer.
 - Model-family comparison reports.
+- Distributed SAE training manifests.
+- Remote causal validation workers.

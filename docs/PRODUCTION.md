@@ -102,6 +102,10 @@ Config strings can reference `{MODEL}`, `{run_dir}`, `{config_dir}`, or `${MODEL
 - `PyYAML` for YAML configs
 - `torch` and `transformers` for Hugging Face activation collection and SAE training
 - `sae-lens` for public SAE Lens adapters
+- `transformer-lens` for hook-cache activation export
+- `nnsight` for trace-path activation export
+- `goodfire` for Goodfire feature search
+- `huggingface-hub` for artifact publishing
 
 Use JSON output in scripts:
 
@@ -126,12 +130,21 @@ interp-lab run examples/run_records.json
 For model-backed release examples:
 
 ```bash
-python -m pip install -e ".[hf,train]"
+python -m pip install -e ".[hf,train,transformerlens,nnsight,goodfire,publish]"
 interp-lab train-sae --help
 interp-lab export-hf-records --help
+interp-lab export-transformerlens-records --help
+interp-lab export-nnsight-records --help
+interp-lab publish-hf-artifact --help
 ```
 
 PyPI release details live in `docs/RELEASE.md`.
+
+## Large Runs
+
+Use `interp-lab plan-scale` before harvesting large activation corpora. For 1T+ models, keep the model runtime colocated with the infrastructure that can serve it, write sharded activation records or SAE records, then run interp-lab ranking and report generation over the evidence layer.
+
+Details live in `docs/SCALING.md`.
 
 ## Operator Notes
 

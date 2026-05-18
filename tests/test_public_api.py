@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from interp_lab import compare, doctor, inspect, run, train_sae
+from interp_lab import attribution_graph, compare, doctor, inspect, publish_hf_artifact, run, scale_plan, train_sae
 from interp_lab.artifacts import InspectionReport, load_inspection_report
 
 
@@ -86,6 +86,23 @@ def test_run_and_doctor_api(tmp_path: Path):
     assert run(config) == 0
     assert (run_dir / "manifest.json").exists()
     assert doctor()["tool"] == "interp-lab"
+
+
+def test_graph_publish_and_scale_public_apis(tmp_path: Path):
+    result = inspect("toy/a", "benchmark awareness", backend="toy", out=tmp_path / "inspect", top_k=2)
+    graph = attribution_graph(result.report)
+    written_graph = attribution_graph(result.json_path, out=tmp_path / "graph.json")
+    dry_run = publish_hf_artifact(
+        repo_id="user/interp-lab-demo",
+        paths=[result.json_path],
+        dry_run=True,
+    )
+    plan = scale_plan(model_params=1e12, tokens=1000, d_model=1024)
+
+    assert graph["schema_version"] == "interp-lab.attribution_graph.v1"
+    assert written_graph.json_path == tmp_path / "graph.json"
+    assert dry_run.uploaded == ["report.json"]
+    assert any("1T+" in item for item in plan["recommendations"])
 
 
 def _row(model: str, prompt_id: str, score: float, features: dict[str, float]):

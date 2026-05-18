@@ -89,12 +89,36 @@ diagnostics = doctor()
 print(diagnostics["ok"])
 ```
 
+## Graphs, Publishing, And Scale Plans
+
+```python
+from interp_lab import attribution_graph, publish_hf_artifact, scale_plan
+
+graph = attribution_graph("reports/model-a/report.json")
+
+publish_hf_artifact(
+    repo_id="your-user/interp-lab-demo",
+    paths=["reports/model-a"],
+    repo_type="dataset",
+    dry_run=True,
+)
+
+plan = scale_plan(
+    model_params=1e12,
+    tokens=1_000_000_000,
+    d_model=16384,
+    selected_layers=8,
+    latent_dim=1_048_576,
+    shards=4096,
+)
+```
+
 ## Extension Points
 
 Advanced users can import provider and runner classes from `interp_lab.providers`:
 
 ```python
-from interp_lab.providers import FeatureProvider, InterventionRunner
+from interp_lab.providers import FeatureProvider, GoodfireFeatureProvider, InterventionRunner
 ```
 
 Stable report and schema helpers live in `interp_lab.artifacts`:

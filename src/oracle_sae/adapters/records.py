@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from oracle_sae.math_utils import clamp, mean, pearson
+from oracle_sae.math_utils import clamp, mean
 from oracle_sae.schema import Criterion, FeatureEvidence
 
 LAYER_PATTERN = re.compile(r"(?:^|[^A-Za-z0-9])L(\d+)(?:[^A-Za-z0-9]|$)")
@@ -68,45 +69,46 @@ class ActivationRecordFeatureProvider:
         self.examples_per_feature = examples_per_feature
 
     def features_for(self, model: str, criterion: Criterion) -> list[FeatureEvidence]:
-        records = [record for record in self._load_records() if record.model == model]
-        if not records:
-            return []
-
-        activations: dict[str, list[float]] = defaultdict(list)
-        scores: dict[str, list[float]] = defaultdict(list)
-        examples: dict[str, list[tuple[float, float, str, str]]] = defaultdict(list)
+        stats_by_feature: dict[str, _FeatureStats] = {}
         metadata_by_feature: dict[str, dict[str, Any]] = defaultdict(dict)
 
-        for record in records:
+        for record in self._iter_records():
+            if record.model != model:
+                continue
             for feature_id, activation in record.features.items():
-                activations[feature_id].append(activation)
-                scores[feature_id].append(record.criterion_score)
-                if record.text:
-                    examples[feature_id].append(
-                        (activation, record.criterion_score, record.prompt_id, record.text)
-                    )
+                stats = stats_by_feature.setdefault(
+                    feature_id,
+                    _FeatureStats(signature_size=self.signature_size, examples_per_feature=self.examples_per_feature),
+                )
+                stats.add(activation, record.criterion_score, record.prompt_id, record.text)
                 metadata_by_feature[feature_id].update(record.feature_metadata.get(feature_id, {}))
+        if not stats_by_feature:
+            return []
+        for record in self._iter_records():
+            if record.model != model:
+                continue
+            for feature_id, activation in record.features.items():
+                stats = stats_by_feature.get(feature_id)
+                if stats is not None:
+                    stats.add_separation(activation, record.criterion_score)
 
         evidence_items: list[FeatureEvidence] = []
-        for feature_id, feature_activations in activations.items():
-            feature_scores = scores[feature_id]
-            signed_association = pearson(feature_activations, feature_scores)
-            signed_separation = _mean_separation(feature_activations, feature_scores)
+        for feature_id, stats in stats_by_feature.items():
+            signed_association = stats.pearson()
+            signed_separation = stats.mean_separation()
             metadata = dict(metadata_by_feature.get(feature_id, {}))
             metadata.update(
                 {
-                    "record_count": len(feature_activations),
+                    "record_count": stats.count,
                     "signed_association": round(signed_association, 6),
                     "signed_separation": round(signed_separation, 6),
-                    "criterion_score_mean": round(mean(feature_scores), 6),
+                    "criterion_score_mean": round(stats.mean_score(), 6),
                 }
             )
 
             label = str(metadata.get("label", feature_id))
             layer = _coerce_layer(metadata.get("layer"), feature_id)
             decoder_signature = _number_list(metadata.get("decoder_signature", []))
-            top_examples = _top_examples(examples.get(feature_id, []), self.examples_per_feature)
-            activation_signature = _signature(feature_activations, self.signature_size)
 
             evidence_items.append(
                 FeatureEvidence(
@@ -114,8 +116,8 @@ class ActivationRecordFeatureProvider:
                     model=model,
                     layer=layer,
                     label=label,
-                    examples=top_examples,
-                    activation_signature=activation_signature,
+                    examples=stats.top_examples(),
+                    activation_signature=stats.activation_signature(),
                     decoder_signature=decoder_signature,
                     causal_effects={
                         "criterion": round(abs(signed_association), 6),
@@ -131,7 +133,9 @@ class ActivationRecordFeatureProvider:
         return evidence_items
 
     def _load_records(self) -> list[ActivationRecord]:
-        records: list[ActivationRecord] = []
+        return list(self._iter_records())
+
+    def _iter_records(self):
         with self.path.open("r", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, start=1):
                 stripped = line.strip()
@@ -142,8 +146,7 @@ class ActivationRecordFeatureProvider:
                     data = json.loads(stripped)
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"{line_label}: invalid JSON: {exc.msg}") from exc
-                records.append(ActivationRecord.from_dict(data, line_label=line_label))
-        return records
+                yield ActivationRecord.from_dict(data, line_label=line_label)
 
 
 def _parse_features(raw_features: Any, *, line_label: str) -> tuple[dict[str, float], dict[str, dict[str, Any]]]:
@@ -198,6 +201,85 @@ def _top_examples(examples: list[tuple[float, float, str, str]], limit: int) -> 
             prefix = f"{prompt_id}: {prefix}"
         rendered.append(f"{prefix} | {text}")
     return rendered
+
+
+@dataclass
+class _FeatureStats:
+    signature_size: int
+    examples_per_feature: int
+    count: int = 0
+    sum_x: float = 0.0
+    sum_y: float = 0.0
+    sum_xx: float = 0.0
+    sum_yy: float = 0.0
+    sum_xy: float = 0.0
+    min_x: float | None = None
+    max_x: float | None = None
+    positive_sum: float = 0.0
+    positive_count: int = 0
+    negative_sum: float = 0.0
+    negative_count: int = 0
+    signature_values: list[float] = field(default_factory=list)
+    examples: list[tuple[float, float, str, str]] = field(default_factory=list)
+
+    def add(self, activation: float, score: float, prompt_id: str, text: str) -> None:
+        self.count += 1
+        self.sum_x += activation
+        self.sum_y += score
+        self.sum_xx += activation * activation
+        self.sum_yy += score * score
+        self.sum_xy += activation * score
+        self.min_x = activation if self.min_x is None else min(self.min_x, activation)
+        self.max_x = activation if self.max_x is None else max(self.max_x, activation)
+        if len(self.signature_values) < self.signature_size:
+            self.signature_values.append(activation)
+        self._add_example(activation, score, prompt_id, text)
+
+    def pearson(self) -> float:
+        if self.count < 2:
+            return 0.0
+        numerator = self.count * self.sum_xy - self.sum_x * self.sum_y
+        x_denominator = self.count * self.sum_xx - self.sum_x * self.sum_x
+        y_denominator = self.count * self.sum_yy - self.sum_y * self.sum_y
+        if x_denominator <= 0.0 or y_denominator <= 0.0:
+            return 0.0
+        return numerator / math.sqrt(x_denominator * y_denominator)
+
+    def mean_score(self) -> float:
+        return self.sum_y / self.count if self.count else 0.0
+
+    def mean_separation(self) -> float:
+        if not self.count or self.min_x is None or self.max_x is None:
+            return 0.0
+        if not self.positive_count or not self.negative_count:
+            return 0.0
+        spread = self.max_x - self.min_x
+        if spread == 0.0:
+            return 0.0
+        positive_mean = self.positive_sum / self.positive_count
+        negative_mean = self.negative_sum / self.negative_count
+        return clamp((positive_mean - negative_mean) / spread, -1.0, 1.0)
+
+    def add_separation(self, activation: float, score: float) -> None:
+        if score >= self.mean_score():
+            self.positive_sum += activation
+            self.positive_count += 1
+        else:
+            self.negative_sum += activation
+            self.negative_count += 1
+
+    def activation_signature(self) -> list[float]:
+        return _signature(self.signature_values, self.signature_size)
+
+    def top_examples(self) -> list[str]:
+        return _top_examples(self.examples, self.examples_per_feature)
+
+    def _add_example(self, activation: float, score: float, prompt_id: str, text: str) -> None:
+        if not text:
+            return
+        self.examples.append((activation, score, prompt_id, text))
+        self.examples.sort(key=lambda item: abs(item[0]), reverse=True)
+        del self.examples[self.examples_per_feature :]
 
 
 def _coerce_layer(raw_layer: Any, feature_id: str) -> int | None:

@@ -76,6 +76,9 @@ def render_inspection_markdown(report: InspectionReport) -> str:
         )
         if direction:
             lines.extend([direction, ""])
+        strong = card.causal_effects.get("strong_causal_score")
+        if strong is not None:
+            lines.extend([f"Strong causal score: {float(strong):.3f}", ""])
         intervention = _intervention_lines(card.metadata.get("interventions"))
         if intervention:
             lines.extend(intervention)
@@ -141,7 +144,7 @@ def _evidence_line(card) -> str:
         return "Evidence: activation/criterion association"
     if card.source in {"activation-records", "hf-hidden-state"}:
         return "Evidence: activation/criterion association"
-    if card.source in {"neuronpedia", "saelens"}:
+    if card.source in {"neuronpedia", "saelens", "goodfire", "gemma-scope", "qwen-scope"}:
         return f"Evidence: imported {card.source} feature evidence"
     return ""
 
@@ -157,6 +160,17 @@ def _intervention_lines(raw_value: object) -> list[str]:
     ]
     if side_effect is not None:
         lines[0] += f", mean side effect={float(side_effect):.3f}"
+    ci_low = raw_value.get("criterion_ci_low")
+    ci_high = raw_value.get("criterion_ci_high")
+    if ci_low is not None and ci_high is not None:
+        lines[0] += f", 95% CI=[{float(ci_low):.3f}, {float(ci_high):.3f}]"
+    controls = raw_value.get("controls")
+    if isinstance(controls, dict) and controls.get("count"):
+        lines.append(
+            "Controls: "
+            f"n={controls.get('count')}, "
+            f"mean abs effect={float(controls.get('mean_abs_directed_effect', 0.0)):.3f}"
+        )
     examples = raw_value.get("examples", [])
     if examples:
         lines.append("")

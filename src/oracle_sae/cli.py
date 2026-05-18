@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from oracle_sae.adapters.goodfire import GoodfireFeatureProvider
 from oracle_sae.adapters.interventions import InterventionRecordRunner
 from oracle_sae.adapters.jsonl import JsonlFeatureProvider
 from oracle_sae.adapters.neuronpedia import (
@@ -16,11 +17,15 @@ from oracle_sae.adapters.saelens import (
     load_saelens_feature_metadata,
     parse_feature_indices,
 )
+from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
+from oracle_sae.graphs import build_graph_export_parser, run_graph_export_from_args
 from oracle_sae.hf_contrast import build_contrast_parser, run_contrast_from_args
 from oracle_sae.hf_interventions import build_intervention_parser, run_interventions_from_args
+from oracle_sae.hf_publish import build_hf_publish_parser, run_hf_publish_from_args
 from oracle_sae.hf_records import build_export_parser, run_export_from_args
+from oracle_sae.nnsight_records import build_nnsight_export_parser, run_nnsight_export_from_args
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
     load_inspection_report,
@@ -30,6 +35,11 @@ from oracle_sae.reporting import (
 )
 from oracle_sae.runs import RunOptions, run_config_file
 from oracle_sae.sae_training import build_train_sae_parser, run_train_sae_from_args
+from oracle_sae.scaling import build_scale_plan_parser, run_scale_plan_from_args
+from oracle_sae.transformerlens_records import (
+    build_transformerlens_export_parser,
+    run_transformerlens_export_from_args,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     inspect.add_argument(
         "--backend",
         default="toy",
-        choices=["toy", "jsonl", "records", "neuronpedia", "saelens"],
+        choices=["toy", "jsonl", "records", "neuronpedia", "saelens", "goodfire", "scope"],
         help="Feature backend.",
     )
     inspect.add_argument("--features", help="JSONL feature dump for --backend jsonl.")
@@ -101,6 +111,44 @@ def build_parser() -> argparse.ArgumentParser:
         "--saelens-feature-metadata",
         help="Optional JSON object keyed by feature index with labels/examples.",
     )
+    inspect.add_argument(
+        "--goodfire-top-k",
+        type=int,
+        default=32,
+        help="Max Goodfire features to import.",
+    )
+    inspect.add_argument(
+        "--goodfire-api-key-env",
+        default="GOODFIRE_API_KEY",
+        help="Environment variable containing a Goodfire API key.",
+    )
+    inspect.add_argument(
+        "--scope-source",
+        choices=["gemma-scope", "qwen-scope"],
+        help="Named SAE suite for --backend scope.",
+    )
+    inspect.add_argument("--scope-release", help="SAELens release or HF repo for --backend scope.")
+    inspect.add_argument("--scope-sae-id", help="SAE id inside --scope-release.")
+    inspect.add_argument(
+        "--scope-feature-indexes",
+        help="Comma-separated feature indexes or inclusive ranges, e.g. 0,5,10-12.",
+    )
+    inspect.add_argument(
+        "--scope-max-features",
+        type=int,
+        default=32,
+        help="Max scope features to import when indexes are omitted.",
+    )
+    inspect.add_argument("--scope-device", default="cpu", help="Device passed to the scope loader.")
+    inspect.add_argument(
+        "--scope-force-download",
+        action="store_true",
+        help="Force the scope loader to re-download the pretrained SAE.",
+    )
+    inspect.add_argument(
+        "--scope-feature-metadata",
+        help="Optional JSON object keyed by feature index with labels/examples.",
+    )
     inspect.add_argument("--top-k", type=int, default=8, help="Number of feature cards to keep.")
     inspect.add_argument("--out", default="reports/inspection", help="Output directory.")
     inspect.set_defaults(func=run_inspect)
@@ -139,6 +187,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_hf.set_defaults(func=run_export_hf_records)
 
+    export_tl = subparsers.add_parser(
+        "export-transformerlens-records",
+        help="Export TransformerLens hook activations as activation records.",
+        parents=[build_transformerlens_export_parser()],
+        add_help=False,
+    )
+    export_tl.set_defaults(func=run_export_transformerlens_records)
+
+    export_nnsight = subparsers.add_parser(
+        "export-nnsight-records",
+        help="Export NNsight trace activations as activation records.",
+        parents=[build_nnsight_export_parser()],
+        add_help=False,
+    )
+    export_nnsight.set_defaults(func=run_export_nnsight_records)
+
     hf_interventions = subparsers.add_parser(
         "export-hf-interventions",
         help="Export HF hidden-dimension ablations as intervention records.",
@@ -162,6 +226,30 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     train_sae.set_defaults(func=run_train_sae)
+
+    publish_hf = subparsers.add_parser(
+        "publish-hf-artifact",
+        help="Publish reports and artifacts to Hugging Face Hub.",
+        parents=[build_hf_publish_parser()],
+        add_help=False,
+    )
+    publish_hf.set_defaults(func=run_publish_hf_artifact)
+
+    export_graph = subparsers.add_parser(
+        "export-attribution-graph",
+        help="Export a report as an attribution graph JSON.",
+        parents=[build_graph_export_parser()],
+        add_help=False,
+    )
+    export_graph.set_defaults(func=run_export_attribution_graph)
+
+    scale_plan = subparsers.add_parser(
+        "plan-scale",
+        help="Estimate storage and execution shape for large model runs.",
+        parents=[build_scale_plan_parser()],
+        add_help=False,
+    )
+    scale_plan.set_defaults(func=run_plan_scale)
 
     return parser
 
@@ -251,6 +339,18 @@ def run_export_hf_records(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_export_transformerlens_records(args: argparse.Namespace) -> int:
+    path = run_transformerlens_export_from_args(args)
+    print(f"Wrote {path}")
+    return 0
+
+
+def run_export_nnsight_records(args: argparse.Namespace) -> int:
+    path = run_nnsight_export_from_args(args)
+    print(f"Wrote {path}")
+    return 0
+
+
 def run_export_hf_interventions(args: argparse.Namespace) -> int:
     path = run_interventions_from_args(args)
     print(f"Wrote {path}")
@@ -271,6 +371,26 @@ def run_train_sae(args: argparse.Namespace) -> int:
     print(f"Wrote {artifact_path}")
     if records_path is not None:
         print(f"Wrote {records_path}")
+    return 0
+
+
+def run_publish_hf_artifact(args: argparse.Namespace) -> int:
+    result = run_hf_publish_from_args(args)
+    prefix = "Would upload" if result.dry_run else "Uploaded"
+    print(f"{prefix} {len(result.uploaded)} artifact path(s) to {result.repo_type}/{result.repo_id}")
+    for path in result.uploaded:
+        print(f"- {path}")
+    return 0
+
+
+def run_export_attribution_graph(args: argparse.Namespace) -> int:
+    path = run_graph_export_from_args(args)
+    print(f"Wrote {path}")
+    return 0
+
+
+def run_plan_scale(args: argparse.Namespace) -> int:
+    run_scale_plan_from_args(args)
     return 0
 
 
@@ -295,6 +415,33 @@ def _provider_from_args(args: argparse.Namespace):
             )
         client = NeuronpediaClient(base_url=args.neuronpedia_base_url)
         return NeuronpediaFeatureProvider(refs, client=client)
+    if args.backend == "goodfire":
+        return GoodfireFeatureProvider(
+            top_k=args.goodfire_top_k,
+            api_key_env=args.goodfire_api_key_env,
+        )
+    if args.backend == "scope":
+        if not args.scope_source:
+            raise SystemExit("--scope-source is required with --backend scope")
+        if not args.scope_release:
+            raise SystemExit("--scope-release is required with --backend scope")
+        if not args.scope_sae_id:
+            raise SystemExit("--scope-sae-id is required with --backend scope")
+        try:
+            feature_indices = parse_feature_indices(args.scope_feature_indexes)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+        metadata = load_saelens_feature_metadata(args.scope_feature_metadata)
+        return ScopeFeatureProvider(
+            source=args.scope_source,
+            release=args.scope_release,
+            sae_id=args.scope_sae_id,
+            feature_indices=feature_indices,
+            max_features=args.scope_max_features,
+            device=args.scope_device,
+            force_download=args.scope_force_download,
+            feature_metadata=metadata,
+        )
     if not args.saelens_release:
         raise SystemExit("--saelens-release is required with --backend saelens")
     if not args.saelens_sae_id:

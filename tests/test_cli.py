@@ -130,6 +130,72 @@ def test_doctor_command_reports_environment(capsys):
     assert output["tool"] == "interp-lab"
 
 
+def test_publish_hf_artifact_dry_run_command(tmp_path: Path, capsys):
+    artifact = tmp_path / "report.json"
+    artifact.write_text("{}", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "publish-hf-artifact",
+            "--repo-id",
+            "user/interp-lab-demo",
+            "--path",
+            str(artifact),
+            "--path-in-repo",
+            "reports/report.json",
+            "--dry-run",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Would upload 1 artifact" in output
+    assert "reports/report.json" in output
+
+
+def test_plan_scale_command_outputs_estimate(capsys):
+    exit_code = main(
+        [
+            "plan-scale",
+            "--model-params",
+            "1e12",
+            "--tokens",
+            "1000",
+            "--d-model",
+            "1024",
+            "--selected-layers",
+            "2",
+            "--latent-dim",
+            "4096",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "interp-lab scale plan" in output
+    assert "1T+" in output
+
+
+def test_export_attribution_graph_command(tmp_path: Path):
+    exit_code = main(["demo", "--out", str(tmp_path / "demo")])
+    assert exit_code == 0
+
+    graph = tmp_path / "graph.json"
+    exit_code = main(
+        [
+            "export-attribution-graph",
+            "--report",
+            str(tmp_path / "demo" / "model-a" / "report.json"),
+            "--out",
+            str(graph),
+        ]
+    )
+
+    data = json.loads(graph.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert data["schema_version"] == "interp-lab.attribution_graph.v1"
+
+
 def test_run_config_writes_manifest_and_report(tmp_path: Path):
     records = tmp_path / "records.jsonl"
     rows = [

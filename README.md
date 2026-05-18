@@ -34,7 +34,7 @@ right = inspect(
 matches = compare(left.report, right.report, out="reports/matches.json")
 ```
 
-The package includes toy, JSONL, activation-record, Neuronpedia, SAE Lens, Hugging Face activation, contrast-direction, and on-demand SAE training paths. It is shaped around adapter interfaces for real activation hooks, SAEs, crosscoders, and natural-language autoencoders.
+The package includes toy, JSONL, activation-record, Neuronpedia, SAE Lens, Goodfire, Gemma Scope/Qwen-Scope, Hugging Face, TransformerLens, NNsight, contrast-direction, and on-demand SAE training paths. It is shaped around adapter interfaces for real activation hooks, SAEs, crosscoders, and natural-language autoencoders.
 
 ## Why This Exists
 
@@ -92,6 +92,30 @@ interp-lab export-hf-records \
   --model distilgpt2 \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
   --out reports/real-small/distilgpt2-unit/records.jsonl
+```
+
+Export activation records from TransformerLens hooks:
+
+```bash
+python -m pip install "interp-lab[transformerlens]"
+
+interp-lab export-transformerlens-records \
+  --model gpt2-small \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --layers 6 \
+  --out reports/tl/gpt2-small-layer6-records.jsonl
+```
+
+Export activation records from NNsight traces:
+
+```bash
+python -m pip install "interp-lab[nnsight]"
+
+interp-lab export-nnsight-records \
+  --model openai-community/gpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --activation-path transformer.h[6].output[0] \
+  --out reports/nnsight/gpt2-layer6-records.jsonl
 ```
 
 Export ablation records for top hidden-dimension features:
@@ -226,6 +250,67 @@ interp-lab inspect \
   --out reports/saelens-feature
 ```
 
+Import Goodfire features:
+
+```bash
+python -m pip install "interp-lab[goodfire]"
+
+interp-lab inspect \
+  --model meta-llama/Llama-3.1-8B-Instruct \
+  --criterion "formal writing style" \
+  --backend goodfire \
+  --goodfire-top-k 20 \
+  --out reports/goodfire-formal-style
+```
+
+Import selected features from named SAE suites:
+
+```bash
+interp-lab inspect \
+  --model google/gemma-2-2b \
+  --criterion "numeric measurements" \
+  --backend scope \
+  --scope-source gemma-scope \
+  --scope-release <saelens-release-or-hf-repo> \
+  --scope-sae-id blocks.6.hook_resid_post \
+  --scope-feature-indexes 650 \
+  --out reports/gemma-scope-feature
+```
+
+Publish reports or artifact folders to Hugging Face Hub:
+
+```bash
+python -m pip install "interp-lab[publish]"
+
+interp-lab publish-hf-artifact \
+  --repo-id your-user/interp-lab-demo \
+  --repo-type dataset \
+  --path reports/real-small/distilgpt2-unit \
+  --tag sae \
+  --tag activation-records
+```
+
+Export a report as a causal attribution graph:
+
+```bash
+interp-lab export-attribution-graph \
+  --report reports/eval-awareness/report.json \
+  --out reports/eval-awareness/graph.json \
+  --include-similarity-edges
+```
+
+Plan a large run before harvesting activations:
+
+```bash
+interp-lab plan-scale \
+  --model-params 1e12 \
+  --tokens 1000000000 \
+  --d-model 16384 \
+  --selected-layers 8 \
+  --latent-dim 1048576 \
+  --shards 4096
+```
+
 ## JSONL Feature Dumps
 
 You can inspect a model from a JSONL feature dump:
@@ -256,7 +341,7 @@ Each row should look like this:
 
 ## Activation Records
 
-Activation records are the most flexible import path. Use them when you have per-prompt feature activations from an SAE, crosscoder, NLA probe, Neuronpedia script, or custom hook.
+Activation records are the most flexible import path. Use them when you have per-prompt or per-token feature activations from an SAE, crosscoder, NLA probe, Neuronpedia script, remote activation harvester, or custom hook.
 
 Each row is one prompt or token position:
 
@@ -278,7 +363,7 @@ Each row is one prompt or token position:
 }
 ```
 
-interp-lab aggregates records by feature, estimates criterion association, preserves top activating examples, and creates a feature fingerprint for matching. Add intervention records when you want causal evidence in the report.
+interp-lab streams records by feature, estimates criterion association from sufficient statistics, preserves top activating examples, and creates a feature fingerprint for matching. Add intervention records when you want causal evidence in the report.
 
 ## Intervention Records
 
@@ -303,6 +388,8 @@ Hugging Face exporters use positive-scored prompts for criterion effects and neg
 
 Rows with a `criterion` field are matched to the CLI criterion by normalized exact text. Omit `criterion`, or pass `--allow-intervention-criterion-mismatch`, when you want to reuse intervention files across paraphrased criteria.
 
+Control rows can be included in the same intervention JSONL by setting `metadata.control_type` to values such as `random_feature`, `matched_frequency`, or `placebo`. Reports include confidence intervals, control-effect summaries, and a `strong_causal_score`.
+
 ## Neuronpedia
 
 The Neuronpedia backend reads the public feature JSON endpoint documented by Neuronpedia. It accepts refs like:
@@ -318,6 +405,31 @@ Neuronpedia features include dashboard evidence, autointerp explanations, top ac
 ## SAE Lens
 
 The SAE Lens backend is optional because it can pull in heavier model tooling. It uses `SAE.from_pretrained_with_cfg_and_sparsity()` when available, extracts selected decoder rows, and wraps them as interp-lab feature evidence. For criterion ranking over real prompts, export SAE activations into activation records and run the `records` backend.
+
+## Ecosystem Bridges
+
+- Goodfire: semantic feature search through the Goodfire SDK.
+- Neuronpedia: public feature endpoint import.
+- SAE Lens: pretrained SAE decoder-row import.
+- Gemma Scope and Qwen-Scope: named wrappers around SAE-suite metadata.
+- TransformerLens: hook-cache activation export.
+- NNsight: trace-based activation export for local or remote model execution.
+- Hugging Face Hub: artifact publishing for reports, records, interventions, and trained SAE metadata.
+
+Each bridge is optional. The base package keeps the portable JSONL evidence formats stable, while heavier model tooling lives behind extras.
+
+## Scaling
+
+For large models, use interp-lab as the orchestration and evidence layer:
+
+1. Harvest activations through the environment that can run the model.
+2. Write sharded activation records or SAE feature records.
+3. Train or import SAEs against those shards.
+4. Stream records into inspection reports.
+5. Run causal validation in resumable batches.
+6. Publish reports, graphs, and artifacts with manifests.
+
+`interp-lab plan-scale` estimates activation storage, SAE parameter storage, shard size, and recommended execution shape. See `docs/SCALING.md` for the 1T+ path.
 
 ## Architecture
 
@@ -342,13 +454,12 @@ Adapters are intentionally small:
 
 ## Roadmap
 
-- `TransformerLens` and `nnsight` activation adapters.
-- `SAELens` feature provider.
-- Neuronpedia feature import.
 - Natural Language Autoencoder adapter.
 - Crosscoder training and import.
 - Rich HTML feature cards.
-- Intervention runners for ablation, clamping, activation patching, and steering.
+- Distributed SAE training manifests.
+- Remote causal validation workers.
+- Feature transfer tests across model families.
 
 ## Development
 

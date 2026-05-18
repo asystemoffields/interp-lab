@@ -31,6 +31,7 @@ INPUT_PATH_KEYS = {
     "left",
     "right",
     "report",
+    "path",
 }
 
 
@@ -176,6 +177,16 @@ def _top_level_inspect_args(config: dict[str, Any]) -> dict[str, Any]:
         "saelens_device",
         "saelens_force_download",
         "saelens_feature_metadata",
+        "goodfire_top_k",
+        "goodfire_api_key_env",
+        "scope_source",
+        "scope_release",
+        "scope_sae_id",
+        "scope_feature_indexes",
+        "scope_max_features",
+        "scope_device",
+        "scope_force_download",
+        "scope_feature_metadata",
         "top_k",
     }
     args = {key: value for key, value in config.items() if key in allowed}

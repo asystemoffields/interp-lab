@@ -27,6 +27,8 @@ Current providers:
 - `ActivationRecordFeatureProvider`: per-prompt feature activations aggregated into feature evidence.
 - `NeuronpediaFeatureProvider`: public Neuronpedia feature dashboards imported as evidence.
 - `SAELensFeatureProvider`: selected pretrained SAE Lens features imported as evidence.
+- `GoodfireFeatureProvider`: semantically searched Goodfire features imported as evidence.
+- `ScopeFeatureProvider`: named wrappers for Gemma Scope and Qwen-Scope metadata.
 
 Planned providers:
 
@@ -35,7 +37,7 @@ Planned providers:
 
 ## Activation Records
 
-Activation records make the tool useful across model families before a library-specific adapter exists. Each row contains a prompt, a criterion score, and a set of feature activations.
+Activation records make the tool useful across model families before a library-specific adapter exists. Each row contains a prompt or token position, a criterion score, and a set of feature activations.
 
 The provider estimates:
 
@@ -45,6 +47,16 @@ The provider estimates:
 - activation signatures over anchor prompts.
 
 Those estimates become `causal_effects` and fingerprint components. Direct interventions should still be run when a model adapter is available.
+
+The provider streams JSONL and keeps per-feature sufficient statistics, compact signatures, and top examples. This keeps the ranking path usable for sharded activation corpora produced by large remote harvesters.
+
+Current activation exporters:
+
+- Hugging Face hidden states.
+- TransformerLens hook caches.
+- NNsight trace paths.
+- HF contrast directions.
+- On-demand SAE latent activations.
 
 ## Verbalizers
 
@@ -59,6 +71,8 @@ The score schema is intentionally simple:
 - `criterion`: how much the feature moves the requested criterion.
 - `specificity`: how targeted the effect appears.
 - `side_effect`: how much unrelated behavior moves.
+- `strong_causal_score`: criterion effect adjusted by side effects and control interventions.
+- `criterion_ci_low` / `criterion_ci_high`: a normal-approximation confidence interval over intervention rows.
 
 Runners can implement ablation, amplification, clamping, activation patching, or text-level estimates.
 
@@ -75,6 +89,8 @@ The Hugging Face exporters currently generate two useful intervention families:
 - contrast-direction steering, with optional strength sweeps that select the setting with the best criterion effect minus side-effect movement.
 
 Prompt datasets with `criterion_score` support specificity checks: positive-scored prompts estimate the requested criterion effect, and negative-scored prompts estimate side effects.
+
+Intervention records can also carry controls through `metadata.control_type`, with values such as `random_feature`, `matched_frequency`, or `placebo`. Reports preserve target effects, control effects, and confidence intervals.
 
 ## On-Demand SAE Training
 
@@ -121,6 +137,23 @@ score =
 The weights are defaults. Real projects should tune them against held-out transfer tests.
 
 Match reports preserve labels and signed effects. Candidate equivalents with opposite signed causal effects are downgraded by the causal fingerprint component and surfaced in the markdown report.
+
+## Attribution Graphs
+
+`export-attribution-graph` converts a report into a graph JSON with:
+
+- a criterion node;
+- feature nodes;
+- feature-to-criterion causal edges;
+- optional feature-to-feature fingerprint-similarity edges.
+
+The graph schema keeps effect sizes, signed effects, specificity, side effects, strong causal scores, confidence intervals, and intervention record counts.
+
+## Scaling Model
+
+For very large models, interp-lab treats model execution as an adapter concern. A 1T+ model can harvest activations through a colocated runtime, Goodfire-style API, NNsight remote execution, or a custom cluster job. The stable interchange layer is sharded activation records, SAE artifacts, intervention records, and manifests.
+
+`plan-scale` estimates activation storage, per-shard size, SAE parameter storage, and recommended execution shape before a harvesting run begins.
 
 ## Adapter Contract
 

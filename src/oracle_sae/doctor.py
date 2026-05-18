@@ -18,6 +18,20 @@ def collect_diagnostics() -> dict[str, Any]:
         _check_module("torch", required=False, purpose="HF activation export and SAE training"),
         _check_module("transformers", required=False, purpose="Hugging Face model adapters"),
         _check_module("sae_lens", package_name="sae-lens", required=False, purpose="SAE Lens adapter"),
+        _check_module(
+            "transformer_lens",
+            package_name="transformer-lens",
+            required=False,
+            purpose="TransformerLens activation export",
+        ),
+        _check_module("nnsight", required=False, purpose="NNsight activation export"),
+        _check_module("goodfire", required=False, purpose="Goodfire feature adapter"),
+        _check_module(
+            "huggingface_hub",
+            package_name="huggingface-hub",
+            required=False,
+            purpose="Hugging Face artifact publishing",
+        ),
     ]
     return {
         "tool": "interp-lab",
@@ -75,6 +89,8 @@ def _check_package(name: str, *, required: bool) -> dict[str, Any]:
         version = importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
         version = __version__ if name == "interp-lab" else None
+    if name == "interp-lab" and version is not None:
+        version = __version__
     return {
         "name": name,
         "ok": version is not None,

@@ -25,6 +25,7 @@ This checklist is for publishing interp-lab as a useful public tool.
 - `docs/RELEASE.md`: PyPI trusted publishing and release process.
 - `docs/REAL_MODEL_SMOKE_TEST.md`: validated small-model path.
 - `docs/ARCHITECTURE.md`: adapter contracts and core loop.
+- `docs/SCALING.md`: sharded activation and 1T+ execution shape.
 - `docs/ROADMAP.md`: next research and engineering milestones.
 
 ## Demo Packet
@@ -39,9 +40,9 @@ For outreach, send:
 
 ## First Issues To File
 
-- Add TransformerLens activation cache adapter.
-- Add nnsight activation hook adapter.
 - Add HTML feature-card report.
 - Add criterion dataset generator.
-- Add causal validation suite with confidence intervals.
 - Add cross-model transfer validation.
+- Add distributed SAE training manifests.
+- Add remote causal validation workers.
+- Add Goodfire activation-record export once the desired API shape is settled.

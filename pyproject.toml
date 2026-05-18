@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "interp-lab"
-version = "0.1.0"
+version = "0.2.0"
 description = "Criterion-driven feature discovery, explanation, causal testing, and cross-model activation matching."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -54,8 +54,31 @@ hf = [
   "torch>=2.0",
   "transformers>=4.38"
 ]
+transformerlens = [
+  "torch>=2.0",
+  "transformer-lens>=3.0"
+]
+nnsight = [
+  "torch>=2.0",
+  "nnsight>=0.6"
+]
+goodfire = [
+  "goodfire>=0.3"
+]
+publish = [
+  "huggingface-hub>=1.0"
+]
 train = [
   "torch>=2.0"
+]
+all = [
+  "torch>=2.0",
+  "transformers>=4.38",
+  "sae-lens>=6.0",
+  "transformer-lens>=3.0",
+  "nnsight>=0.6",
+  "goodfire>=0.3",
+  "huggingface-hub>=1.0"
 ]
 
 [project.scripts]

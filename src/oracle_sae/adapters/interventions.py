@@ -26,6 +26,14 @@ PROMOTING_WHEN_SCORE_RISES = {
     "patch_in",
     "steer",
 }
+CONTROL_TYPES = {
+    "control",
+    "matched_frequency",
+    "negative_control",
+    "placebo",
+    "random",
+    "random_feature",
+}
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,17 @@ class InterventionRecord:
             return self.intervention_score - self.baseline_score
         return self.intervention_score - self.baseline_score
 
+    @property
+    def control_type(self) -> str | None:
+        value = self.metadata.get("control_type")
+        if value is None:
+            return None
+        return str(value).lower()
+
+    @property
+    def is_control(self) -> bool:
+        return self.control_type in CONTROL_TYPES
+
 
 class InterventionRecordRunner:
     """Aggregates external causal intervention results for feature ranking."""
@@ -93,7 +112,9 @@ class InterventionRecordRunner:
         self._records: list[InterventionRecord] | None = None
 
     def estimate(self, evidence: FeatureEvidence, criterion: Criterion) -> dict[str, float]:
-        effects = self._matching_records(evidence, criterion)
+        matching = self._matching_records(evidence, criterion)
+        effects = [record for record in matching if not record.is_control]
+        controls = [record for record in matching if record.is_control]
         fallback = (
             dict(self.fallback_runner.estimate(evidence, criterion))
             if self.fallback_runner is not None
@@ -118,9 +139,15 @@ class InterventionRecordRunner:
             for record in effects
             if record.side_effect_score is not None
         ]
+        control_summary = _summarize_control_records(controls)
         causal_strength = abs(mean(directed))
         side_effect = mean(side_effects) if side_effects else float(fallback.get("side_effect", 0.0))
         specificity = max(0.0, causal_strength - side_effect)
+        strong_causal_score = max(
+            0.0,
+            specificity - control_summary.get("mean_abs_directed_effect", 0.0),
+        )
+        ci_low, ci_high = _mean_confidence_interval(directed)
 
         merged = dict(fallback)
         merged.update(
@@ -128,15 +155,25 @@ class InterventionRecordRunner:
                 "criterion": round(clamp(causal_strength), 6),
                 "specificity": round(clamp(specificity), 6),
                 "side_effect": round(clamp(side_effect), 6),
+                "strong_causal_score": round(clamp(strong_causal_score), 6),
                 "signed_causal_effect": round(mean(directed), 6),
                 "raw_intervention_delta": round(mean(raw_deltas), 6),
                 "intervention_record_count": float(len(effects)),
+                "control_record_count": float(len(controls)),
+                "control_mean_abs_effect": round(
+                    clamp(control_summary.get("mean_abs_directed_effect", 0.0)),
+                    6,
+                ),
+                "criterion_ci_low": round(ci_low, 6),
+                "criterion_ci_high": round(ci_high, 6),
             }
         )
         return merged
 
     def metadata_for(self, evidence: FeatureEvidence, criterion: Criterion) -> dict[str, Any]:
-        effects = self._matching_records(evidence, criterion)
+        matching = self._matching_records(evidence, criterion)
+        effects = [record for record in matching if not record.is_control]
+        controls = [record for record in matching if record.is_control]
         if not effects:
             return {}
         directed = [record.directed_effect for record in effects]
@@ -145,6 +182,8 @@ class InterventionRecordRunner:
             for record in effects
             if record.side_effect_score is not None
         ]
+        ci_low, ci_high = _mean_confidence_interval(directed)
+        control_summary = _summarize_control_records(controls)
         summary = {
             "count": len(effects),
             "mean_directed_effect": round(mean(directed), 6),
@@ -152,7 +191,10 @@ class InterventionRecordRunner:
             "stdev_directed_effect": round(statistics.pstdev(directed), 6)
             if len(directed) > 1
             else 0.0,
+            "criterion_ci_low": round(ci_low, 6),
+            "criterion_ci_high": round(ci_high, 6),
             "mean_side_effect": round(mean(side_effects), 6) if side_effects else None,
+            "controls": control_summary,
             "examples": [_render_record(record) for record in effects[:5]],
         }
         return {"interventions": summary}
@@ -216,3 +258,41 @@ def _render_record(record: InterventionRecord) -> str:
         f"intervention={record.intervention_score:.3f}, "
         f"directed_effect={record.directed_effect:.3f}"
     )
+
+
+def _mean_confidence_interval(values: list[float]) -> tuple[float, float]:
+    if not values:
+        return 0.0, 0.0
+    average = mean(values)
+    if len(values) == 1:
+        return average, average
+    stdev = statistics.pstdev(values)
+    half_width = 1.96 * stdev / (len(values) ** 0.5)
+    return average - half_width, average + half_width
+
+
+def _summarize_control_records(records: list[InterventionRecord]) -> dict[str, Any]:
+    if not records:
+        return {
+            "count": 0,
+            "mean_directed_effect": 0.0,
+            "mean_abs_directed_effect": 0.0,
+            "by_type": {},
+        }
+    directed = [record.directed_effect for record in records]
+    by_type: dict[str, list[float]] = defaultdict(list)
+    for record in records:
+        by_type[record.control_type or "control"].append(record.directed_effect)
+    return {
+        "count": len(records),
+        "mean_directed_effect": round(mean(directed), 6),
+        "mean_abs_directed_effect": round(mean([abs(value) for value in directed]), 6),
+        "by_type": {
+            control_type: {
+                "count": len(values),
+                "mean_directed_effect": round(mean(values), 6),
+                "mean_abs_directed_effect": round(mean([abs(value) for value in values]), 6),
+            }
+            for control_type, values in sorted(by_type.items())
+        },
+    }

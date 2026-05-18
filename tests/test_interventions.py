@@ -48,6 +48,8 @@ def test_intervention_runner_aggregates_causal_effects(tmp_path: Path):
     assert effects["side_effect"] == 0.04
     assert metadata["interventions"]["count"] == 2
     assert metadata["interventions"]["examples"][0].startswith("p1: ablate")
+    assert effects["strong_causal_score"] == 0.41
+    assert effects["criterion_ci_low"] < effects["criterion_ci_high"]
 
 
 def test_intervention_runner_filters_criterion_by_default(tmp_path: Path):
@@ -124,3 +126,39 @@ def test_summarize_intervention_file_counts_types(tmp_path: Path):
     path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
 
     assert summarize_intervention_file(path) == {"ablate": 1, "amplify": 1}
+
+
+def test_intervention_runner_tracks_control_records(tmp_path: Path):
+    path = tmp_path / "interventions.jsonl"
+    rows = [
+        {
+            "model": "m",
+            "feature_id": "L1:F1",
+            "criterion": "criterion",
+            "intervention": "ablate",
+            "baseline_score": 0.8,
+            "intervention_score": 0.2,
+            "side_effect_score": 0.05,
+        },
+        {
+            "model": "m",
+            "feature_id": "L1:F1",
+            "criterion": "criterion",
+            "intervention": "ablate",
+            "baseline_score": 0.5,
+            "intervention_score": 0.4,
+            "metadata": {"control_type": "random_feature"},
+        },
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    evidence = FeatureEvidence(feature_id="L1:F1", model="m", layer=1, label="feature")
+
+    runner = InterventionRecordRunner(path)
+    effects = runner.estimate(evidence, HeuristicCriterionCompiler().compile("criterion"))
+    metadata = runner.metadata_for(evidence, HeuristicCriterionCompiler().compile("criterion"))
+
+    assert effects["criterion"] == 0.6
+    assert effects["control_record_count"] == 1.0
+    assert effects["control_mean_abs_effect"] == 0.1
+    assert effects["strong_causal_score"] == 0.45
+    assert metadata["interventions"]["controls"]["by_type"]["random_feature"]["count"] == 1

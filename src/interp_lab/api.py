@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from oracle_sae.adapters.goodfire import GoodfireFeatureProvider
 from oracle_sae.adapters.interventions import InterventionRecordRunner
 from oracle_sae.adapters.jsonl import JsonlFeatureProvider
 from oracle_sae.adapters.neuronpedia import (
@@ -17,9 +18,12 @@ from oracle_sae.adapters.saelens import (
     load_saelens_feature_metadata,
     parse_feature_indices,
 )
+from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.cli import main as _cli_main
 from oracle_sae.doctor import collect_diagnostics
+from oracle_sae.graphs import build_attribution_graph, export_attribution_graph
+from oracle_sae.hf_publish import PublishResult, publish_hf_artifact as _publish_hf_artifact
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
     load_inspection_report,
@@ -34,6 +38,7 @@ from oracle_sae.sae_training import (
     train_sae_from_records,
 )
 from oracle_sae.schema import InspectionReport, MatchReport
+from oracle_sae.scaling import ScalePlan
 
 
 @dataclass(frozen=True)
@@ -55,6 +60,12 @@ class SaeTrainingResult:
     artifact_path: Path
     records_path: Path | None = None
     interventions_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class WrittenGraph:
+    graph: dict[str, Any]
+    json_path: Path | None = None
 
 
 def inspect(
@@ -79,6 +90,16 @@ def inspect(
     saelens_device: str = "cpu",
     saelens_force_download: bool = False,
     saelens_feature_metadata: str | Path | None = None,
+    goodfire_top_k: int = 32,
+    goodfire_api_key_env: str = "GOODFIRE_API_KEY",
+    scope_source: str | None = None,
+    scope_release: str | None = None,
+    scope_sae_id: str | None = None,
+    scope_feature_indexes: str | None = None,
+    scope_max_features: int = 32,
+    scope_device: str = "cpu",
+    scope_force_download: bool = False,
+    scope_feature_metadata: str | Path | None = None,
 ) -> InspectionReport | WrittenInspection:
     """Rank and explain features for a natural-language criterion.
 
@@ -100,6 +121,16 @@ def inspect(
         saelens_device=saelens_device,
         saelens_force_download=saelens_force_download,
         saelens_feature_metadata=saelens_feature_metadata,
+        goodfire_top_k=goodfire_top_k,
+        goodfire_api_key_env=goodfire_api_key_env,
+        scope_source=scope_source,
+        scope_release=scope_release,
+        scope_sae_id=scope_sae_id,
+        scope_feature_indexes=scope_feature_indexes,
+        scope_max_features=scope_max_features,
+        scope_device=scope_device,
+        scope_force_download=scope_force_download,
+        scope_feature_metadata=scope_feature_metadata,
     )
     intervention_runner = _intervention_runner(
         interventions=interventions,
@@ -284,6 +315,99 @@ def doctor() -> dict[str, Any]:
     return collect_diagnostics()
 
 
+def attribution_graph(
+    report: InspectionReport | str | Path,
+    *,
+    out: str | Path | None = None,
+    include_similarity_edges: bool = False,
+    similarity_threshold: float = 0.9,
+) -> dict[str, Any] | WrittenGraph:
+    """Build or write an attribution graph from an inspection report."""
+    if isinstance(report, InspectionReport):
+        graph = build_attribution_graph(
+            report,
+            include_similarity_edges=include_similarity_edges,
+            similarity_threshold=similarity_threshold,
+        )
+        if out is None:
+            return graph
+        path = Path(out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        import json
+
+        path.write_text(json.dumps(graph, indent=2, sort_keys=True), encoding="utf-8")
+        return WrittenGraph(graph=graph, json_path=path)
+    if out is None:
+        loaded = load_inspection_report(report)
+        return build_attribution_graph(
+            loaded,
+            include_similarity_edges=include_similarity_edges,
+            similarity_threshold=similarity_threshold,
+        )
+    path = export_attribution_graph(
+        report_path=report,
+        out_path=out,
+        include_similarity_edges=include_similarity_edges,
+        similarity_threshold=similarity_threshold,
+    )
+    graph = build_attribution_graph(
+        load_inspection_report(report),
+        include_similarity_edges=include_similarity_edges,
+        similarity_threshold=similarity_threshold,
+    )
+    return WrittenGraph(graph=graph, json_path=path)
+
+
+def publish_hf_artifact(
+    *,
+    repo_id: str,
+    paths: list[str | Path],
+    repo_type: str = "dataset",
+    private: bool = False,
+    path_in_repo: str | None = None,
+    revision: str | None = None,
+    commit_message: str = "Upload interp-lab artifact",
+    card_title: str | None = None,
+    tags: list[str] | None = None,
+    dry_run: bool = False,
+) -> PublishResult:
+    """Publish reports, records, or artifact folders to Hugging Face Hub."""
+    return _publish_hf_artifact(
+        repo_id=repo_id,
+        paths=paths,
+        repo_type=repo_type,
+        private=private,
+        path_in_repo=path_in_repo,
+        revision=revision,
+        commit_message=commit_message,
+        card_title=card_title,
+        tags=tags,
+        dry_run=dry_run,
+    )
+
+
+def scale_plan(
+    *,
+    model_params: float,
+    tokens: int,
+    d_model: int,
+    selected_layers: int = 1,
+    latent_dim: int = 131072,
+    dtype: str = "bf16",
+    shards: int = 256,
+) -> dict[str, Any]:
+    """Estimate activation storage and execution shape for a large run."""
+    return ScalePlan(
+        model_params=model_params,
+        tokens=tokens,
+        d_model=d_model,
+        selected_layers=selected_layers,
+        latent_dim=latent_dim,
+        dtype=dtype,
+        shards=shards,
+    ).to_dict()
+
+
 def _feature_provider(
     *,
     backend: str,
@@ -299,6 +423,16 @@ def _feature_provider(
     saelens_device: str,
     saelens_force_download: bool,
     saelens_feature_metadata: str | Path | None,
+    goodfire_top_k: int,
+    goodfire_api_key_env: str,
+    scope_source: str | None,
+    scope_release: str | None,
+    scope_sae_id: str | None,
+    scope_feature_indexes: str | None,
+    scope_max_features: int,
+    scope_device: str,
+    scope_force_download: bool,
+    scope_feature_metadata: str | Path | None,
 ):
     if backend == "toy":
         return ToyFeatureProvider()
@@ -334,7 +468,29 @@ def _feature_provider(
             force_download=saelens_force_download,
             feature_metadata=load_saelens_feature_metadata(saelens_feature_metadata),
         )
-    raise ValueError("backend must be one of: toy, jsonl, records, neuronpedia, saelens")
+    if backend == "goodfire":
+        return GoodfireFeatureProvider(
+            top_k=goodfire_top_k,
+            api_key_env=goodfire_api_key_env,
+        )
+    if backend == "scope":
+        if scope_source is None:
+            raise ValueError("scope_source is required with backend='scope'")
+        if scope_release is None:
+            raise ValueError("scope_release is required with backend='scope'")
+        if scope_sae_id is None:
+            raise ValueError("scope_sae_id is required with backend='scope'")
+        return ScopeFeatureProvider(
+            source=scope_source,
+            release=scope_release,
+            sae_id=scope_sae_id,
+            feature_indices=parse_feature_indices(scope_feature_indexes),
+            max_features=scope_max_features,
+            device=scope_device,
+            force_download=scope_force_download,
+            feature_metadata=load_saelens_feature_metadata(scope_feature_metadata),
+        )
+    raise ValueError("backend must be one of: toy, jsonl, records, neuronpedia, saelens, goodfire, scope")
 
 
 def _intervention_runner(
