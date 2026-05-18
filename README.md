@@ -14,6 +14,26 @@ interp-lab inspect \
   --out reports/eval-awareness
 ```
 
+Python API:
+
+```python
+from interp_lab import compare, inspect
+
+left = inspect(
+    "toy/model-a",
+    "the model is aware it is being evaluated",
+    backend="toy",
+    out="reports/model-a",
+)
+right = inspect(
+    "toy/model-b",
+    "the model is aware it is being evaluated",
+    backend="toy",
+    out="reports/model-b",
+)
+matches = compare(left.report, right.report, out="reports/matches.json")
+```
+
 The package includes toy, JSONL, activation-record, Neuronpedia, SAE Lens, Hugging Face activation, contrast-direction, and on-demand SAE training paths. It is shaped around adapter interfaces for real activation hooks, SAEs, crosscoders, and natural-language autoencoders.
 
 ## Why This Exists

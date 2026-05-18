@@ -55,7 +55,7 @@ train = [
 interp-lab = "oracle_sae.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/oracle_sae"]
+packages = ["src/oracle_sae", "src/interp_lab"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

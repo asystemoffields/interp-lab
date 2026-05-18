@@ -7,6 +7,15 @@ interp-lab doctor
 interp-lab run examples/run_records.json
 ```
 
+For Python users, the same path is available through `interp_lab`:
+
+```python
+from interp_lab import doctor, run
+
+print(doctor()["ok"])
+run("examples/run_records.json")
+```
+
 ## Supported Platforms
 
 CI runs on:
