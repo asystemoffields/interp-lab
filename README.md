@@ -1,8 +1,10 @@
-# Oracle SAE
+# interp-lab
 
-Oracle SAE is an open-source starter kit for criterion-driven mechanistic interpretability.
+interp-lab is an open-source starter kit for criterion-driven mechanistic interpretability.
 
 Give it a model, a criterion, and feature evidence. It ranks internal features, explains them, tests causal impact, and searches for equivalent features in other models.
+
+The current CLI command is `oracle-sae`.
 
 ```bash
 oracle-sae inspect \
@@ -256,7 +258,7 @@ Each row is one prompt or token position:
 }
 ```
 
-Oracle SAE aggregates records by feature, estimates criterion association, preserves top activating examples, and creates a feature fingerprint for matching. Add intervention records when you want causal evidence in the report.
+interp-lab aggregates records by feature, estimates criterion association, preserves top activating examples, and creates a feature fingerprint for matching. Add intervention records when you want causal evidence in the report.
 
 ## Intervention Records
 
@@ -291,11 +293,11 @@ https://www.neuronpedia.org/gpt2-small/6-res_scefr-ajt/650
 https://www.neuronpedia.org/api/feature/gpt2-small/6-res_scefr-ajt/650
 ```
 
-Neuronpedia features include dashboard evidence, autointerp explanations, top activating examples, logits, sparsity, and related metadata. Oracle SAE converts those into feature evidence and fingerprints.
+Neuronpedia features include dashboard evidence, autointerp explanations, top activating examples, logits, sparsity, and related metadata. interp-lab converts those into feature evidence and fingerprints.
 
 ## SAE Lens
 
-The SAE Lens backend is optional because it can pull in heavier model tooling. It uses `SAE.from_pretrained_with_cfg_and_sparsity()` when available, extracts selected decoder rows, and wraps them as Oracle SAE feature evidence. For criterion ranking over real prompts, export SAE activations into activation records and run the `records` backend.
+The SAE Lens backend is optional because it can pull in heavier model tooling. It uses `SAE.from_pretrained_with_cfg_and_sparsity()` when available, extracts selected decoder rows, and wraps them as interp-lab feature evidence. For criterion ranking over real prompts, export SAE activations into activation records and run the `records` backend.
 
 ## Architecture
 
