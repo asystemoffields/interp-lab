@@ -1,0 +1,8 @@
+{
+  "out": "reports/example-records-run",
+  "model": "toy-records/model",
+  "criterion": "benchmark awareness",
+  "backend": "records",
+  "records": "examples/activation_records.jsonl",
+  "top_k": 5
+}

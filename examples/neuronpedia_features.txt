@@ -1,0 +1,2 @@
+# One feature ref per line. URLs work too.
+gpt2-small@6-res_scefr-ajt:650

@@ -1,0 +1,336 @@
+# Oracle SAE
+
+Oracle SAE is an open-source starter kit for criterion-driven mechanistic interpretability.
+
+Give it a model, a criterion, and feature evidence. It ranks internal features, explains them, tests causal impact, and searches for equivalent features in other models.
+
+```bash
+oracle-sae inspect \
+  --model google/gemma-2-2b \
+  --criterion "the model is aware it is being evaluated" \
+  --backend toy \
+  --out reports/eval-awareness
+```
+
+The package includes toy, JSONL, activation-record, Neuronpedia, SAE Lens, Hugging Face activation, contrast-direction, and on-demand SAE training paths. It is shaped around adapter interfaces for real activation hooks, SAEs, crosscoders, and natural-language autoencoders.
+
+## Why This Exists
+
+The goal is to get close to an "oracular SAE" workflow:
+
+1. Compile a natural-language criterion into examples and scores.
+2. Collect candidate features from SAEs, crosscoders, NLA explanations, or feature dumps.
+3. Rank features by criterion association, specificity, causal evidence, and stability.
+4. Build a feature fingerprint that can be compared across models.
+5. Validate cross-model equivalents with interventions.
+
+## Commands
+
+Check your local environment:
+
+```bash
+oracle-sae doctor
+```
+
+Run a criterion inspection:
+
+```bash
+oracle-sae inspect --model toy/a --criterion "Python security bug" --backend toy
+```
+
+Compare two reports:
+
+```bash
+oracle-sae match \
+  --left reports/a/report.json \
+  --right reports/b/report.json \
+  --out reports/matches.json
+```
+
+This writes both `matches.json` and a readable markdown report with labels, component scores, and signed effects when present.
+
+Create a demo run:
+
+```bash
+oracle-sae demo --out reports/demo
+```
+
+Run a reproducible workflow from config:
+
+```bash
+oracle-sae run examples/run_records.json
+```
+
+This writes a run manifest with the tool version, platform, input hashes, executed steps, and output paths. Run configs can be JSON, TOML, or YAML.
+
+Export activation records from a real Hugging Face model:
+
+```bash
+oracle-sae export-hf-records \
+  --model distilgpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --out reports/real-small/distilgpt2-unit/records.jsonl
+```
+
+Export ablation records for top hidden-dimension features:
+
+```bash
+oracle-sae export-hf-interventions \
+  --model distilgpt2 \
+  --report reports/real-small/distilgpt2-unit/inspect/report.json \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --criterion "the next token should be a physical measurement unit" \
+  --out reports/real-small/distilgpt2-unit/interventions.jsonl
+```
+
+Export a contrast-direction feature and calibrate a causal steering strength:
+
+```bash
+oracle-sae export-hf-contrast \
+  --model distilgpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --criterion "the next token should be a physical measurement unit" \
+  --records-out reports/real-small/distilgpt2-unit/contrast-records.jsonl \
+  --interventions-out reports/real-small/distilgpt2-unit/contrast-interventions.jsonl \
+  --strength-sweep "3,10,30,100"
+```
+
+`export-hf-contrast` learns a positive-minus-negative hidden-state direction from scored prompts. When `--strength-sweep` is set, it tests each steering strength on positive prompts, uses negative prompts as side-effect checks, and writes intervention rows for the most specific setting.
+
+Train an SAE when no public SAE exists:
+
+```bash
+oracle-sae train-sae \
+  --preset minimal \
+  --hf-model distilgpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --layer 6 \
+  --latent-dim 64 \
+  --epochs 50 \
+  --out reports/real-small/distilgpt2-unit/trained-sae/sae.json \
+  --records-out reports/real-small/distilgpt2-unit/trained-sae/records.jsonl
+```
+
+Use `--preset minimal` for quick local exploration. It trains on one activation row per prompt and keeps the compute footprint small.
+
+Use `--preset production` when you want a stronger artifact:
+
+```bash
+oracle-sae train-sae \
+  --preset production \
+  --hf-model distilgpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --layer 6 \
+  --latent-dim 1024 \
+  --out reports/production-sae/sae.json \
+  --records-out reports/production-sae/records.jsonl \
+  --causal-out reports/production-sae/interventions.jsonl \
+  --criterion "the next token should be a physical measurement unit"
+```
+
+Production mode uses token-level activation rows, top-k sparse codes, held-out reconstruction metrics, dead-latent reporting, and optional SAE-latent steering interventions when `--causal-out` is provided. You can override any preset choice, such as `--epochs`, `--batch-size`, `--top-k`, or `--max-records`.
+
+Then inspect the learned SAE latents with the normal records backend:
+
+```bash
+oracle-sae inspect \
+  --model distilgpt2 \
+  --criterion "the next token should be a physical measurement unit" \
+  --backend records \
+  --records reports/real-small/distilgpt2-unit/trained-sae/records.jsonl \
+  --out reports/real-small/distilgpt2-unit/trained-sae/inspect
+```
+
+`train-sae` can also train from an existing activation-record JSONL:
+
+```bash
+oracle-sae train-sae \
+  --records reports/real-small/distilgpt2-unit/records.jsonl \
+  --model distilgpt2 \
+  --latent-dim 256 \
+  --method auto \
+  --out reports/sae/sae.json \
+  --records-out reports/sae/records.jsonl
+```
+
+Training uses PyTorch when available. `--method fallback` uses a deterministic sparse dictionary trainer, which is useful for small runs, constrained environments, and smoke tests. Set `--latent-dim` directly for any SAE width, or use `--expansion-factor` to scale from the input dimension. By default, the exported activation records write every learned latent; `--top-k-features` can compress large runs. `--max-records` bounds training on large JSONL streams with deterministic reservoir sampling.
+
+Rank features from per-prompt activation records:
+
+```bash
+oracle-sae inspect \
+  --model my/model \
+  --criterion "the model is aware it is being evaluated" \
+  --backend records \
+  --records examples/activation_records.jsonl \
+  --out reports/eval-awareness
+```
+
+Add causal intervention evidence:
+
+```bash
+oracle-sae inspect \
+  --model my/model \
+  --criterion "the model is aware it is being evaluated" \
+  --backend records \
+  --records examples/activation_records.jsonl \
+  --interventions examples/interventions.jsonl \
+  --out reports/eval-awareness-causal
+```
+
+Import selected features from Neuronpedia:
+
+```bash
+oracle-sae inspect \
+  --model gpt2-small \
+  --criterion "mentions of measurements in meters or feet" \
+  --backend neuronpedia \
+  --neuronpedia-feature gpt2-small@6-res_scefr-ajt:650 \
+  --out reports/neuronpedia-measurements
+```
+
+Import selected features from a pretrained SAE Lens SAE:
+
+```bash
+python -m pip install "oracle-sae[saelens]"
+
+oracle-sae inspect \
+  --model gpt2-small \
+  --criterion "numeric measurements" \
+  --backend saelens \
+  --saelens-release gpt2-small-res-jb \
+  --saelens-sae-id blocks.6.hook_resid_pre \
+  --saelens-feature-indexes 650 \
+  --out reports/saelens-feature
+```
+
+## JSONL Feature Dumps
+
+You can inspect a model from a JSONL feature dump:
+
+```bash
+oracle-sae inspect \
+  --model my/model \
+  --criterion "refusal behavior" \
+  --features examples/features.jsonl \
+  --out reports/refusal
+```
+
+Each row should look like this:
+
+```json
+{
+  "feature_id": "L18:F104921",
+  "model": "my/model",
+  "layer": 18,
+  "label": "constructed benchmark or test scenario",
+  "examples": ["This looks like a test case...", "The prompt appears artificial..."],
+  "activation_signature": [0.9, 0.2, 0.1],
+  "decoder_signature": [0.1, -0.4, 0.3],
+  "causal_effects": {"criterion": 0.34, "refusal": 0.12},
+  "source": "sae"
+}
+```
+
+## Activation Records
+
+Activation records are the most flexible import path. Use them when you have per-prompt feature activations from an SAE, crosscoder, NLA probe, Neuronpedia script, or custom hook.
+
+Each row is one prompt or token position:
+
+```json
+{
+  "model": "my/model",
+  "prompt_id": "eval-1",
+  "text": "This looks like a benchmark task...",
+  "criterion_score": 1.0,
+  "features": [
+    {
+      "feature_id": "L18:F104921",
+      "activation": 0.92,
+      "label": "constructed benchmark or test scenario",
+      "layer": 18,
+      "decoder_signature": [0.1, -0.4, 0.3, 0.2]
+    }
+  ]
+}
+```
+
+Oracle SAE aggregates records by feature, estimates criterion association, preserves top activating examples, and creates a feature fingerprint for matching. Add intervention records when you want causal evidence in the report.
+
+## Intervention Records
+
+Intervention records let the report distinguish correlational evidence from causal evidence. Each row is one ablation, amplification, clamp, patch, or steering run:
+
+```json
+{
+  "model": "my/model",
+  "feature_id": "L18:F104921",
+  "criterion": "the model is aware it is being evaluated",
+  "intervention": "ablate",
+  "prompt_id": "eval-1",
+  "baseline_score": 0.92,
+  "intervention_score": 0.31,
+  "side_effect_score": 0.04
+}
+```
+
+For `ablate`, `zero`, `remove`, `knockout`, `suppress`, and `clamp_down`, a score drop is treated as evidence the feature promotes the criterion. For `amplify`, `steer`, `patch`, `patch_in`, `clamp`, and `clamp_up`, a score rise is treated as evidence the feature promotes the criterion.
+
+Hugging Face exporters use positive-scored prompts for criterion effects and negative-scored prompts for side-effect estimates. That makes a report prefer features that move the requested behavior while leaving nearby unrelated prompts stable.
+
+Rows with a `criterion` field are matched to the CLI criterion by normalized exact text. Omit `criterion`, or pass `--allow-intervention-criterion-mismatch`, when you want to reuse intervention files across paraphrased criteria.
+
+## Neuronpedia
+
+The Neuronpedia backend reads the public feature JSON endpoint documented by Neuronpedia. It accepts refs like:
+
+```text
+gpt2-small@6-res_scefr-ajt:650
+https://www.neuronpedia.org/gpt2-small/6-res_scefr-ajt/650
+https://www.neuronpedia.org/api/feature/gpt2-small/6-res_scefr-ajt/650
+```
+
+Neuronpedia features include dashboard evidence, autointerp explanations, top activating examples, logits, sparsity, and related metadata. Oracle SAE converts those into feature evidence and fingerprints.
+
+## SAE Lens
+
+The SAE Lens backend is optional because it can pull in heavier model tooling. It uses `SAE.from_pretrained_with_cfg_and_sparsity()` when available, extracts selected decoder rows, and wraps them as Oracle SAE feature evidence. For criterion ranking over real prompts, export SAE activations into activation records and run the `records` backend.
+
+## Architecture
+
+The core object is a `FeatureFingerprint`:
+
+```text
+activation signature
++ text explanation embedding
++ decoder signature
++ causal effect vector
++ examples
+```
+
+Cross-model equivalence is scored by fingerprint similarity. A match becomes interesting when it also preserves intervention effects.
+
+Adapters are intentionally small:
+
+- `FeatureProvider`: returns candidate features.
+- `Verbalizer`: adds NLA-style text explanations.
+- `InterventionRunner`: ablates, amplifies, patches, or estimates causal effects.
+- `CriterionCompiler`: turns natural-language criteria into examples and scoring hints.
+
+## Roadmap
+
+- `TransformerLens` and `nnsight` activation adapters.
+- `SAELens` feature provider.
+- Neuronpedia feature import.
+- Natural Language Autoencoder adapter.
+- Crosscoder training and import.
+- Rich HTML feature cards.
+- Intervention runners for ablation, clamping, activation patching, and steering.
+
+## Development
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest
+```

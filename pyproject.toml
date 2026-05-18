@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oracle-sae"
+version = "0.1.0"
+description = "Criterion-driven feature discovery, explanation, causal testing, and cross-model activation matching."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+  { name = "Oracle SAE contributors" }
+]
+keywords = [
+  "mechanistic-interpretability",
+  "sparse-autoencoders",
+  "activation-steering",
+  "crosscoders",
+  "natural-language-autoencoders"
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+dependencies = [
+  "PyYAML>=6.0",
+  "tomli>=2.0; python_version < '3.11'"
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "pytest>=8.0"
+]
+saelens = [
+  "sae-lens>=6.0"
+]
+hf = [
+  "torch>=2.0",
+  "transformers>=4.38"
+]
+train = [
+  "torch>=2.0"
+]
+
+[project.scripts]
+oracle-sae = "oracle_sae.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/oracle_sae"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

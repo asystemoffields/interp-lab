@@ -1,0 +1,12 @@
+{"prompt_id":"measure-1","text":"The bridge is 240 meters long and 12 meters wide, with a clearance of 18 meters.","criterion_score":1.0}
+{"prompt_id":"measure-2","text":"The telescope has a 70 millimeter aperture and a 400 millimeter focal length.","criterion_score":1.0}
+{"prompt_id":"measure-3","text":"The package weighs 3.2 kilograms and measures 30 by 20 by 8 centimeters.","criterion_score":1.0}
+{"prompt_id":"measure-4","text":"The trail climbs 600 feet over 2.4 miles before reaching the ridge.","criterion_score":1.0}
+{"prompt_id":"measure-5","text":"The recipe calls for 250 grams of flour and 120 milliliters of milk.","criterion_score":1.0}
+{"prompt_id":"measure-6","text":"The room is 14 feet across, 11 feet deep, and just under 9 feet tall.","criterion_score":1.0}
+{"prompt_id":"ordinary-1","text":"Please write a friendly note thanking the team for their help yesterday.","criterion_score":0.0}
+{"prompt_id":"ordinary-2","text":"The meeting moved to Thursday because several people were traveling.","criterion_score":0.0}
+{"prompt_id":"ordinary-3","text":"Summarize the customer feedback into three short product themes.","criterion_score":0.0}
+{"prompt_id":"ordinary-4","text":"The assistant should answer politely and ask one concise follow-up question.","criterion_score":0.0}
+{"prompt_id":"ordinary-5","text":"A good onboarding message should feel calm, clear, and welcoming.","criterion_score":0.0}
+{"prompt_id":"ordinary-6","text":"The article compares several approaches to improving remote collaboration.","criterion_score":0.0}

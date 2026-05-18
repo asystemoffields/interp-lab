@@ -1,0 +1,257 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from oracle_sae.hf_records import PromptRecord, load_prompt_records, parse_layers, split_prompt_record_indexes
+from oracle_sae.hf_contrast import (
+    _contrast_direction,
+    _register_gpt2_steering,
+    _select_best_strength,
+    parse_strength_sweep,
+)
+from oracle_sae.hf_interventions import (
+    _register_gpt2_hidden_ablations,
+    append_hf_group_activation_record,
+    parse_target_tokens,
+)
+
+
+def test_parse_layers_supports_ranges():
+    assert parse_layers("0,2,4-6") == [0, 2, 4, 5, 6]
+    assert parse_layers(None) is None
+    with pytest.raises(ValueError):
+        parse_layers("3-1")
+
+
+def test_load_prompt_records(tmp_path: Path):
+    path = tmp_path / "prompts.jsonl"
+    path.write_text(
+        json.dumps({"prompt_id": "p1", "text": "hello", "criterion_score": 1.0}) + "\n",
+        encoding="utf-8",
+    )
+
+    records = load_prompt_records(path)
+
+    assert records[0].prompt_id == "p1"
+    assert records[0].criterion_score == 1.0
+
+
+def test_parse_target_tokens_adds_leading_spaces():
+    assert parse_target_tokens(["meters, feet", " kilogram"]) == [
+        " meters",
+        " feet",
+        " kilogram",
+    ]
+    assert parse_target_tokens(None) is None
+
+
+def test_parse_strength_sweep():
+    assert parse_strength_sweep("3, 10, -30") == [3.0, 10.0, -30.0]
+    assert parse_strength_sweep(None) is None
+
+
+def test_split_prompt_record_indexes():
+    prompts = [
+        PromptRecord(prompt_id="positive", text="a", criterion_score=1.0),
+        PromptRecord(prompt_id="negative", text="b", criterion_score=0.0),
+    ]
+
+    assert split_prompt_record_indexes(prompts) == ({0}, {1})
+
+
+def test_select_best_strength_uses_specificity():
+    selected, summary = _select_best_strength(
+        {
+            3.0: [
+                {"baseline_score": 0.1, "intervention_score": 0.2},
+                {"baseline_score": 0.1, "intervention_score": 0.0},
+            ],
+            10.0: [
+                {"baseline_score": 0.1, "intervention_score": 0.3},
+                {"baseline_score": 0.1, "intervention_score": 0.2},
+            ],
+        },
+        {
+            3.0: [0.0],
+            10.0: [0.2],
+        },
+    )
+
+    assert selected == 3.0
+    assert summary == [
+        {
+            "steer_strength": 3.0,
+            "mean_directed_effect": 0.0,
+            "mean_side_effect": 0.0,
+            "specificity": 0.0,
+        },
+        {
+            "steer_strength": 10.0,
+            "mean_directed_effect": 0.15,
+            "mean_side_effect": 0.2,
+            "specificity": -0.05,
+        },
+    ]
+
+
+def test_append_hf_group_activation_record_orients_by_signed_effect(tmp_path: Path):
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "model": "m",
+                "criterion": {"text": "criterion"},
+                "cards": [
+                    {
+                        "feature_id": "L1:D1",
+                        "model": "m",
+                        "layer": 1,
+                        "label": "positive",
+                        "explanation": "",
+                        "importance": 1,
+                        "association": 1,
+                        "specificity": 1,
+                        "causal_effect": 1,
+                        "stability": 1,
+                        "examples": [],
+                        "source": "hf-hidden-state",
+                        "fingerprint": {
+                            "feature_id": "L1:D1",
+                            "model": "m",
+                            "layer": 1,
+                            "text": "",
+                            "text_vector": [],
+                            "activation_signature": [],
+                            "decoder_signature": [],
+                            "causal_vector": [],
+                        },
+                        "metadata": {},
+                        "causal_effects": {"signed_association": 1},
+                    },
+                    {
+                        "feature_id": "L1:D2",
+                        "model": "m",
+                        "layer": 1,
+                        "label": "negative",
+                        "explanation": "",
+                        "importance": 1,
+                        "association": 1,
+                        "specificity": 1,
+                        "causal_effect": 1,
+                        "stability": 1,
+                        "examples": [],
+                        "source": "hf-hidden-state",
+                        "fingerprint": {
+                            "feature_id": "L1:D2",
+                            "model": "m",
+                            "layer": 1,
+                            "text": "",
+                            "text_vector": [],
+                            "activation_signature": [],
+                            "decoder_signature": [],
+                            "causal_vector": [],
+                        },
+                        "metadata": {},
+                        "causal_effects": {"signed_association": -1},
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    records = tmp_path / "records.jsonl"
+    records.write_text(
+        json.dumps(
+            {
+                "model": "m",
+                "prompt_id": "p",
+                "text": "text",
+                "criterion_score": 1,
+                "features": [
+                    {"feature_id": "L1:D1", "activation": 2},
+                    {"feature_id": "L1:D2", "activation": -4},
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "grouped.jsonl"
+
+    group_id = append_hf_group_activation_record(
+        records_path=records,
+        report_path=report,
+        out_path=out,
+        group_top_k=2,
+    )
+
+    row = json.loads(out.read_text(encoding="utf-8"))
+    group_feature = row["features"][-1]
+    assert group_feature["feature_id"] == group_id
+    assert group_feature["activation"] == 3
+
+
+def test_contrast_direction_points_from_negative_to_positive():
+    direction = _contrast_direction(
+        vectors=[[2.0, 0.0], [4.0, 0.0], [-2.0, 0.0], [-4.0, 0.0]],
+        scores=[1.0, 1.0, 0.0, 0.0],
+    )
+
+    assert direction == [1.0, 0.0]
+
+
+def test_final_hidden_layer_interventions_hook_final_layer_norm():
+    model = _FakeGpt2Model(block_count=2)
+
+    handle = _register_gpt2_hidden_ablations(model, [(2, 7, 0.0)])
+
+    assert len(model.transformer.h[1].hooks) == 0
+    assert len(model.transformer.ln_f.hooks) == 1
+    handle.remove()
+    assert model.transformer.ln_f.removed == 1
+
+
+def test_final_hidden_layer_steering_hooks_final_layer_norm():
+    model = _FakeGpt2Model(block_count=2)
+
+    handle = _register_gpt2_steering(model, 2, direction=_FakeDirection(), strength=1.0)
+
+    assert len(model.transformer.h[1].hooks) == 0
+    assert len(model.transformer.ln_f.hooks) == 1
+    handle.remove()
+    assert model.transformer.ln_f.removed == 1
+
+
+class _FakeGpt2Model:
+    def __init__(self, block_count: int):
+        self.transformer = _FakeTransformer(block_count)
+
+
+class _FakeTransformer:
+    def __init__(self, block_count: int):
+        self.h = [_FakeHookable() for _ in range(block_count)]
+        self.ln_f = _FakeHookable()
+
+
+class _FakeHookable:
+    def __init__(self):
+        self.hooks = []
+        self.removed = 0
+
+    def register_forward_hook(self, hook):
+        self.hooks.append(hook)
+        return _FakeHandle(self)
+
+
+class _FakeHandle:
+    def __init__(self, module: _FakeHookable):
+        self.module = module
+
+    def remove(self):
+        self.module.removed += 1
+
+
+class _FakeDirection:
+    def to(self, _dtype):
+        return self
