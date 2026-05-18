@@ -118,6 +118,7 @@ python -m pip install -e ".[dev]"
 python -m pytest
 python -m compileall src tests
 python -m build
+python -m twine check dist/*
 interp-lab doctor
 interp-lab run examples/run_records.json
 ```
@@ -129,6 +130,8 @@ python -m pip install -e ".[hf,train]"
 interp-lab train-sae --help
 interp-lab export-hf-records --help
 ```
+
+PyPI release details live in `docs/RELEASE.md`.
 
 ## Operator Notes
 

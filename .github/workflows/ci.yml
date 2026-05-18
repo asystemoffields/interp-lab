@@ -24,3 +24,5 @@ jobs:
         run: python -m compileall src tests
       - name: Build package
         run: python -m build
+      - name: Check package metadata
+        run: python -m twine check dist/*

@@ -22,6 +22,7 @@ This checklist is for publishing interp-lab as a useful public tool.
 
 - README: quickstart, commands, real-model example, adapter overview.
 - `docs/PRODUCTION.md`: run configs, manifests, platform support.
+- `docs/RELEASE.md`: PyPI trusted publishing and release process.
 - `docs/REAL_MODEL_SMOKE_TEST.md`: validated small-model path.
 - `docs/ARCHITECTURE.md`: adapter contracts and core loop.
 - `docs/ROADMAP.md`: next research and engineering milestones.
