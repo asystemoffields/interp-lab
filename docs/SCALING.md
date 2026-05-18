@@ -44,6 +44,17 @@ The model runtime can be a hosted Goodfire/NNsight-style service, an internal in
 
 ## Planning Storage
 
+First, profile the environment that might run the job:
+
+```bash
+interp-lab profile-env \
+  --path /data/interp-lab-artifacts \
+  --out reports/env-profile.json \
+  --json
+```
+
+The profile includes CPU count, RAM, disk space for the inspected path, local CUDA/MPS accelerators when visible, optional adapter packages, sanitized API-key presence checks, route options, alerts, and agent next actions.
+
 Use:
 
 ```bash
@@ -54,6 +65,7 @@ interp-lab plan-scale \
   --selected-layers 8 \
   --latent-dim 1M \
   --dtype bf16 \
+  --from-env \
   --target-shard-size 64GB \
   --out reports/scale-plan.json
 ```
@@ -76,7 +88,30 @@ Profiles:
 - `remote-api`: model execution through an API or external service.
 - `frontier-lab`: colocated activation harvesting for very large models.
 
-Use `--profile auto` for default selection, or choose a profile explicitly. Use `--json` for stdout JSON and `--out` for a reusable plan file.
+Use `--profile auto` for default selection, or choose a profile explicitly. Use `--from-env` to profile the current environment during planning, and `--env-profile other-machine.json` when the target environment was profiled elsewhere. The environment advisory can suggest a starting route and still leave the researcher free to choose local CPU, GPU, cluster, remote API, or frontier-lab execution with `--profile`. Use `--json` for stdout JSON and `--out` for a reusable plan file.
+
+## Environment Routing
+
+The route advisory is intentionally structured for both humans and agents:
+
+```json
+{
+  "schema_version": "interp-lab.env_profile.v1",
+  "routing": {
+    "suggested_profile": "single-gpu",
+    "suggested_reason": "a local accelerator was detected",
+    "options": [
+      {"profile": "local-cpu", "status": "available"},
+      {"profile": "single-gpu", "status": "available"},
+      {"profile": "cluster", "status": "candidate"},
+      {"profile": "remote-api", "status": "candidate"},
+      {"profile": "frontier-lab", "status": "candidate"}
+    ]
+  }
+}
+```
+
+This lets an agent alert a user with context like: "Looks like this is a CPU-only laptop with 32 GB RAM and 80 GB free disk; for this run, consider a remote API or cluster route." The saved JSON can then be passed directly into `plan-scale`.
 
 ## Robustness Rules
 

@@ -1,7 +1,17 @@
 import json
 from pathlib import Path
 
-from interp_lab import attribution_graph, compare, doctor, inspect, publish_hf_artifact, run, scale_plan, train_sae
+from interp_lab import (
+    attribution_graph,
+    compare,
+    doctor,
+    inspect,
+    profile_environment,
+    publish_hf_artifact,
+    run,
+    scale_plan,
+    train_sae,
+)
 from interp_lab.artifacts import InspectionReport, load_inspection_report
 
 
@@ -86,6 +96,7 @@ def test_run_and_doctor_api(tmp_path: Path):
     assert run(config) == 0
     assert (run_dir / "manifest.json").exists()
     assert doctor()["tool"] == "interp-lab"
+    assert profile_environment(tmp_path)["schema_version"] == "interp-lab.env_profile.v1"
 
 
 def test_graph_publish_and_scale_public_apis(tmp_path: Path):

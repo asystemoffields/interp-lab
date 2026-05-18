@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from oracle_sae.env_profile import (
+    PROFILE_ORDER,
+    collect_environment_profile,
+    environment_summary,
+    load_environment_profile,
+)
+
 
 DTYPE_BYTES = {
     "fp32": 4,
@@ -85,16 +92,27 @@ class ScalePlan:
     causal_prompts: int = 256
     interventions_per_feature: int = 2
     train_batch_size: int = 4096
+    environment_profile: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         dtype_bytes = DTYPE_BYTES[self.dtype]
         activation_bytes = self.tokens * self.d_model * self.selected_layers * dtype_bytes
-        profile, profile_reason = _resolve_profile(self.profile, self.model_params, activation_bytes)
+        profile, profile_reason = _resolve_profile(
+            self.profile,
+            self.model_params,
+            activation_bytes,
+            environment_profile=self.environment_profile,
+        )
         preset = PROFILE_PRESETS[profile]
         artifact_format = (
             str(preset["artifact_format"]) if self.artifact_format == "auto" else self.artifact_format
         )
-        target_shard_size_bytes = self.target_shard_size_bytes or int(preset["target_shard_size_bytes"])
+        target_shard_size_bytes, target_shard_size_source = _target_shard_size(
+            explicit_target=self.target_shard_size_bytes,
+            preset_target=int(preset["target_shard_size_bytes"]),
+            profile=profile,
+            environment_profile=self.environment_profile,
+        )
         recommended_shards = max(1, _ceil_div(activation_bytes, target_shard_size_bytes))
         shards = self.shards or recommended_shards
         sae_parameter_bytes = self.d_model * self.latent_dim * 2 * dtype_bytes
@@ -124,6 +142,14 @@ class ScalePlan:
             target_shard_size_bytes=target_shard_size_bytes,
             max_dense_bytes=int(preset["max_dense_bytes"]),
         )
+        risks.extend(
+            environment_risk_flags_for_plan(
+                environment_profile=self.environment_profile,
+                selected_profile=profile,
+                activation_bytes=activation_bytes,
+                training_memory_floor_bytes=training_memory_floor_bytes,
+            )
+        )
         recommendations = recommendations_for_plan(
             model_params=self.model_params,
             activation_bytes=activation_bytes,
@@ -132,14 +158,16 @@ class ScalePlan:
             profile=profile,
             artifact_format=artifact_format,
             risks=risks,
+            environment_profile=self.environment_profile,
         )
         next_actions = agent_next_actions_for_plan(
             profile=profile,
             artifact_format=artifact_format,
             activation_bytes=activation_bytes,
             sparse_record_bytes=sparse_record_bytes,
+            environment_profile=self.environment_profile,
         )
-        return {
+        result = {
             "schema_version": "interp-lab.scale_plan.v2",
             "inputs": {
                 "model_params": self.model_params,
@@ -156,6 +184,7 @@ class ScalePlan:
                 "causal_prompts": self.causal_prompts,
                 "interventions_per_feature": self.interventions_per_feature,
                 "train_batch_size": self.train_batch_size,
+                "environment_profile": bool(self.environment_profile),
             },
             "profile": profile,
             "profile_reason": profile_reason,
@@ -178,6 +207,7 @@ class ScalePlan:
                 "recommended_shards_for_target": recommended_shards,
                 "target_shard_size_bytes": target_shard_size_bytes,
                 "target_shard_size_human": _format_bytes(target_shard_size_bytes),
+                "target_shard_size_source": target_shard_size_source,
                 "dense_bytes_per_shard": activation_bytes // max(shards, 1),
                 "dense_human_per_shard": _format_bytes(activation_bytes // max(shards, 1)),
                 "sparse_bytes_per_shard": sparse_record_bytes // max(shards, 1),
@@ -202,6 +232,9 @@ class ScalePlan:
             "sae_parameter_bytes": sae_parameter_bytes,
             "sae_parameter_human": _format_bytes(sae_parameter_bytes),
         }
+        if self.environment_profile is not None:
+            result["environment_profile"] = self.environment_profile
+        return result
 
 
 def build_scale_plan_parser() -> argparse.ArgumentParser:
@@ -235,6 +268,20 @@ def build_scale_plan_parser() -> argparse.ArgumentParser:
     parser.add_argument("--causal-prompts", type=int, default=256, help="Prompts per causal validation batch.")
     parser.add_argument("--interventions-per-feature", type=int, default=2, help="Interventions per feature.")
     parser.add_argument("--train-batch-size", type=parse_count_int, default=4096, help="SAE train batch size for memory floor estimate.")
+    parser.add_argument(
+        "--from-env",
+        action="store_true",
+        help="Profile this environment and use it as advisory routing context.",
+    )
+    parser.add_argument(
+        "--env-profile",
+        help="Path to JSON written by `interp-lab profile-env` for this or another environment.",
+    )
+    parser.add_argument(
+        "--env-path",
+        default=".",
+        help="Filesystem path to inspect when --from-env is set.",
+    )
     parser.add_argument("--out", help="Optional JSON path to write the plan for agents or workflows.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     return parser
@@ -253,6 +300,14 @@ def run_scale_plan_from_args(args: argparse.Namespace) -> dict[str, Any]:
     ]:
         if int(getattr(args, name)) < 1:
             raise SystemExit(f"--{name.replace('_', '-')} must be at least 1")
+    environment_profile = None
+    if args.env_profile:
+        try:
+            environment_profile = load_environment_profile(args.env_profile)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+    elif args.from_env:
+        environment_profile = collect_environment_profile(path=args.env_path)
     plan = ScalePlan(
         model_params=args.model_params,
         tokens=args.tokens,
@@ -269,6 +324,7 @@ def run_scale_plan_from_args(args: argparse.Namespace) -> dict[str, Any]:
         causal_prompts=args.causal_prompts,
         interventions_per_feature=args.interventions_per_feature,
         train_batch_size=args.train_batch_size,
+        environment_profile=environment_profile,
     ).to_dict()
     if args.out:
         path = Path(args.out)
@@ -302,6 +358,18 @@ def render_scale_plan(plan: dict[str, Any]) -> str:
             f"{estimates['causal_validation']['estimated_forward_passes']:,} estimated forward passes"
         ),
     ]
+    if plan.get("environment_profile"):
+        env = plan["environment_profile"]
+        routing = env["routing"]
+        lines.extend(
+            [
+                "",
+                "Environment advisory:",
+                f"- Looks like: {environment_summary(env)}",
+                f"- Suggested route: {routing['suggested_profile']} ({routing['suggested_reason']})",
+                "- Override route: interp-lab plan-scale --profile <profile> ...",
+            ]
+        )
     if plan["risk_flags"]:
         lines.extend(["", "Risk flags:"])
         for item in plan["risk_flags"]:
@@ -325,6 +393,7 @@ def recommendations_for_plan(
     profile: str,
     artifact_format: str,
     risks: list[dict[str, str]],
+    environment_profile: dict[str, Any] | None = None,
 ) -> list[str]:
     recommendations = [
         f"Use the {profile} profile assumptions for this estimate.",
@@ -341,6 +410,10 @@ def recommendations_for_plan(
         recommendations.append("Use more shards so retries and uploads stay granular.")
     if any(item["level"] == "high" for item in risks):
         recommendations.append("Create a small pilot shard before launching the full harvest.")
+    if environment_profile is not None:
+        recommendations.append(
+            "Use the environment advisory as a starting point, then choose the route that matches where the model will actually run."
+        )
     return recommendations
 
 
@@ -397,6 +470,7 @@ def agent_next_actions_for_plan(
     artifact_format: str,
     activation_bytes: int,
     sparse_record_bytes: int,
+    environment_profile: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     actions = [
         {
@@ -421,6 +495,15 @@ def agent_next_actions_for_plan(
                 "id": "sparsify_records",
                 "title": "Convert dense activations into sparse feature records",
                 "why": f"The planned {artifact_format} evidence layer is smaller after feature extraction.",
+            },
+        )
+    if environment_profile is not None:
+        actions.insert(
+            0,
+            {
+                "id": "review_environment_route",
+                "title": "Review the environment advisory and choose the execution route",
+                "command": "interp-lab profile-env --out reports/env-profile.json --json",
             },
         )
     if profile in {"remote-api", "frontier-lab", "cluster"}:
@@ -476,9 +559,95 @@ def parse_shards(value: str | int) -> int | None:
     return parse_count_int(value)
 
 
-def _resolve_profile(profile: str, model_params: float, activation_bytes: int) -> tuple[str, str]:
+def environment_risk_flags_for_plan(
+    *,
+    environment_profile: dict[str, Any] | None,
+    selected_profile: str,
+    activation_bytes: int,
+    training_memory_floor_bytes: int,
+) -> list[dict[str, str]]:
+    if environment_profile is None:
+        return []
+    capabilities = environment_profile.get("capabilities", {})
+    routing = environment_profile.get("routing", {})
+    memory = environment_profile.get("memory", {})
+    disk = environment_profile.get("disk", {})
+    suggested_profile = routing.get("suggested_profile")
+    risks: list[dict[str, str]] = []
+    if suggested_profile in PROFILE_ORDER and _profile_rank(selected_profile) > _profile_rank(str(suggested_profile)):
+        risks.append(
+            {
+                "level": "medium",
+                "message": (
+                    f"The selected route {selected_profile} is larger than the current environment advisory "
+                    f"route {suggested_profile}."
+                ),
+                "mitigation": (
+                    "Run on the larger target environment, pass --env-profile from that environment, "
+                    "or choose another --profile."
+                ),
+            }
+        )
+    free_disk = int(disk.get("free_bytes") or 0)
+    if selected_profile in {"local-cpu", "single-gpu"} and free_disk and activation_bytes > free_disk:
+        risks.append(
+            {
+                "level": "high",
+                "message": "Planned dense activations exceed free disk on the inspected filesystem.",
+                "mitigation": "Use fewer tokens or hook points, write to a larger path, or use a remote/cluster route.",
+            }
+        )
+    available_memory = int(memory.get("available_bytes") or memory.get("total_bytes") or 0)
+    if selected_profile == "local-cpu" and available_memory and training_memory_floor_bytes > available_memory:
+        risks.append(
+            {
+                "level": "medium",
+                "message": "Estimated SAE training memory exceeds local available RAM.",
+                "mitigation": "Lower latent_dim or batch size, use a GPU/cluster route, or stream smaller shards.",
+            }
+        )
+    max_gpu_memory = int(capabilities.get("max_gpu_memory_bytes") or 0)
+    if selected_profile == "single-gpu":
+        if not capabilities.get("has_local_accelerator"):
+            risks.append(
+                {
+                    "level": "medium",
+                    "message": "The selected single-gpu route has no detected local accelerator in this environment.",
+                    "mitigation": "Use --env-profile from the GPU machine or choose a CPU, remote, or cluster profile.",
+                }
+            )
+        elif max_gpu_memory and training_memory_floor_bytes > max_gpu_memory:
+            risks.append(
+                {
+                    "level": "medium",
+                    "message": "Estimated SAE training memory exceeds the largest detected GPU VRAM.",
+                    "mitigation": "Lower latent_dim or batch size, use CPU offload, or train on a larger GPU/cluster route.",
+                }
+            )
+    return risks
+
+
+def _resolve_profile(
+    profile: str,
+    model_params: float,
+    activation_bytes: int,
+    *,
+    environment_profile: dict[str, Any] | None = None,
+) -> tuple[str, str]:
     if profile != "auto":
         return profile, "selected explicitly"
+    base_profile, base_reason = _resolve_profile_from_job(model_params, activation_bytes)
+    if environment_profile is None:
+        return base_profile, base_reason
+    env_profile = str(environment_profile.get("routing", {}).get("suggested_profile") or "")
+    if env_profile not in PROFILE_PRESETS:
+        return base_profile, f"{base_reason}; environment profile had no recognized route"
+    if _profile_rank(env_profile) > _profile_rank(base_profile):
+        return env_profile, f"environment profile suggested {env_profile}; job-size route was {base_profile}"
+    return base_profile, f"{base_reason}; environment advisory route is {env_profile}"
+
+
+def _resolve_profile_from_job(model_params: float, activation_bytes: int) -> tuple[str, str]:
     if model_params >= 1e12 or activation_bytes >= 100 * 1024**4:
         return "frontier-lab", "auto-selected for frontier-scale model or activation volume"
     if activation_bytes >= 2 * 1024**4:
@@ -486,6 +655,28 @@ def _resolve_profile(profile: str, model_params: float, activation_bytes: int) -
     if activation_bytes >= 100 * 1024**3:
         return "single-gpu", "auto-selected for medium activation volume"
     return "local-cpu", "auto-selected for small activation volume"
+
+
+def _target_shard_size(
+    *,
+    explicit_target: int | None,
+    preset_target: int,
+    profile: str,
+    environment_profile: dict[str, Any] | None,
+) -> tuple[int, str]:
+    if explicit_target is not None:
+        return explicit_target, "selected explicitly"
+    if environment_profile is not None:
+        routing = environment_profile.get("routing", {})
+        suggested_profile = routing.get("suggested_profile")
+        recommended = routing.get("recommended_target_shard_size_bytes")
+        if profile == suggested_profile and profile in {"local-cpu", "single-gpu", "cluster"} and recommended:
+            return int(recommended), "environment profile recommendation"
+    return preset_target, "profile preset"
+
+
+def _profile_rank(profile: str) -> int:
+    return PROFILE_ORDER.get(profile, 0)
 
 
 def _assumptions(*, dtype_bytes: int, sparse_event_bytes: int, artifact_format: str) -> list[dict[str, Any]]:

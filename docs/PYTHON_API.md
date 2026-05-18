@@ -89,6 +89,25 @@ diagnostics = doctor()
 print(diagnostics["ok"])
 ```
 
+## Environment Profiles
+
+```python
+from interp_lab import profile_environment, scale_plan
+
+env = profile_environment("reports")
+print(env["routing"]["suggested_profile"])
+
+plan = scale_plan(
+    model_params=70_000_000_000,
+    tokens=10_000_000,
+    d_model=8192,
+    selected_layers=4,
+    env_profile=env,
+)
+```
+
+Use `env_profile="reports/env-profile.json"` to plan against a saved profile from another machine.
+
 ## Graphs, Publishing, And Scale Plans
 
 ```python

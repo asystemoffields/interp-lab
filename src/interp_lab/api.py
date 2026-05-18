@@ -22,6 +22,7 @@ from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.cli import main as _cli_main
 from oracle_sae.doctor import collect_diagnostics
+from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
 from oracle_sae.graphs import build_attribution_graph, export_attribution_graph
 from oracle_sae.hf_publish import PublishResult, publish_hf_artifact as _publish_hf_artifact
 from oracle_sae.pipeline import inspect_model, match_reports
@@ -315,6 +316,11 @@ def doctor() -> dict[str, Any]:
     return collect_diagnostics()
 
 
+def profile_environment(path: str | Path = ".") -> dict[str, Any]:
+    """Return a sanitized compute, storage, and route profile for an environment."""
+    return collect_environment_profile(path=path)
+
+
 def attribution_graph(
     report: InspectionReport | str | Path,
     *,
@@ -403,8 +409,18 @@ def scale_plan(
     causal_prompts: int = 256,
     interventions_per_feature: int = 2,
     train_batch_size: int = 4096,
+    env_profile: dict[str, Any] | str | Path | None = None,
+    from_env: bool = False,
+    env_path: str | Path = ".",
 ) -> dict[str, Any]:
     """Estimate activation storage and execution shape for a large run."""
+    resolved_env_profile = None
+    if isinstance(env_profile, (str, Path)):
+        resolved_env_profile = load_environment_profile(env_profile)
+    elif env_profile is not None:
+        resolved_env_profile = env_profile
+    elif from_env:
+        resolved_env_profile = collect_environment_profile(path=env_path)
     return ScalePlan(
         model_params=model_params,
         tokens=tokens,
@@ -421,6 +437,7 @@ def scale_plan(
         causal_prompts=causal_prompts,
         interventions_per_feature=interventions_per_feature,
         train_batch_size=train_batch_size,
+        environment_profile=resolved_env_profile,
     ).to_dict()
 
 

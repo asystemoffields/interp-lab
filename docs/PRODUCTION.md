@@ -4,6 +4,7 @@ interp-lab is meant to work for quick local experiments and repeatable research 
 
 ```bash
 interp-lab doctor
+interp-lab profile-env --out reports/env-profile.json --json
 interp-lab run examples/run_records.json
 ```
 
@@ -113,6 +114,14 @@ Use JSON output in scripts:
 interp-lab doctor --json
 ```
 
+`interp-lab profile-env` reports machine capacity and route options:
+
+```bash
+interp-lab profile-env --path reports --json
+```
+
+The JSON includes CPU cores, RAM, free disk at the inspected path, visible accelerators, optional packages, sanitized credential presence checks, route options, alerts, and agent next actions.
+
 ## Release Checklist
 
 Before publishing a release:
@@ -124,6 +133,7 @@ python -m compileall src tests
 python -m build
 python -m twine check dist/*
 interp-lab doctor
+interp-lab profile-env --out reports/env-profile.json --json
 interp-lab run examples/run_records.json
 ```
 
@@ -142,7 +152,7 @@ PyPI release details live in `docs/RELEASE.md`.
 
 ## Large Runs
 
-Use `interp-lab plan-scale` before harvesting large activation corpora. It accepts sizes like `70B`, `1T`, `1B`, and `64GB`, writes JSON with `--out`, and includes agent next actions for automated workflows. For 1T+ models, keep the model runtime colocated with the infrastructure that can serve it, write sharded activation records or SAE records, then run interp-lab ranking and report generation over the evidence layer.
+Use `interp-lab plan-scale` before harvesting large activation corpora. It accepts sizes like `70B`, `1T`, `1B`, and `64GB`, writes JSON with `--out`, and includes agent next actions for automated workflows. Add `--from-env` for local advisory routing or pass `--env-profile` from a target machine. For 1T+ models, keep the model runtime colocated with the infrastructure that can serve it, write sharded activation records or SAE records, then run interp-lab ranking and report generation over the evidence layer.
 
 Details live in `docs/SCALING.md`.
 

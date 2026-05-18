@@ -54,6 +54,12 @@ Check your local environment:
 interp-lab doctor
 ```
 
+Profile the current machine and route options:
+
+```bash
+interp-lab profile-env --out reports/env-profile.json --json
+```
+
 Run a criterion inspection:
 
 ```bash
@@ -308,6 +314,7 @@ interp-lab plan-scale \
   --d-model 16384 \
   --selected-layers 8 \
   --latent-dim 1M \
+  --from-env \
   --target-shard-size 64GB \
   --out reports/scale-plan.json
 ```
@@ -430,7 +437,9 @@ For large models, use interp-lab as the orchestration and evidence layer:
 5. Run causal validation in resumable batches.
 6. Publish reports, graphs, and artifacts with manifests.
 
-`interp-lab plan-scale` accepts human-friendly sizes such as `70B`, `1T`, `1B`, and `64GB`. It estimates dense activation storage, sparse feature-record storage, SAE parameter storage, causal validation forward passes, shard counts, risk flags, and agent next actions. Use `--json` or `--out scale-plan.json` when an AI agent or workflow should consume the plan directly. See `docs/SCALING.md` for the 1T+ path.
+`interp-lab profile-env` inspects CPU cores, RAM, disk space, local accelerators, optional packages, and sanitized environment flags such as whether Goodfire or NNsight credentials are present. It returns advisory route options, including local CPU, single GPU, cluster, remote API, and frontier-lab style harvesting.
+
+`interp-lab plan-scale` accepts human-friendly sizes such as `70B`, `1T`, `1B`, and `64GB`. It estimates dense activation storage, sparse feature-record storage, SAE parameter storage, causal validation forward passes, shard counts, risk flags, and agent next actions. Add `--from-env` to profile the current machine while planning, or `--env-profile other-machine.json` to plan against a saved profile from another environment. Every route suggestion can be overridden with `--profile`. Use `--json` or `--out scale-plan.json` when an AI agent or workflow should consume the plan directly. See `docs/SCALING.md` for the 1T+ path.
 
 ## Architecture
 

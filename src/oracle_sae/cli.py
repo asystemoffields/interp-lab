@@ -20,6 +20,7 @@ from oracle_sae.adapters.saelens import (
 from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
+from oracle_sae.env_profile import build_environment_profile_parser, run_environment_profile_from_args
 from oracle_sae.graphs import build_graph_export_parser, run_graph_export_from_args
 from oracle_sae.hf_contrast import build_contrast_parser, run_contrast_from_args
 from oracle_sae.hf_interventions import build_intervention_parser, run_interventions_from_args
@@ -167,6 +168,14 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = subparsers.add_parser("doctor", help="Check the local interp-lab environment.")
     doctor.add_argument("--json", action="store_true", help="Print diagnostics as JSON.")
     doctor.set_defaults(func=run_doctor)
+
+    profile_env = subparsers.add_parser(
+        "profile-env",
+        help="Profile local compute, storage, and routing options.",
+        parents=[build_environment_profile_parser()],
+        add_help=False,
+    )
+    profile_env.set_defaults(func=run_profile_env)
 
     run = subparsers.add_parser("run", help="Run a reproducible workflow from a JSON/TOML/YAML config.")
     run.add_argument("config", help="Run config path.")
@@ -320,6 +329,11 @@ def run_doctor(args: argparse.Namespace) -> int:
     else:
         print(diagnostics_to_text(diagnostics))
     return 0 if diagnostics["ok"] else 1
+
+
+def run_profile_env(args: argparse.Namespace) -> int:
+    run_environment_profile_from_args(args)
+    return 0
 
 
 def run_config(args: argparse.Namespace) -> int:
