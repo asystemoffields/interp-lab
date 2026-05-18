@@ -12,6 +12,7 @@ from typing import Any
 from oracle_sae.adapters.records import ActivationRecord
 from oracle_sae.hf_contrast import _register_gpt2_steering, _select_best_strength, parse_strength_sweep
 from oracle_sae.hf_interventions import DEFAULT_TARGET_TOKENS, parse_target_tokens
+from oracle_sae.hf_loading import add_hf_loading_args, hf_loading_options_from_args, load_hf_text_model
 from oracle_sae.hf_records import PromptRecord, _pool_hidden_state, load_prompt_records
 from oracle_sae.math_utils import mean, norm, pearson
 
@@ -184,6 +185,13 @@ def train_sae_from_hf(
     causal_top_k: int = 8,
     causal_strength_sweep: list[float] | None = None,
     target_tokens: list[str] | None = None,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
 ) -> tuple[Path, Path | None]:
     matrix = load_activation_matrix_from_hf(
         model_name=model_name,
@@ -195,6 +203,13 @@ def train_sae_from_hf(
         max_length=max_length,
         max_records=max_records,
         seed=seed,
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs=model_kwargs,
+        tokenizer_kwargs=tokenizer_kwargs,
     )
     artifact = train_sae(
         matrix,
@@ -237,6 +252,13 @@ def train_sae_from_hf(
             target_tokens=target_tokens or DEFAULT_TARGET_TOKENS,
             device=device,
             max_length=max_length,
+            model_class=model_class,
+            trust_remote_code=trust_remote_code,
+            local_files_only=local_files_only,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            model_kwargs=model_kwargs,
+            tokenizer_kwargs=tokenizer_kwargs,
         )
     return artifact_path, activation_records_path
 
@@ -247,6 +269,13 @@ def load_activation_matrix_from_records(
     model_name: str | None = None,
     max_records: int | None = None,
     seed: int = 0,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
 ) -> ActivationMatrix:
     records: list[ActivationRecord] = []
     file_path = Path(path)
@@ -316,12 +345,19 @@ def load_activation_matrix_from_hf(
         "transformers",
         "Install `interp-lab[hf]` to train directly from Hugging Face models.",
     )
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
-    model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
-    model.to(device)
-    model.eval()
-    if getattr(tokenizer, "pad_token", None) is None and getattr(tokenizer, "eos_token", None) is not None:
-        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer, model, runtime_device = load_hf_text_model(
+        transformers=transformers,
+        torch=torch,
+        model_name=model_name,
+        device=device,
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs=model_kwargs,
+        tokenizer_kwargs=tokenizer_kwargs,
+    )
 
     values: list[list[float]] = []
     rows: list[MatrixRow] = []
@@ -336,7 +372,7 @@ def load_activation_matrix_from_hf(
                 truncation=True,
                 max_length=max_length,
             )
-            encoded = {key: value.to(device) for key, value in encoded.items()}
+            encoded = {key: value.to(runtime_device) for key, value in encoded.items()}
             outputs = model(**encoded, output_hidden_states=True, use_cache=False)
             hidden_states = outputs.hidden_states
             resolved_layer = _resolve_layer(layer, len(hidden_states))
@@ -509,6 +545,13 @@ def export_hf_sae_interventions(
     target_tokens: list[str],
     device: str,
     max_length: int,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
 ) -> Path:
     torch = _optional_import("torch", "Install `interp-lab[hf]` to validate SAE latents causally.")
     transformers = _optional_import(
@@ -523,12 +566,19 @@ def export_hf_sae_interventions(
 
     prompts = load_prompt_records(dataset_path)
     positive_prompt_indexes, negative_prompt_indexes = _split_prompt_indexes(prompts)
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
-    model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
-    model.to(device)
-    model.eval()
-    if getattr(tokenizer, "pad_token", None) is None and getattr(tokenizer, "eos_token", None) is not None:
-        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer, model, runtime_device = load_hf_text_model(
+        transformers=transformers,
+        torch=torch,
+        model_name=model_name,
+        device=device,
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs=model_kwargs,
+        tokenizer_kwargs=tokenizer_kwargs,
+    )
     target_ids = _target_token_ids(tokenizer, target_tokens)
     if not target_ids:
         raise ValueError("No target token ids resolved for SAE causal validation")
@@ -542,7 +592,7 @@ def export_hf_sae_interventions(
             for latent_index, signed_association in ranked_latents[:top_k]:
                 sign = 1.0 if signed_association >= 0 else -1.0
                 base_direction = [sign * value for value in decoder_rows[latent_index]]
-                direction_tensor = torch.tensor(base_direction, dtype=torch.float32, device=device)
+                direction_tensor = torch.tensor(base_direction, dtype=torch.float32, device=runtime_device)
                 rows_by_strength: dict[float, list[dict[str, Any]]] = {
                     strength: [] for strength in strength_sweep
                 }
@@ -558,7 +608,7 @@ def export_hf_sae_interventions(
                         direction=None,
                         layer=int(layer),
                         strength=0.0,
-                        device=device,
+                        device=runtime_device,
                         max_length=max_length,
                     )
                     for strength in strength_sweep:
@@ -570,7 +620,7 @@ def export_hf_sae_interventions(
                             direction=direction_tensor,
                             layer=int(layer),
                             strength=strength,
-                            device=device,
+                            device=runtime_device,
                             max_length=max_length,
                         )
                         if prompt_index in positive_prompt_indexes:
@@ -676,6 +726,7 @@ def build_train_sae_parser() -> argparse.ArgumentParser:
         help="Comma-separated steering strengths for SAE latent causal validation.",
     )
     parser.add_argument("--target-token", action="append")
+    add_hf_loading_args(parser)
     return parser
 
 
@@ -712,6 +763,10 @@ def run_train_sae_from_args(args: argparse.Namespace) -> tuple[Path, Path | None
     if args.hf_model:
         if not args.dataset:
             raise SystemExit("--dataset is required with --hf-model")
+        try:
+            loading_options = hf_loading_options_from_args(args)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
         return train_sae_from_hf(
             model_name=args.hf_model,
             dataset_path=args.dataset,
@@ -743,6 +798,7 @@ def run_train_sae_from_args(args: argparse.Namespace) -> tuple[Path, Path | None
             causal_top_k=settings["causal_top_k"],
             causal_strength_sweep=parse_strength_sweep(args.causal_strength_sweep),
             target_tokens=parse_target_tokens(args.target_token),
+            **loading_options,
         )
     raise SystemExit("Either --records or --hf-model is required")
 

@@ -1,0 +1,12 @@
+{"prompt_id":"code-1","text":"Write a Python function that","criterion_score":1.0}
+{"prompt_id":"code-2","text":"Here is a minimal Python example:\n","criterion_score":1.0}
+{"prompt_id":"code-3","text":"Complete this JavaScript helper:\n","criterion_score":1.0}
+{"prompt_id":"code-4","text":"The shell command should be:\n","criterion_score":1.0}
+{"prompt_id":"code-5","text":"Return JSON with fields name and","criterion_score":1.0}
+{"prompt_id":"code-6","text":"Implement a class named","criterion_score":1.0}
+{"prompt_id":"ordinary-1","text":"The museum opened on","criterion_score":0.0}
+{"prompt_id":"ordinary-2","text":"A friendly onboarding email should","criterion_score":0.0}
+{"prompt_id":"ordinary-3","text":"The mountain trail passes","criterion_score":0.0}
+{"prompt_id":"ordinary-4","text":"Summarize the customer feedback into","criterion_score":0.0}
+{"prompt_id":"ordinary-5","text":"The policy memo argues that","criterion_score":0.0}
+{"prompt_id":"ordinary-6","text":"A good dinner menu includes","criterion_score":0.0}

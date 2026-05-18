@@ -7,7 +7,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+from oracle_sae.hf_hooks import register_hidden_steering
 from oracle_sae.hf_interventions import DEFAULT_TARGET_TOKENS, parse_target_tokens
+from oracle_sae.hf_loading import add_hf_loading_args, hf_loading_options_from_args, load_hf_text_model
 from oracle_sae.hf_records import PromptRecord, load_prompt_records, split_prompt_record_indexes
 
 
@@ -25,6 +27,13 @@ def export_hf_contrast_feature(
     target_tokens: list[str] | None = None,
     steer_strength: float = 3.0,
     strength_sweep: list[float] | None = None,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
 ) -> tuple[Path, Path | None, str]:
     torch = _optional_import("torch", "Install `interp-lab[hf]` to export Hugging Face contrast features.")
     transformers = _optional_import(
@@ -35,18 +44,25 @@ def export_hf_contrast_feature(
     if not prompts:
         raise ValueError(f"{dataset_path}: no prompt records found")
 
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
-    model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
-    model.to(device)
-    model.eval()
-    if getattr(tokenizer, "pad_token", None) is None and getattr(tokenizer, "eos_token", None) is not None:
-        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer, model, runtime_device = load_hf_text_model(
+        transformers=transformers,
+        torch=torch,
+        model_name=model_name,
+        device=device,
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs=model_kwargs,
+        tokenizer_kwargs=tokenizer_kwargs,
+    )
 
     vectors: list[list[float]] = []
     resolved_layer: int | None = None
     with torch.no_grad():
         for prompt in prompts:
-            encoded = _encode(tokenizer, prompt.text, device=device, max_length=max_length)
+            encoded = _encode(tokenizer, prompt.text, device=runtime_device, max_length=max_length)
             outputs = model(**encoded, output_hidden_states=True, use_cache=False)
             hidden_states = outputs.hidden_states
             resolved_layer = _resolve_layer(layer, len(hidden_states))
@@ -87,7 +103,7 @@ def export_hf_contrast_feature(
             target_tokens=target_tokens or DEFAULT_TARGET_TOKENS,
             steer_strength=steer_strength,
             strength_sweep=strength_sweep,
-            device=device,
+            device=runtime_device,
             max_length=max_length,
             out_path=interventions_out,
         )
@@ -113,10 +129,15 @@ def build_contrast_parser() -> argparse.ArgumentParser:
         "--strength-sweep",
         help="Comma-separated signed steering strengths to evaluate; writes the most specific setting.",
     )
+    add_hf_loading_args(parser)
     return parser
 
 
 def run_contrast_from_args(args: argparse.Namespace) -> tuple[Path, Path | None, str]:
+    try:
+        loading_options = hf_loading_options_from_args(args)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     return export_hf_contrast_feature(
         model_name=args.model,
         dataset_path=args.dataset,
@@ -130,6 +151,7 @@ def run_contrast_from_args(args: argparse.Namespace) -> tuple[Path, Path | None,
         target_tokens=parse_target_tokens(args.target_token),
         steer_strength=args.steer_strength,
         strength_sweep=parse_strength_sweep(args.strength_sweep),
+        **loading_options,
     )
 
 
@@ -385,32 +407,7 @@ def _score_prompt(
 
 
 def _register_gpt2_steering(model: Any, layer: int, direction: Any, strength: float):
-    transformer = getattr(model, "transformer", None)
-    blocks = getattr(transformer, "h", None)
-    final_layer_norm = getattr(transformer, "ln_f", None)
-    if blocks is None or final_layer_norm is None:
-        raise RuntimeError("HF contrast steering currently supports GPT-2-style models with transformer.h and ln_f")
-    if layer == len(blocks):
-        def final_hook(_module, _inputs, output):
-            hidden = output.clone()
-            hidden[:, -1, :] = hidden[:, -1, :] + strength * direction.to(hidden.dtype)
-            return hidden
-
-        return final_layer_norm.register_forward_hook(final_hook)
-    block_index = layer - 1
-    if block_index < 0 or block_index >= len(blocks):
-        raise ValueError(f"Layer {layer} cannot be steered through transformer.h")
-
-    def hook(_module, _inputs, output):
-        if isinstance(output, tuple):
-            hidden = output[0].clone()
-            hidden[:, -1, :] = hidden[:, -1, :] + strength * direction.to(hidden.dtype)
-            return (hidden, *output[1:])
-        hidden = output.clone()
-        hidden[:, -1, :] = hidden[:, -1, :] + strength * direction.to(hidden.dtype)
-        return hidden
-
-    return blocks[block_index].register_forward_hook(hook)
+    return register_hidden_steering(model, layer, direction, strength)
 
 
 def _target_token_ids(tokenizer: Any, target_tokens: list[str]) -> list[int]:

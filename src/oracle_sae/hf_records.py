@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from oracle_sae.hf_loading import add_hf_loading_args, hf_loading_options_from_args, load_hf_text_model
 from oracle_sae.math_utils import pearson
 
 
@@ -39,6 +40,13 @@ def export_hf_activation_records(
     pool: str = "last",
     device: str = "cpu",
     max_length: int = 128,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
 ) -> Path:
     torch = _optional_import("torch", "Install `interp-lab[hf]` to export Hugging Face activations.")
     transformers = _optional_import(
@@ -49,12 +57,19 @@ def export_hf_activation_records(
     if not prompts:
         raise ValueError(f"{dataset_path}: no prompt records found")
 
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
-    model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
-    model.to(device)
-    model.eval()
-    if getattr(tokenizer, "pad_token", None) is None and getattr(tokenizer, "eos_token", None) is not None:
-        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer, model, runtime_device = load_hf_text_model(
+        transformers=transformers,
+        torch=torch,
+        model_name=model_name,
+        device=device,
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs=model_kwargs,
+        tokenizer_kwargs=tokenizer_kwargs,
+    )
 
     layer_vectors: dict[int, list[list[float]]] = {}
     with torch.no_grad():
@@ -65,7 +80,7 @@ def export_hf_activation_records(
                 truncation=True,
                 max_length=max_length,
             )
-            encoded = {key: value.to(device) for key, value in encoded.items()}
+            encoded = {key: value.to(runtime_device) for key, value in encoded.items()}
             outputs = model(**encoded, output_hidden_states=True, use_cache=False)
             hidden_states = outputs.hidden_states
             selected_layers = _resolve_layers(layers, len(hidden_states))
@@ -180,12 +195,17 @@ def build_export_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pool", choices=["last", "mean"], default="last")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--max-length", type=int, default=128)
+    add_hf_loading_args(parser)
     return parser
 
 
 def run_export_from_args(args: argparse.Namespace) -> Path:
     try:
         layers = parse_layers(args.layers)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    try:
+        loading_options = hf_loading_options_from_args(args)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     return export_hf_activation_records(
@@ -197,6 +217,7 @@ def run_export_from_args(args: argparse.Namespace) -> Path:
         pool=args.pool,
         device=args.device,
         max_length=args.max_length,
+        **loading_options,
     )
 
 

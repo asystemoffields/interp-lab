@@ -100,6 +100,8 @@ interp-lab export-hf-records \
   --out reports/real-small/distilgpt2-unit/records.jsonl
 ```
 
+For a current Gemma 4 walkthrough, including local quantized Transformers-compatible checkpoints, see `docs/GEMMA4_WALKTHROUGH.md`.
+
 Export activation records from TransformerLens hooks:
 
 ```bash

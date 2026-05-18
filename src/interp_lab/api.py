@@ -205,6 +205,13 @@ def train_sae(
     causal_top_k: int | None = None,
     causal_strength_sweep: list[float] | None = None,
     target_tokens: list[str] | None = None,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
 ) -> SaeTrainingResult:
     """Train an SAE from activation records or Hugging Face hidden states."""
     settings = _training_settings(
@@ -289,6 +296,13 @@ def train_sae(
             causal_top_k=settings["causal_top_k"],
             causal_strength_sweep=causal_strength_sweep,
             target_tokens=target_tokens,
+            model_class=model_class,
+            trust_remote_code=trust_remote_code,
+            local_files_only=local_files_only,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            model_kwargs=model_kwargs,
+            tokenizer_kwargs=tokenizer_kwargs,
         )
         return SaeTrainingResult(
             artifact_path=artifact_path,

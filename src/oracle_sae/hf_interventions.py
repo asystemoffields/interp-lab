@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from oracle_sae.hf_hooks import register_hidden_ablations
+from oracle_sae.hf_loading import add_hf_loading_args, hf_loading_options_from_args, load_hf_text_model
 from oracle_sae.hf_records import PromptRecord, load_prompt_records, split_prompt_record_indexes
 from oracle_sae.reporting import load_inspection_report
 
@@ -48,6 +50,13 @@ def export_hf_intervention_records(
     max_length: int = 128,
     ablate_value: float = 0.0,
     group_top_k: int | None = None,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
 ) -> Path:
     torch = _optional_import("torch", "Install `interp-lab[hf]` to export Hugging Face interventions.")
     transformers = _optional_import(
@@ -66,12 +75,19 @@ def export_hf_intervention_records(
     if not positive_indexes:
         raise ValueError("HF interventions need at least one positive-scored prompt")
 
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
-    model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
-    model.to(device)
-    model.eval()
-    if getattr(tokenizer, "pad_token", None) is None and getattr(tokenizer, "eos_token", None) is not None:
-        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer, model, runtime_device = load_hf_text_model(
+        transformers=transformers,
+        torch=torch,
+        model_name=model_name,
+        device=device,
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs=model_kwargs,
+        tokenizer_kwargs=tokenizer_kwargs,
+    )
     target_ids = _target_token_ids(tokenizer, target_tokens or DEFAULT_TARGET_TOKENS)
     if not target_ids:
         raise ValueError("No target token ids resolved for intervention scoring")
@@ -98,7 +114,7 @@ def export_hf_intervention_records(
                     },
                     positive_indexes=positive_indexes,
                     negative_indexes=negative_indexes,
-                    device=device,
+                    device=runtime_device,
                     max_length=max_length,
                     ablation=(layer, dimension, ablate_value),
                 )
@@ -125,7 +141,7 @@ def export_hf_intervention_records(
                     },
                     positive_indexes=positive_indexes,
                     negative_indexes=negative_indexes,
-                    device=device,
+                    device=runtime_device,
                     max_length=max_length,
                     ablations=[
                         (layer, dimension, ablate_value)
@@ -303,10 +319,15 @@ def build_intervention_parser() -> argparse.ArgumentParser:
         "--records",
         help="Activation-record JSONL to copy when --append-group-records is set.",
     )
+    add_hf_loading_args(parser)
     return parser
 
 
 def run_interventions_from_args(args: argparse.Namespace) -> Path:
+    try:
+        loading_options = hf_loading_options_from_args(args)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     path = export_hf_intervention_records(
         model_name=args.model,
         report_path=args.report,
@@ -319,6 +340,7 @@ def run_interventions_from_args(args: argparse.Namespace) -> Path:
         max_length=args.max_length,
         ablate_value=args.ablate_value,
         group_top_k=args.group_top_k,
+        **loading_options,
     )
     if args.append_group_records:
         if not args.group_top_k:
@@ -380,7 +402,7 @@ def _score_prompt(
         layer, dimension, value = ablation
         ablations = [(layer, dimension, value)]
     if ablations:
-        hook_handle = _register_gpt2_hidden_ablations(model, ablations)
+        hook_handle = register_hidden_ablations(model, ablations)
     try:
         outputs = model(**encoded, use_cache=False)
     finally:
@@ -392,54 +414,7 @@ def _score_prompt(
 
 
 def _register_gpt2_hidden_ablations(model: Any, ablations: list[tuple[int, int, float]]):
-    transformer = getattr(model, "transformer", None)
-    blocks = getattr(transformer, "h", None)
-    final_layer_norm = getattr(transformer, "ln_f", None)
-    if blocks is None or final_layer_norm is None:
-        raise RuntimeError("HF intervention exporter currently supports GPT-2-style models with transformer.h and ln_f")
-    by_block: dict[int, list[tuple[int, float]]] = {}
-    final_edits: list[tuple[int, float]] = []
-    for layer, dimension, value in ablations:
-        if layer == len(blocks):
-            final_edits.append((dimension, value))
-            continue
-        block_index = layer - 1
-        if block_index < 0 or block_index >= len(blocks):
-            raise ValueError(f"Layer {layer} cannot be ablated through transformer.h")
-        by_block.setdefault(block_index, []).append((dimension, value))
-    handles = []
-
-    for block_index, edits in by_block.items():
-        def hook(_module, _inputs, output, edits=edits):
-            if isinstance(output, tuple):
-                hidden = output[0].clone()
-                for dimension, value in edits:
-                    hidden[..., dimension] = value
-                return (hidden, *output[1:])
-            hidden = output.clone()
-            for dimension, value in edits:
-                hidden[..., dimension] = value
-            return hidden
-
-        handles.append(blocks[block_index].register_forward_hook(hook))
-    if final_edits:
-        def final_hook(_module, _inputs, output):
-            hidden = output.clone()
-            for dimension, value in final_edits:
-                hidden[..., dimension] = value
-            return hidden
-
-        handles.append(final_layer_norm.register_forward_hook(final_hook))
-    return _HookGroup(handles)
-
-
-class _HookGroup:
-    def __init__(self, handles: list[Any]):
-        self.handles = handles
-
-    def remove(self) -> None:
-        for handle in self.handles:
-            handle.remove()
+    return register_hidden_ablations(model, ablations)
 
 
 def _group_feature(
