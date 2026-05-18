@@ -33,12 +33,14 @@ OPTIONAL_MODULES = {
     "transformer_lens": "TransformerLens activation export",
     "nnsight": "NNsight activation export",
     "goodfire": "Goodfire feature adapter",
+    "llama_cpp": "GGUF runtime smoke tests",
     "huggingface_hub": "Hugging Face artifact publishing",
 }
 PACKAGE_NAMES = {
     "sae_lens": "sae-lens",
     "transformer_lens": "transformer-lens",
     "huggingface_hub": "huggingface-hub",
+    "llama_cpp": "llama-cpp-python",
 }
 ENV_FLAGS = [
     "GOODFIRE_API_KEY",

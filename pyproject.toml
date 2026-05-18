@@ -65,6 +65,9 @@ nnsight = [
 goodfire = [
   "goodfire>=0.3"
 ]
+gguf = [
+  "llama-cpp-python>=0.3"
+]
 publish = [
   "huggingface-hub>=1.0"
 ]

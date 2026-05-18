@@ -26,6 +26,7 @@ def collect_diagnostics() -> dict[str, Any]:
         ),
         _check_module("nnsight", required=False, purpose="NNsight activation export"),
         _check_module("goodfire", required=False, purpose="Goodfire feature adapter"),
+        _check_module("llama_cpp", package_name="llama-cpp-python", required=False, purpose="GGUF runtime smoke tests"),
         _check_module(
             "huggingface_hub",
             package_name="huggingface-hub",

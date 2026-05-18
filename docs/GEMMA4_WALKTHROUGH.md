@@ -10,6 +10,15 @@ google/gemma-4-E2B-it
 
 References: [Google Gemma 4 model card](https://ai.google.dev/gemma/docs/core/model_card_4) and [Transformers Gemma 4 docs](https://huggingface.co/docs/transformers/v5.5.0/model_doc/gemma4).
 
+PMRA GGUF artifact:
+
+```text
+Asystemoffields/gemma-4-E2B-it-PMRA-GGUF
+gemma4_e2b_it_pmra_calib_knapsack.gguf
+```
+
+Reference: [Asystemoffields/gemma-4-E2B-it-PMRA-GGUF](https://huggingface.co/Asystemoffields/gemma-4-E2B-it-PMRA-GGUF).
+
 Local model:
 
 ```text
@@ -25,6 +34,12 @@ python -m pip install -U "interp-lab[hf,train]"
 ```
 
 For quantized local checkpoints, install the quantization runtime required by that checkpoint, such as bitsandbytes, accelerate, torchao, or the package that produced the local artifact.
+
+For GGUF runtime smoke tests:
+
+```bash
+python -m pip install -U "interp-lab[gguf]" huggingface_hub
+```
 
 ## Profile The Environment
 
@@ -64,6 +79,12 @@ Use a local quantized checkpoint as `<GEMMA4_MODEL>`:
 C:/models/your-gemma4-quant
 ```
 
+Use the PMRA GGUF file as `<GEMMA4_GGUF>`:
+
+```bash
+models/gemma4-pmra/gemma4_e2b_it_pmra_calib_knapsack.gguf
+```
+
 Gemma 4 uses a conditional-generation class in current Transformers builds:
 
 ```text
@@ -94,9 +115,26 @@ To find the hidden size for a local or official checkpoint:
 python -c "from transformers import AutoConfig; c=AutoConfig.from_pretrained('<GEMMA4_MODEL>', trust_remote_code=True); t=getattr(c, 'text_config', c); print(getattr(t, 'hidden_size', 'unknown'))"
 ```
 
+## Download The PMRA GGUF
+
+```bash
+huggingface-cli download \
+  Asystemoffields/gemma-4-E2B-it-PMRA-GGUF \
+  gemma4_e2b_it_pmra_calib_knapsack.gguf \
+  --local-dir models/gemma4-pmra
+```
+
+Smoke-test generation with llama-cpp-python:
+
+```bash
+python -c "from llama_cpp import Llama; llm=Llama(model_path='models/gemma4-pmra/gemma4_e2b_it_pmra_calib_knapsack.gguf', n_ctx=2048); print(llm('Write a Python function that', max_tokens=48)['choices'][0]['text'])"
+```
+
+GGUF is a strong local runtime target for generation and behavior checks. The activation, SAE, and causal-hook commands below use a Transformers-compatible model path because those steps need hidden states and forward hooks. If a GGUF runtime exports activation records, point `interp-lab inspect --backend records` at those records directly.
+
 ## Export Hidden-State Records
 
-The example dataset asks for code or structured output completions and contrasts them with ordinary prose prompts.
+The example dataset asks for code or structured output completions and contrasts them with ordinary prose prompts. Use the official Transformers checkpoint, or a local safetensors/Transformers checkpoint, for this step:
 
 ```bash
 interp-lab export-hf-records \
