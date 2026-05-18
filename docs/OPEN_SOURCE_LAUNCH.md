@@ -1,6 +1,6 @@
 # Open-Source Launch Checklist
 
-This checklist is for publishing Oracle SAE / Interp Lab as a useful public tool.
+This checklist is for publishing interp-lab as a useful public tool.
 
 ## Repository
 
@@ -11,8 +11,8 @@ This checklist is for publishing Oracle SAE / Interp Lab as a useful public tool
 
 ## Quality Bar
 
-- `oracle-sae doctor` succeeds on a clean environment.
-- `oracle-sae run examples/run_records.json` writes a manifest and report.
+- `interp-lab doctor` succeeds on a clean environment.
+- `interp-lab run examples/run_records.json` writes a manifest and report.
 - Unit tests pass on Ubuntu, macOS, and Windows.
 - Package build succeeds for Python 3.10, 3.11, and 3.12.
 - README quickstart works from a fresh clone.

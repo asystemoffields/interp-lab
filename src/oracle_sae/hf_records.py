@@ -40,10 +40,10 @@ def export_hf_activation_records(
     device: str = "cpu",
     max_length: int = 128,
 ) -> Path:
-    torch = _optional_import("torch", "Install `oracle-sae[hf]` to export Hugging Face activations.")
+    torch = _optional_import("torch", "Install `interp-lab[hf]` to export Hugging Face activations.")
     transformers = _optional_import(
         "transformers",
-        "Install `oracle-sae[hf]` to export Hugging Face activations.",
+        "Install `interp-lab[hf]` to export Hugging Face activations.",
     )
     prompts = load_prompt_records(dataset_path)
     if not prompts:

@@ -49,10 +49,10 @@ def export_hf_intervention_records(
     ablate_value: float = 0.0,
     group_top_k: int | None = None,
 ) -> Path:
-    torch = _optional_import("torch", "Install `oracle-sae[hf]` to export Hugging Face interventions.")
+    torch = _optional_import("torch", "Install `interp-lab[hf]` to export Hugging Face interventions.")
     transformers = _optional_import(
         "transformers",
-        "Install `oracle-sae[hf]` to export Hugging Face interventions.",
+        "Install `interp-lab[hf]` to export Hugging Face interventions.",
     )
     report = load_inspection_report(report_path)
     features = [_parse_hidden_dimension(card.feature_id) for card in report.cards[:top_k]]

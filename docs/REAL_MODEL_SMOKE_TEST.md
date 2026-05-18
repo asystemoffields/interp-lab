@@ -14,7 +14,7 @@ Two prompt sets are included:
 Export hidden-state activation records:
 
 ```bash
-oracle-sae export-hf-records \
+interp-lab export-hf-records \
   --model distilgpt2 \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
   --out reports/real-small/distilgpt2-unit/records.jsonl \
@@ -26,7 +26,7 @@ oracle-sae export-hf-records \
 Inspect criterion-associated features:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model distilgpt2 \
   --criterion "the next token should be a physical measurement unit" \
   --backend records \
@@ -37,7 +37,7 @@ oracle-sae inspect \
 Export real ablation records:
 
 ```bash
-oracle-sae export-hf-interventions \
+interp-lab export-hf-interventions \
   --model distilgpt2 \
   --report reports/real-small/distilgpt2-unit/inspect/report.json \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
@@ -50,7 +50,7 @@ oracle-sae export-hf-interventions \
 Inspect only features with intervention evidence:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model distilgpt2 \
   --criterion "the next token should be a physical measurement unit" \
   --backend records \
@@ -63,7 +63,7 @@ oracle-sae inspect \
 Export a contrast-direction feature with a specificity-aware steering sweep:
 
 ```bash
-oracle-sae export-hf-contrast \
+interp-lab export-hf-contrast \
   --model distilgpt2 \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
   --criterion "the next token should be a physical measurement unit" \
@@ -76,7 +76,7 @@ oracle-sae export-hf-contrast \
 Then inspect it:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model distilgpt2 \
   --criterion "the next token should be a physical measurement unit" \
   --backend records \
@@ -89,7 +89,7 @@ oracle-sae inspect \
 Train an SAE directly from model activations:
 
 ```bash
-oracle-sae train-sae \
+interp-lab train-sae \
   --preset minimal \
   --hf-model distilgpt2 \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
@@ -107,7 +107,7 @@ oracle-sae train-sae \
 Run the production-oriented path with token rows, top-k sparse codes, and causal validation:
 
 ```bash
-oracle-sae train-sae \
+interp-lab train-sae \
   --preset production \
   --hf-model distilgpt2 \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
@@ -127,7 +127,7 @@ oracle-sae train-sae \
 Inspect the trained SAE latents:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model distilgpt2 \
   --criterion "the next token should be a physical measurement unit" \
   --backend records \
@@ -138,7 +138,7 @@ oracle-sae inspect \
 Compare DistilGPT-2 and GPT-2 reports:
 
 ```bash
-oracle-sae match \
+interp-lab match \
   --left reports/real-small/distilgpt2-unit/inspect/report.json \
   --right reports/real-small/gpt2-unit/inspect/report.json \
   --top-k 12 \

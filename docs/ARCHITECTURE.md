@@ -1,6 +1,6 @@
 # Architecture
 
-Oracle SAE is organized around one idea: every candidate feature should produce a comparable fingerprint and a falsifiable causal claim.
+interp-lab is organized around one idea: every candidate feature should produce a comparable fingerprint and a falsifiable causal claim.
 
 ## Pipeline
 
@@ -67,7 +67,7 @@ Current runners:
 - `ToyInterventionRunner`: passes through demo or imported causal scores.
 - `InterventionRecordRunner`: aggregates external ablation, amplification, clamp, patch, and steering records.
 
-Intervention records are model-agnostic. A model-specific backend can produce them today, and Oracle SAE will fold them into feature ranking and reports.
+Intervention records are model-agnostic. A model-specific backend can produce them today, and interp-lab will fold them into feature ranking and reports.
 
 The Hugging Face exporters currently generate two useful intervention families:
 

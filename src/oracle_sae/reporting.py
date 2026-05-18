@@ -40,7 +40,7 @@ def load_inspection_report(path: str | Path) -> InspectionReport:
 
 def render_inspection_markdown(report: InspectionReport) -> str:
     lines = [
-        f"# Oracle SAE Report: {report.model}",
+        f"# interp-lab Report: {report.model}",
         "",
         f"Criterion: {report.criterion.text}",
         "",
@@ -88,7 +88,7 @@ def render_inspection_markdown(report: InspectionReport) -> str:
 
 def render_match_markdown(report: MatchReport) -> str:
     lines = [
-        f"# Oracle SAE Match Report: {report.left_model} -> {report.right_model}",
+        f"# interp-lab Match Report: {report.left_model} -> {report.right_model}",
         "",
         "## Candidate Equivalents",
         "",

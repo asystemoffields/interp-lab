@@ -16,7 +16,7 @@ class SAELensFeatureProvider:
     """Loads selected features from a pretrained SAE Lens SAE.
 
     This adapter intentionally avoids importing `sae_lens` at module import time.
-    Projects that want it can install `oracle-sae[saelens]`.
+    Projects that want it can install `interp-lab[saelens]`.
     """
 
     def __init__(
@@ -99,7 +99,7 @@ class SAELensFeatureProvider:
             sae_lens = importlib.import_module("sae_lens")
         except ImportError as exc:
             raise RuntimeError(
-                "SAELens is not installed. Install it with `python -m pip install oracle-sae[saelens]` "
+                "SAELens is not installed. Install it with `python -m pip install interp-lab[saelens]` "
                 "or provide activation records exported from SAELens."
             ) from exc
         SAE = getattr(sae_lens, "SAE", None)

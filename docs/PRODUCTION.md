@@ -1,10 +1,10 @@
 # Production Guide
 
-Oracle SAE is meant to work for quick local experiments and repeatable research runs. The production path is:
+interp-lab is meant to work for quick local experiments and repeatable research runs. The production path is:
 
 ```bash
-oracle-sae doctor
-oracle-sae run examples/run_records.json
+interp-lab doctor
+interp-lab run examples/run_records.json
 ```
 
 ## Supported Platforms
@@ -20,7 +20,7 @@ The package avoids shell-specific workflows in the core CLI. Commands in docs us
 
 ## Reproducible Runs
 
-Use `oracle-sae run` when you want a saved, replayable workflow.
+Use `interp-lab run` when you want a saved, replayable workflow.
 
 Minimal config:
 
@@ -65,7 +65,7 @@ Multi-step config:
 
 Every run writes `manifest.json` with:
 
-- Oracle SAE version
+- interp-lab version
 - Python and platform info
 - rendered config
 - input file hashes for small/medium inputs
@@ -75,20 +75,20 @@ Every run writes `manifest.json` with:
 Use `--dry-run` to print commands:
 
 ```bash
-oracle-sae run examples/run_records.json --dry-run
+interp-lab run examples/run_records.json --dry-run
 ```
 
 Use `--var KEY=VALUE` for templates:
 
 ```bash
-oracle-sae run run.json --var MODEL=distilgpt2
+interp-lab run run.json --var MODEL=distilgpt2
 ```
 
 Config strings can reference `{MODEL}`, `{run_dir}`, `{config_dir}`, or `${MODEL}`.
 
 ## Environment Diagnostics
 
-`oracle-sae doctor` reports core runtime status and optional adapter dependencies:
+`interp-lab doctor` reports core runtime status and optional adapter dependencies:
 
 - `PyYAML` for YAML configs
 - `torch` and `transformers` for Hugging Face activation collection and SAE training
@@ -97,7 +97,7 @@ Config strings can reference `{MODEL}`, `{run_dir}`, `{config_dir}`, or `${MODEL
 Use JSON output in scripts:
 
 ```bash
-oracle-sae doctor --json
+interp-lab doctor --json
 ```
 
 ## Release Checklist
@@ -109,16 +109,16 @@ python -m pip install -e ".[dev]"
 python -m pytest
 python -m compileall src tests
 python -m build
-oracle-sae doctor
-oracle-sae run examples/run_records.json
+interp-lab doctor
+interp-lab run examples/run_records.json
 ```
 
 For model-backed release examples:
 
 ```bash
 python -m pip install -e ".[hf,train]"
-oracle-sae train-sae --help
-oracle-sae export-hf-records --help
+interp-lab train-sae --help
+interp-lab export-hf-records --help
 ```
 
 ## Operator Notes

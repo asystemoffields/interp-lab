@@ -40,7 +40,7 @@ def test_train_sae_from_records_writes_artifact_and_activation_records(tmp_path:
     )
 
     artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
-    assert artifact["format"] == "oracle-sae.sae.v1"
+    assert artifact["format"] == "interp-lab.sae.v1"
     assert artifact["method"] == "fallback-dictionary"
     assert artifact["input_dim"] == 3
     assert artifact["latent_dim"] == 4

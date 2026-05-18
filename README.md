@@ -4,10 +4,10 @@ interp-lab is an open-source starter kit for criterion-driven mechanistic interp
 
 Give it a model, a criterion, and feature evidence. It ranks internal features, explains them, tests causal impact, and searches for equivalent features in other models.
 
-The current CLI command is `oracle-sae`.
+Quick start:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model google/gemma-2-2b \
   --criterion "the model is aware it is being evaluated" \
   --backend toy \
@@ -31,19 +31,19 @@ The goal is to get close to an "oracular SAE" workflow:
 Check your local environment:
 
 ```bash
-oracle-sae doctor
+interp-lab doctor
 ```
 
 Run a criterion inspection:
 
 ```bash
-oracle-sae inspect --model toy/a --criterion "Python security bug" --backend toy
+interp-lab inspect --model toy/a --criterion "Python security bug" --backend toy
 ```
 
 Compare two reports:
 
 ```bash
-oracle-sae match \
+interp-lab match \
   --left reports/a/report.json \
   --right reports/b/report.json \
   --out reports/matches.json
@@ -54,13 +54,13 @@ This writes both `matches.json` and a readable markdown report with labels, comp
 Create a demo run:
 
 ```bash
-oracle-sae demo --out reports/demo
+interp-lab demo --out reports/demo
 ```
 
 Run a reproducible workflow from config:
 
 ```bash
-oracle-sae run examples/run_records.json
+interp-lab run examples/run_records.json
 ```
 
 This writes a run manifest with the tool version, platform, input hashes, executed steps, and output paths. Run configs can be JSON, TOML, or YAML.
@@ -68,7 +68,7 @@ This writes a run manifest with the tool version, platform, input hashes, execut
 Export activation records from a real Hugging Face model:
 
 ```bash
-oracle-sae export-hf-records \
+interp-lab export-hf-records \
   --model distilgpt2 \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
   --out reports/real-small/distilgpt2-unit/records.jsonl
@@ -77,7 +77,7 @@ oracle-sae export-hf-records \
 Export ablation records for top hidden-dimension features:
 
 ```bash
-oracle-sae export-hf-interventions \
+interp-lab export-hf-interventions \
   --model distilgpt2 \
   --report reports/real-small/distilgpt2-unit/inspect/report.json \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
@@ -88,7 +88,7 @@ oracle-sae export-hf-interventions \
 Export a contrast-direction feature and calibrate a causal steering strength:
 
 ```bash
-oracle-sae export-hf-contrast \
+interp-lab export-hf-contrast \
   --model distilgpt2 \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
   --criterion "the next token should be a physical measurement unit" \
@@ -102,7 +102,7 @@ oracle-sae export-hf-contrast \
 Train an SAE when no public SAE exists:
 
 ```bash
-oracle-sae train-sae \
+interp-lab train-sae \
   --preset minimal \
   --hf-model distilgpt2 \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
@@ -118,7 +118,7 @@ Use `--preset minimal` for quick local exploration. It trains on one activation 
 Use `--preset production` when you want a stronger artifact:
 
 ```bash
-oracle-sae train-sae \
+interp-lab train-sae \
   --preset production \
   --hf-model distilgpt2 \
   --dataset examples/hf_prompts_unit_prediction.jsonl \
@@ -135,7 +135,7 @@ Production mode uses token-level activation rows, top-k sparse codes, held-out r
 Then inspect the learned SAE latents with the normal records backend:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model distilgpt2 \
   --criterion "the next token should be a physical measurement unit" \
   --backend records \
@@ -146,7 +146,7 @@ oracle-sae inspect \
 `train-sae` can also train from an existing activation-record JSONL:
 
 ```bash
-oracle-sae train-sae \
+interp-lab train-sae \
   --records reports/real-small/distilgpt2-unit/records.jsonl \
   --model distilgpt2 \
   --latent-dim 256 \
@@ -160,7 +160,7 @@ Training uses PyTorch when available. `--method fallback` uses a deterministic s
 Rank features from per-prompt activation records:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model my/model \
   --criterion "the model is aware it is being evaluated" \
   --backend records \
@@ -171,7 +171,7 @@ oracle-sae inspect \
 Add causal intervention evidence:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model my/model \
   --criterion "the model is aware it is being evaluated" \
   --backend records \
@@ -183,7 +183,7 @@ oracle-sae inspect \
 Import selected features from Neuronpedia:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model gpt2-small \
   --criterion "mentions of measurements in meters or feet" \
   --backend neuronpedia \
@@ -194,9 +194,9 @@ oracle-sae inspect \
 Import selected features from a pretrained SAE Lens SAE:
 
 ```bash
-python -m pip install "oracle-sae[saelens]"
+python -m pip install "interp-lab[saelens]"
 
-oracle-sae inspect \
+interp-lab inspect \
   --model gpt2-small \
   --criterion "numeric measurements" \
   --backend saelens \
@@ -211,7 +211,7 @@ oracle-sae inspect \
 You can inspect a model from a JSONL feature dump:
 
 ```bash
-oracle-sae inspect \
+interp-lab inspect \
   --model my/model \
   --criterion "refusal behavior" \
   --features examples/features.jsonl \

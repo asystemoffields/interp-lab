@@ -56,7 +56,7 @@ def run_config_file(options: RunOptions, *, command_runner: CommandRunner) -> in
     if options.dry_run:
         for step in steps:
             argv = _argv_from_step(step)
-            print(" ".join(["oracle-sae", *argv]))
+            print(" ".join(["interp-lab", *argv]))
         return 0
 
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -110,7 +110,7 @@ def _load_yaml(text: str) -> dict[str, Any]:
     try:
         import yaml
     except ImportError as exc:
-        raise RuntimeError("YAML configs require PyYAML. Install `oracle-sae` with production dependencies.") from exc
+        raise RuntimeError("YAML configs require PyYAML. Install `interp-lab` with production dependencies.") from exc
     data = yaml.safe_load(text)
     if data is None:
         return {}
@@ -141,7 +141,7 @@ def _normalize_step(step: Any, index: int) -> dict[str, Any]:
         raise ValueError(f"run step {index} is missing `command`")
     command = str(step["command"])
     if command == "run":
-        raise ValueError("run configs cannot recursively call `oracle-sae run`")
+        raise ValueError("run configs cannot recursively call `interp-lab run`")
     args = step.get("args", {})
     if not isinstance(args, (dict, list)):
         raise ValueError(f"run step {index} `args` must be an object or list")
@@ -230,8 +230,8 @@ def _dict_to_argv(args: Mapping[str, Any]) -> list[str]:
 
 def _new_manifest(config_path: Path, run_dir: Path, config: dict[str, Any]) -> dict[str, Any]:
     return {
-        "schema_version": "oracle-sae.run.v1",
-        "tool": "oracle-sae",
+        "schema_version": "interp-lab.run.v1",
+        "tool": "interp-lab",
         "version": __version__,
         "status": "running",
         "started_at": _utc_now(),

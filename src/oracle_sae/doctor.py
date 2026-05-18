@@ -13,14 +13,14 @@ from oracle_sae import __version__
 def collect_diagnostics() -> dict[str, Any]:
     checks = [
         _check_python(),
-        _check_package("oracle-sae", required=True),
+        _check_package("interp-lab", required=True),
         _check_module("yaml", package_name="PyYAML", required=False, purpose="YAML run configs"),
         _check_module("torch", required=False, purpose="HF activation export and SAE training"),
         _check_module("transformers", required=False, purpose="Hugging Face model adapters"),
         _check_module("sae_lens", package_name="sae-lens", required=False, purpose="SAE Lens adapter"),
     ]
     return {
-        "tool": "oracle-sae",
+        "tool": "interp-lab",
         "version": __version__,
         "platform": {
             "python": sys.version.split()[0],
@@ -36,7 +36,7 @@ def collect_diagnostics() -> dict[str, Any]:
 
 def diagnostics_to_text(diagnostics: dict[str, Any]) -> str:
     lines = [
-        f"oracle-sae {diagnostics['version']}",
+        f"interp-lab {diagnostics['version']}",
         (
             f"Python {diagnostics['platform']['python']} "
             f"on {diagnostics['platform']['system']} {diagnostics['platform']['machine']}"
@@ -74,7 +74,7 @@ def _check_package(name: str, *, required: bool) -> dict[str, Any]:
     try:
         version = importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
-        version = __version__ if name == "oracle-sae" else None
+        version = __version__ if name == "interp-lab" else None
     return {
         "name": name,
         "ok": version is not None,

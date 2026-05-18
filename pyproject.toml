@@ -3,14 +3,14 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "oracle-sae"
+name = "interp-lab"
 version = "0.1.0"
 description = "Criterion-driven feature discovery, explanation, causal testing, and cross-model activation matching."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
-  { name = "Oracle SAE contributors" }
+  { name = "interp-lab contributors" }
 ]
 keywords = [
   "mechanistic-interpretability",
@@ -52,7 +52,7 @@ train = [
 ]
 
 [project.scripts]
-oracle-sae = "oracle_sae.cli:main"
+interp-lab = "oracle_sae.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/oracle_sae"]

@@ -2,7 +2,7 @@
 
 The north star:
 
-> Give Oracle SAE a model and a criterion in natural language. It returns the internal features most responsible for that criterion, explains them, tests them causally, and, when desired, searches for equivalent features across other models.
+> Give interp-lab a model and a criterion in natural language. It returns the internal features most responsible for that criterion, explains them, tests them causally, and, when desired, searches for equivalent features across other models.
 
 ## Milestone 1: Useful Local Skeleton
 

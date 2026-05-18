@@ -91,7 +91,7 @@ class NeuronpediaClient:
             raise RuntimeError(f"Neuronpedia returned non-JSON content for {url}") from exc
 
     def _headers(self) -> dict[str, str]:
-        headers = {"User-Agent": "oracle-sae/0.1"}
+        headers = {"User-Agent": "interp-lab/0.1"}
         api_key = os.environ.get("NEURONPEDIA_API_KEY")
         if api_key:
             headers["X-Api-Key"] = api_key

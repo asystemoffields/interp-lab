@@ -26,10 +26,10 @@ def export_hf_contrast_feature(
     steer_strength: float = 3.0,
     strength_sweep: list[float] | None = None,
 ) -> tuple[Path, Path | None, str]:
-    torch = _optional_import("torch", "Install `oracle-sae[hf]` to export Hugging Face contrast features.")
+    torch = _optional_import("torch", "Install `interp-lab[hf]` to export Hugging Face contrast features.")
     transformers = _optional_import(
         "transformers",
-        "Install `oracle-sae[hf]` to export Hugging Face contrast features.",
+        "Install `interp-lab[hf]` to export Hugging Face contrast features.",
     )
     prompts = load_prompt_records(dataset_path)
     if not prompts:

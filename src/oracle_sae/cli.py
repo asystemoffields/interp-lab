@@ -34,7 +34,7 @@ from oracle_sae.sae_training import build_train_sae_parser, run_train_sae_from_a
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="oracle-sae",
+        prog="interp-lab",
         description="Criterion-driven feature discovery and cross-model activation matching.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -116,7 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--out", default="reports/demo", help="Output directory.")
     demo.set_defaults(func=run_demo)
 
-    doctor = subparsers.add_parser("doctor", help="Check the local Oracle SAE environment.")
+    doctor = subparsers.add_parser("doctor", help="Check the local interp-lab environment.")
     doctor.add_argument("--json", action="store_true", help="Print diagnostics as JSON.")
     doctor.set_defaults(func=run_doctor)
 

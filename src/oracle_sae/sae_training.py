@@ -311,10 +311,10 @@ def load_activation_matrix_from_hf(
     max_records: int | None = None,
     seed: int = 0,
 ) -> ActivationMatrix:
-    torch = _optional_import("torch", "Install `oracle-sae[hf]` or `oracle-sae[train]` to train from HF activations.")
+    torch = _optional_import("torch", "Install `interp-lab[hf]` or `interp-lab[train]` to train from HF activations.")
     transformers = _optional_import(
         "transformers",
-        "Install `oracle-sae[hf]` to train directly from Hugging Face models.",
+        "Install `interp-lab[hf]` to train directly from Hugging Face models.",
     )
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
     model = transformers.AutoModelForCausalLM.from_pretrained(model_name)
@@ -510,10 +510,10 @@ def export_hf_sae_interventions(
     device: str,
     max_length: int,
 ) -> Path:
-    torch = _optional_import("torch", "Install `oracle-sae[hf]` to validate SAE latents causally.")
+    torch = _optional_import("torch", "Install `interp-lab[hf]` to validate SAE latents causally.")
     transformers = _optional_import(
         "transformers",
-        "Install `oracle-sae[hf]` to validate SAE latents causally.",
+        "Install `interp-lab[hf]` to validate SAE latents causally.",
     )
     layer = artifact.get("layer")
     if layer is None:
@@ -1013,7 +1013,7 @@ def _artifact(
     config: dict[str, Any],
 ) -> dict[str, Any]:
     return {
-        "format": "oracle-sae.sae.v1",
+        "format": "interp-lab.sae.v1",
         "model": matrix.model,
         "source": matrix.source or {},
         "layer": matrix.layer,

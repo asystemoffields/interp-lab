@@ -1,6 +1,6 @@
 # Goodfire Brief
 
-Oracle SAE / Interp Lab is an open-source criterion-driven interpretability tool.
+interp-lab is an open-source criterion-driven interpretability tool.
 
 The target workflow:
 

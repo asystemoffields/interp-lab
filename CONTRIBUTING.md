@@ -1,6 +1,6 @@
 # Contributing
 
-Oracle SAE is early, and the best contributions make one part of the inspection loop more real.
+interp-lab is early, and the best contributions make one part of the inspection loop more real.
 
 ## High-Value Contributions
 

@@ -122,10 +122,12 @@ def test_records_backend_accepts_intervention_records(tmp_path: Path):
     assert card["metadata"]["interventions"]["count"] == 1
 
 
-def test_doctor_command_reports_environment():
+def test_doctor_command_reports_environment(capsys):
     exit_code = main(["doctor", "--json"])
 
+    output = json.loads(capsys.readouterr().out)
     assert exit_code == 0
+    assert output["tool"] == "interp-lab"
 
 
 def test_run_config_writes_manifest_and_report(tmp_path: Path):
@@ -171,6 +173,8 @@ def test_run_config_writes_manifest_and_report(tmp_path: Path):
     assert exit_code == 0
     assert (run_dir / "inspect" / "report.json").exists()
     assert manifest["status"] == "succeeded"
+    assert manifest["tool"] == "interp-lab"
+    assert manifest["schema_version"] == "interp-lab.run.v1"
     assert manifest["steps"][0]["command"] == "inspect"
     assert manifest["steps"][0]["exit_code"] == 0
     assert manifest["inputs"][0]["sha256"]
