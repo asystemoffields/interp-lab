@@ -394,7 +394,15 @@ def scale_plan(
     selected_layers: int = 1,
     latent_dim: int = 131072,
     dtype: str = "bf16",
-    shards: int = 256,
+    shards: int | None = None,
+    profile: str = "auto",
+    artifact_format: str = "auto",
+    target_shard_size_bytes: int | None = None,
+    top_k_active: int = 64,
+    causal_features: int = 128,
+    causal_prompts: int = 256,
+    interventions_per_feature: int = 2,
+    train_batch_size: int = 4096,
 ) -> dict[str, Any]:
     """Estimate activation storage and execution shape for a large run."""
     return ScalePlan(
@@ -405,6 +413,14 @@ def scale_plan(
         latent_dim=latent_dim,
         dtype=dtype,
         shards=shards,
+        profile=profile,
+        artifact_format=artifact_format,
+        target_shard_size_bytes=target_shard_size_bytes,
+        top_k_active=top_k_active,
+        causal_features=causal_features,
+        causal_prompts=causal_prompts,
+        interventions_per_feature=interventions_per_feature,
+        train_batch_size=train_batch_size,
     ).to_dict()
 
 

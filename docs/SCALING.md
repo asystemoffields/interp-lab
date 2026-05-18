@@ -48,16 +48,35 @@ Use:
 
 ```bash
 interp-lab plan-scale \
-  --model-params 1e12 \
-  --tokens 1000000000 \
+  --model-params 1T \
+  --tokens 1B \
   --d-model 16384 \
   --selected-layers 8 \
-  --latent-dim 1048576 \
+  --latent-dim 1M \
   --dtype bf16 \
-  --shards 4096
+  --target-shard-size 64GB \
+  --out reports/scale-plan.json
 ```
 
-This estimates activation storage, per-shard size, SAE parameter storage, and execution recommendations.
+This estimates:
+
+- dense activation storage;
+- sparse feature-record storage after SAE or feature extraction;
+- recommended profile and artifact format;
+- shard count and per-shard size;
+- SAE parameter storage and training memory floor;
+- causal validation forward-pass count;
+- risk flags, recommendations, and agent next actions.
+
+Profiles:
+
+- `local-cpu`: quick pilots and tiny model-backed runs.
+- `single-gpu`: local GPU harvesting or SAE training.
+- `cluster`: distributed harvesting and training.
+- `remote-api`: model execution through an API or external service.
+- `frontier-lab`: colocated activation harvesting for very large models.
+
+Use `--profile auto` for default selection, or choose a profile explicitly. Use `--json` for stdout JSON and `--out` for a reusable plan file.
 
 ## Robustness Rules
 

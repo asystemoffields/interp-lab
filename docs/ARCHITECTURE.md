@@ -153,7 +153,7 @@ The graph schema keeps effect sizes, signed effects, specificity, side effects, 
 
 For very large models, interp-lab treats model execution as an adapter concern. A 1T+ model can harvest activations through a colocated runtime, Goodfire-style API, NNsight remote execution, or a custom cluster job. The stable interchange layer is sharded activation records, SAE artifacts, intervention records, and manifests.
 
-`plan-scale` estimates activation storage, per-shard size, SAE parameter storage, and recommended execution shape before a harvesting run begins.
+`plan-scale` estimates dense activation storage, sparse feature-record storage, shard size, SAE parameter storage, causal validation forward passes, and recommended execution shape before a harvesting run begins. Its JSON output includes assumptions, risk flags, and agent next actions.
 
 ## Adapter Contract
 

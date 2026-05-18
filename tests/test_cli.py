@@ -158,9 +158,9 @@ def test_plan_scale_command_outputs_estimate(capsys):
         [
             "plan-scale",
             "--model-params",
-            "1e12",
+            "1T",
             "--tokens",
-            "1000",
+            "1K",
             "--d-model",
             "1024",
             "--selected-layers",
@@ -173,7 +173,36 @@ def test_plan_scale_command_outputs_estimate(capsys):
     output = capsys.readouterr().out
     assert exit_code == 0
     assert "interp-lab scale plan" in output
+    assert "Agent next actions" in output
     assert "1T+" in output
+
+
+def test_plan_scale_command_writes_agent_json(tmp_path: Path):
+    plan_path = tmp_path / "scale-plan.json"
+    exit_code = main(
+        [
+            "plan-scale",
+            "--model-params",
+            "70B",
+            "--tokens",
+            "10M",
+            "--d-model",
+            "8192",
+            "--selected-layers",
+            "4",
+            "--target-shard-size",
+            "4GB",
+            "--out",
+            str(plan_path),
+            "--json",
+        ]
+    )
+
+    data = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert data["schema_version"] == "interp-lab.scale_plan.v2"
+    assert data["shard_plan"]["target_shard_size_human"] == "4.00 GB"
+    assert data["agent_next_actions"]
 
 
 def test_export_attribution_graph_command(tmp_path: Path):

@@ -142,7 +142,7 @@ PyPI release details live in `docs/RELEASE.md`.
 
 ## Large Runs
 
-Use `interp-lab plan-scale` before harvesting large activation corpora. For 1T+ models, keep the model runtime colocated with the infrastructure that can serve it, write sharded activation records or SAE records, then run interp-lab ranking and report generation over the evidence layer.
+Use `interp-lab plan-scale` before harvesting large activation corpora. It accepts sizes like `70B`, `1T`, `1B`, and `64GB`, writes JSON with `--out`, and includes agent next actions for automated workflows. For 1T+ models, keep the model runtime colocated with the infrastructure that can serve it, write sharded activation records or SAE records, then run interp-lab ranking and report generation over the evidence layer.
 
 Details live in `docs/SCALING.md`.
 

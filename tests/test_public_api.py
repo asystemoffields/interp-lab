@@ -102,6 +102,7 @@ def test_graph_publish_and_scale_public_apis(tmp_path: Path):
     assert graph["schema_version"] == "interp-lab.attribution_graph.v1"
     assert written_graph.json_path == tmp_path / "graph.json"
     assert dry_run.uploaded == ["report.json"]
+    assert plan["schema_version"] == "interp-lab.scale_plan.v2"
     assert any("1T+" in item for item in plan["recommendations"])
 
 

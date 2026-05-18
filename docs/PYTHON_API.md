@@ -109,7 +109,9 @@ plan = scale_plan(
     d_model=16384,
     selected_layers=8,
     latent_dim=1_048_576,
-    shards=4096,
+    profile="frontier-lab",
+    target_shard_size_bytes=64 * 1024**3,
+    top_k_active=64,
 )
 ```
 

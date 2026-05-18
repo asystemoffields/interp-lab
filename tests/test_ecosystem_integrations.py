@@ -8,7 +8,7 @@ from oracle_sae.graphs import build_attribution_graph, export_attribution_graph
 from oracle_sae.hf_publish import publish_hf_artifact, render_hf_card
 from oracle_sae.nnsight_records import _resolve_activation_path, parse_activation_paths
 from oracle_sae.reporting import write_inspection_report
-from oracle_sae.scaling import ScalePlan
+from oracle_sae.scaling import ScalePlan, parse_bytes, parse_count_float, parse_count_int
 from oracle_sae.transformerlens_records import parse_hook_names
 
 
@@ -104,8 +104,18 @@ def test_scale_plan_marks_trillion_parameter_remote_path():
         shards=256,
     ).to_dict()
 
+    assert plan["schema_version"] == "interp-lab.scale_plan.v2"
     assert plan["activation_storage_bytes"] > 0
+    assert plan["profile"] == "frontier-lab"
+    assert plan["estimates"]["causal_validation"]["estimated_forward_passes"] > 0
+    assert plan["agent_next_actions"]
     assert any("1T+" in item for item in plan["recommendations"])
+
+
+def test_scale_plan_accepts_human_friendly_values():
+    assert parse_count_float("1T") == 1_000_000_000_000
+    assert parse_count_int("1.5B") == 1_500_000_000
+    assert parse_bytes("64GB") == 64 * 1024**3
 
 
 class _FakeGoodfireClient:

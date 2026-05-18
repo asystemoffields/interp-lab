@@ -303,12 +303,13 @@ Plan a large run before harvesting activations:
 
 ```bash
 interp-lab plan-scale \
-  --model-params 1e12 \
-  --tokens 1000000000 \
+  --model-params 1T \
+  --tokens 1B \
   --d-model 16384 \
   --selected-layers 8 \
-  --latent-dim 1048576 \
-  --shards 4096
+  --latent-dim 1M \
+  --target-shard-size 64GB \
+  --out reports/scale-plan.json
 ```
 
 ## JSONL Feature Dumps
@@ -429,7 +430,7 @@ For large models, use interp-lab as the orchestration and evidence layer:
 5. Run causal validation in resumable batches.
 6. Publish reports, graphs, and artifacts with manifests.
 
-`interp-lab plan-scale` estimates activation storage, SAE parameter storage, shard size, and recommended execution shape. See `docs/SCALING.md` for the 1T+ path.
+`interp-lab plan-scale` accepts human-friendly sizes such as `70B`, `1T`, `1B`, and `64GB`. It estimates dense activation storage, sparse feature-record storage, SAE parameter storage, causal validation forward passes, shard counts, risk flags, and agent next actions. Use `--json` or `--out scale-plan.json` when an AI agent or workflow should consume the plan directly. See `docs/SCALING.md` for the 1T+ path.
 
 ## Architecture
 
