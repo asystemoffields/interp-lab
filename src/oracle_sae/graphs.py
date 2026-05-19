@@ -291,19 +291,29 @@ def _path_patch_edges(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             grouped.setdefault((source, target), []).append(record)
     edges = []
     for (source, target), rows in sorted(grouped.items()):
-        deltas = [_float(row.get("target_activation_delta")) for row in rows]
+        effect_rows = [row for row in rows if not _is_path_control(row)]
+        control_rows = [row for row in rows if _is_path_control(row)]
+        deltas = [_float(row.get("target_activation_delta")) for row in effect_rows]
         score_deltas = [
             _float(row.get("score_delta"))
-            for row in rows
+            for row in effect_rows
             if row.get("score_delta") is not None
         ]
-        by_strength = _path_strength_summary(rows)
+        control_deltas = [_float(row.get("target_activation_delta")) for row in control_rows]
+        control_score_deltas = [
+            _float(row.get("score_delta"))
+            for row in control_rows
+            if row.get("score_delta") is not None
+        ]
+        mean_abs_delta = _mean([abs(value) for value in deltas])
+        control_mean_abs_delta = _mean([abs(value) for value in control_deltas])
+        by_strength = _path_strength_summary(effect_rows, control_rows)
         best_strength = max(
             by_strength,
             key=lambda item: abs(float(item["mean_target_activation_delta"])),
             default=None,
         )
-        prompts = {str(row.get("prompt_id", "")) for row in rows}
+        prompts = {str(row.get("prompt_id", "")) for row in effect_rows}
         edges.append(
             {
                 "source": source,
@@ -311,16 +321,33 @@ def _path_patch_edges(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "type": "path_patch",
                 "evidence": "source_sae_latent_steering",
                 "mean_target_activation_delta": round(_mean(deltas), 6),
-                "mean_abs_target_activation_delta": round(_mean([abs(value) for value in deltas]), 6),
+                "mean_abs_target_activation_delta": round(mean_abs_delta, 6),
                 "mean_score_delta": round(_mean(score_deltas), 6) if score_deltas else None,
+                "control_mean_abs_target_activation_delta": round(control_mean_abs_delta, 6)
+                if control_rows
+                else None,
+                "control_mean_abs_score_delta": round(_mean([abs(value) for value in control_score_deltas]), 6)
+                if control_score_deltas
+                else None,
+                "path_specificity_score": round(max(0.0, mean_abs_delta - control_mean_abs_delta), 6)
+                if control_rows
+                else None,
                 "best_strength": best_strength,
                 "by_strength": by_strength,
-                "record_count": len(rows),
+                "record_count": len(effect_rows),
+                "control_record_count": len(control_rows),
                 "prompt_count": len(prompts),
                 "strengths": [item["strength"] for item in by_strength],
             }
         )
-    edges.sort(key=lambda edge: edge["mean_abs_target_activation_delta"], reverse=True)
+    edges.sort(
+        key=lambda edge: (
+            edge["path_specificity_score"]
+            if edge.get("path_specificity_score") is not None
+            else edge["mean_abs_target_activation_delta"]
+        ),
+        reverse=True,
+    )
     return edges
 
 
@@ -554,8 +581,11 @@ def _candidate_path_summaries(
                 "mean_target_activation_delta": edge["mean_target_activation_delta"],
                 "mean_abs_target_activation_delta": edge["mean_abs_target_activation_delta"],
                 "mean_score_delta": edge.get("mean_score_delta"),
+                "control_mean_abs_target_activation_delta": edge.get("control_mean_abs_target_activation_delta"),
+                "path_specificity_score": edge.get("path_specificity_score"),
                 "best_strength": edge.get("best_strength"),
                 "record_count": edge["record_count"],
+                "control_record_count": edge.get("control_record_count", 0),
             }
         )
     for edge in coactivation_edges:
@@ -621,28 +651,59 @@ def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
-def _path_strength_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _path_strength_summary(
+    rows: list[dict[str, Any]],
+    control_rows: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     grouped: dict[float, list[dict[str, Any]]] = {}
     for row in rows:
         grouped.setdefault(_float(row.get("strength")), []).append(row)
+    control_grouped: dict[float, list[dict[str, Any]]] = {}
+    for row in control_rows or []:
+        control_grouped.setdefault(_float(row.get("strength")), []).append(row)
     summary = []
-    for strength, strength_rows in sorted(grouped.items()):
+    for strength in sorted(set(grouped) | set(control_grouped)):
+        strength_rows = grouped.get(strength, [])
+        strength_control_rows = control_grouped.get(strength, [])
         deltas = [_float(row.get("target_activation_delta")) for row in strength_rows]
         score_deltas = [
             _float(row.get("score_delta"))
             for row in strength_rows
             if row.get("score_delta") is not None
         ]
+        control_deltas = [_float(row.get("target_activation_delta")) for row in strength_control_rows]
+        control_score_deltas = [
+            _float(row.get("score_delta"))
+            for row in strength_control_rows
+            if row.get("score_delta") is not None
+        ]
+        mean_abs_delta = _mean([abs(value) for value in deltas])
+        control_mean_abs_delta = _mean([abs(value) for value in control_deltas])
         summary.append(
             {
                 "strength": round(strength, 6),
                 "record_count": len(strength_rows),
                 "mean_target_activation_delta": round(_mean(deltas), 6),
-                "mean_abs_target_activation_delta": round(_mean([abs(value) for value in deltas]), 6),
+                "mean_abs_target_activation_delta": round(mean_abs_delta, 6),
                 "mean_score_delta": round(_mean(score_deltas), 6) if score_deltas else None,
+                "control_record_count": len(strength_control_rows),
+                "control_mean_abs_target_activation_delta": round(control_mean_abs_delta, 6)
+                if strength_control_rows
+                else None,
+                "control_mean_abs_score_delta": round(_mean([abs(value) for value in control_score_deltas]), 6)
+                if control_score_deltas
+                else None,
+                "path_specificity_score": round(max(0.0, mean_abs_delta - control_mean_abs_delta), 6)
+                if strength_control_rows
+                else None,
             }
         )
     return summary
+
+
+def _is_path_control(row: dict[str, Any]) -> bool:
+    metadata = row.get("metadata", {})
+    return isinstance(metadata, dict) and bool(metadata.get("control_type"))
 
 
 def _float(value: Any) -> float:

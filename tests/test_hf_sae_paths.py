@@ -5,6 +5,7 @@ import pytest
 from oracle_sae.hf_sae_paths import (
     build_hf_sae_paths_parser,
     parse_sae_feature_ref,
+    _random_source_control_refs,
     resolve_sae_feature_refs,
 )
 from oracle_sae.reporting import write_inspection_report
@@ -71,11 +72,29 @@ def test_hf_sae_paths_parser_accepts_core_options():
             "--target-feature",
             "SAE:L24:F8",
             "--strength-sweep=-2,2",
+            "--random-source-controls",
+            "2",
+            "--control-seed",
+            "17",
         ]
     )
 
     assert args.source_feature == ["SAE:L12:F1"]
     assert args.target_feature == ["SAE:L24:F8"]
+    assert args.random_source_controls == 2
+    assert args.control_seed == 17
+
+
+def test_random_source_controls_are_deterministic_and_exclude_source_latent():
+    artifact = _artifact(layer=12, latent_dim=5)
+    source_ref = parse_sae_feature_ref("SAE:L12:F2", artifact=artifact, role="source")
+
+    left = _random_source_control_refs(source_ref, artifact=artifact, count=4, seed=11)
+    right = _random_source_control_refs(source_ref, artifact=artifact, count=4, seed=11)
+
+    assert [ref.latent_index for ref in left] == [ref.latent_index for ref in right]
+    assert all(ref.latent_index != 2 for ref in left)
+    assert all(ref.feature_id.startswith("SAE:L12:F") for ref in left)
 
 
 def _artifact(*, layer: int, latent_dim: int) -> dict:

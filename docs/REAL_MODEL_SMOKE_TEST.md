@@ -200,6 +200,7 @@ interp-lab export-hf-sae-paths \
   --target-top-k 2 \
   --skip-behavior-score \
   --strength-sweep=-2,2 \
+  --random-source-controls 1 \
   --max-length 32 \
   --out reports/real-small/tiny-gpt2-unit/paths/layer1-to-layer2.jsonl
 ```
@@ -272,8 +273,10 @@ The production-oriented SAE smoke run trained on token-level rows with top-k spa
 The tiny GPT-2 path-patching smoke run validated the local/open attribution loop:
 
 - layer-1 and layer-2 four-latent SAEs trained successfully on CPU;
-- `export-hf-sae-paths` wrote `96` source-to-target path rows for two source latents, two target latents, two steering strengths, and twelve prompts;
-- the strongest measured internal path in the fused graph had mean absolute target-latent delta about `0.62` at strength `2`;
+- `export-hf-sae-paths` wrote `96` source-to-target effect rows for two source latents, two target latents, two steering strengths, and twelve prompts;
+- with one random-source control per selected source latent, it also wrote `96` matched control rows;
+- the strongest measured internal path in the fused graph had mean absolute target-latent delta about `0.62`, while the random-source controls moved the target latents by a similar amount on this tiny sanity setup;
+- the fused graph reports path specificity beside raw target-latent movement;
 - behavior-scored path rows also wrote successfully, with tiny output score movement on `sshleifer/tiny-gpt2`, as expected for a very small sanity model.
 
 The cross-model matcher handled both cases:

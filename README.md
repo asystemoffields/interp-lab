@@ -209,10 +209,11 @@ interp-lab export-hf-sae-paths \
   --source-report reports/sae-layer6/report/report.json \
   --target-report reports/sae-layer10/report/report.json \
   --out reports/sae-paths/layer6-to-layer10.jsonl \
-  --strength-sweep=-4,-2,2,4
+  --strength-sweep=-4,-2,2,4 \
+  --random-source-controls 2
 ```
 
-This steers selected source SAE decoder directions, re-encodes the downstream hidden state with the target SAE, and writes measured target-latent deltas plus optional behavior-score deltas. Feed the result into the attribution graph:
+This steers selected source SAE decoder directions, re-encodes the downstream hidden state with the target SAE, and writes measured target-latent deltas plus optional behavior-score deltas. `--random-source-controls` adds matched rows from random source SAE latents so the attribution graph can report path specificity next to raw effect size. Feed the result into the attribution graph:
 
 ```bash
 interp-lab export-attribution-graph \

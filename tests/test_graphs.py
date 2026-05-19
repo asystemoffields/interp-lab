@@ -65,6 +65,18 @@ def test_attribution_graph_accepts_measured_path_patch_edges():
             "strength": 2.0,
             "prompt_id": "p2",
         },
+        {
+            "source_feature_id": "SAE:L12:F1",
+            "target_feature_id": "SAE:L24:F8",
+            "target_activation_delta": 0.05,
+            "score_delta": 0.005,
+            "strength": 2.0,
+            "prompt_id": "p1",
+            "metadata": {
+                "control_type": "random_source",
+                "control_source_feature_id": "SAE:L12:F9",
+            },
+        },
     ]
 
     graph = build_attribution_graph(report, path_records=path_records)
@@ -72,10 +84,16 @@ def test_attribution_graph_accepts_measured_path_patch_edges():
     path_edges = [edge for edge in graph["edges"] if edge["type"] == "path_patch"]
     assert path_edges
     assert path_edges[0]["mean_target_activation_delta"] == 0.2
+    assert path_edges[0]["record_count"] == 2
+    assert path_edges[0]["control_record_count"] == 1
+    assert path_edges[0]["control_mean_abs_target_activation_delta"] == 0.05
+    assert path_edges[0]["path_specificity_score"] == 0.15
     assert path_edges[0]["best_strength"]["strength"] == 2.0
     assert path_edges[0]["by_strength"][0]["mean_score_delta"] == 0.02
+    assert path_edges[0]["by_strength"][0]["control_record_count"] == 1
     assert graph["mechanism_summary"]["candidate_paths"][0]["evidence"] == "path_patch"
     assert graph["mechanism_summary"]["candidate_paths"][0]["best_strength"]["strength"] == 2.0
+    assert graph["mechanism_summary"]["candidate_paths"][0]["path_specificity_score"] == 0.15
     assert "held-out prompts" in graph["mechanism_summary"]["validation_plan"][0]
 
 
