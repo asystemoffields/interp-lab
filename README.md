@@ -101,7 +101,7 @@ Run a reproducible workflow from config:
 interp-lab run examples/run_records.json
 ```
 
-This writes a run manifest with the tool version, platform, input hashes, executed steps, and output paths. Run configs can be JSON, TOML, or YAML.
+This writes a run manifest with the tool version, platform, input hashes, executed steps, per-step output artifacts, and an aggregate output inventory. Run configs can be JSON, TOML, or YAML.
 
 Export activation records from a real Hugging Face model:
 

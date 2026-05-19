@@ -80,6 +80,7 @@ Every run writes `manifest.json` with:
 - rendered config
 - input file hashes for small/medium inputs
 - ordered step records
+- per-step output artifacts and aggregate output inventory
 - exit codes and timestamps
 
 Use `--dry-run` to print commands:

@@ -454,6 +454,9 @@ def test_run_config_writes_manifest_and_report(tmp_path: Path):
     assert manifest["schema_version"] == "interp-lab.run.v1"
     assert manifest["steps"][0]["command"] == "inspect"
     assert manifest["steps"][0]["exit_code"] == 0
+    assert manifest["steps"][0]["outputs"][0]["kind"] == "directory"
+    assert manifest["steps"][0]["outputs"][0]["exists"] is True
+    assert manifest["outputs"][0]["kind"] == "directory"
     assert manifest["inputs"][0]["sha256"]
 
 
@@ -480,3 +483,32 @@ def test_run_config_steps_support_template_variables(tmp_path: Path):
 
     assert exit_code == 0
     assert (run_dir / "demo" / "matches.json").exists()
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["outputs"][0]["path"] == str((run_dir / "demo").resolve())
+
+
+def test_run_config_list_args_record_outputs(tmp_path: Path):
+    config = tmp_path / "run.json"
+    run_dir = tmp_path / "list-args"
+    config.write_text(
+        json.dumps(
+            {
+                "out": str(run_dir),
+                "steps": [
+                    {
+                        "name": "demo-list",
+                        "command": "demo",
+                        "args": ["--out", str(run_dir / "demo")],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["run", str(config)])
+
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert manifest["steps"][0]["outputs"][0]["path"] == str((run_dir / "demo").resolve())
+    assert manifest["outputs"][0]["kind"] == "directory"

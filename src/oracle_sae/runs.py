@@ -33,6 +33,15 @@ INPUT_PATH_KEYS = {
     "report",
     "path",
 }
+OUTPUT_PATH_KEYS = {
+    "out",
+    "records_out",
+    "causal_out",
+    "path_records_out",
+    "graph_out",
+    "graph_markdown_out",
+    "markdown_out",
+}
 
 
 @dataclass(frozen=True)
@@ -68,7 +77,9 @@ def run_config_file(options: RunOptions, *, command_runner: CommandRunner) -> in
     try:
         for step in steps:
             step_record = _run_step(step, command_runner)
+            step_record["outputs"] = _output_file_records(step, config_dir, manifest)
             manifest["steps"].append(step_record)
+            manifest["outputs"] = _merge_output_records(manifest["steps"])
             _write_manifest(manifest_path, manifest)
             if step_record["status"] != "succeeded":
                 manifest["status"] = "failed"
@@ -256,6 +267,7 @@ def _new_manifest(config_path: Path, run_dir: Path, config: dict[str, Any]) -> d
         },
         "config": config,
         "inputs": [],
+        "outputs": [],
         "steps": [],
     }
 
@@ -277,6 +289,73 @@ def _input_file_records(config: Any, config_dir: Path, manifest: dict[str, Any])
         seen.add(path)
         records.append(_file_record(path, hash_limit))
     return records
+
+
+def _output_file_records(step: dict[str, Any], config_dir: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    hash_limit = int(
+        manifest.get("config", {})
+        .get("manifest", {})
+        .get("max_hash_bytes", DEFAULT_HASH_LIMIT_BYTES)
+    )
+    records = []
+    seen: set[Path] = set()
+    for _key, value in _output_path_items(step):
+        path = _resolve_output_path(value, config_dir)
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        records.append(_artifact_record(resolved, hash_limit))
+    return records
+
+
+def _merge_output_records(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged = []
+    seen = set()
+    for step in steps:
+        for record in step.get("outputs", []):
+            path = record.get("path")
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            merged.append(record)
+    return merged
+
+
+def _output_path_items(step: dict[str, Any]):
+    args = step.get("args", {})
+    if isinstance(args, dict):
+        for key, value in _walk_items(args):
+            if key in OUTPUT_PATH_KEYS and isinstance(value, str):
+                yield key, value
+        return
+    if not isinstance(args, list):
+        return
+    items = [str(item) for item in args]
+    index = 0
+    while index < len(items):
+        item = items[index]
+        if not item.startswith("--"):
+            index += 1
+            continue
+        key_value = item[2:]
+        if "=" in key_value:
+            key, value = key_value.split("=", 1)
+            if key.replace("-", "_") in OUTPUT_PATH_KEYS:
+                yield key, value
+            index += 1
+            continue
+        key = key_value.replace("-", "_")
+        if key in OUTPUT_PATH_KEYS and index + 1 < len(items):
+            value = items[index + 1]
+            if not value.startswith("--"):
+                yield key, value
+                index += 2
+                continue
+        index += 1
 
 
 def _walk_items(value: Any):
@@ -315,6 +394,55 @@ def _file_record(path: Path, hash_limit: int) -> dict[str, Any]:
     if size <= hash_limit:
         record["sha256"] = _sha256(path)
     return record
+
+
+def _resolve_output_path(value: str, config_dir: Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    cwd_path = Path.cwd() / path
+    if cwd_path.exists():
+        return cwd_path
+    config_path = config_dir / path
+    if config_path.exists():
+        return config_path
+    return cwd_path
+
+
+def _artifact_record(path: Path, hash_limit: int) -> dict[str, Any]:
+    if not path.exists():
+        return {
+            "path": str(path),
+            "exists": False,
+            "kind": "missing",
+            "size_bytes": 0,
+            "sha256": None,
+            "hash_skipped": True,
+        }
+    if path.is_file():
+        record = _file_record(path, hash_limit)
+        record["exists"] = True
+        record["kind"] = "file"
+        return record
+    if path.is_dir():
+        files = [item for item in path.rglob("*") if item.is_file()]
+        return {
+            "path": str(path),
+            "exists": True,
+            "kind": "directory",
+            "file_count": len(files),
+            "size_bytes": sum(item.stat().st_size for item in files),
+            "sha256": None,
+            "hash_skipped": True,
+        }
+    return {
+        "path": str(path),
+        "exists": True,
+        "kind": "other",
+        "size_bytes": 0,
+        "sha256": None,
+        "hash_skipped": True,
+    }
 
 
 def _sha256(path: Path) -> str:
