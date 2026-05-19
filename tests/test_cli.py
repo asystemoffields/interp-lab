@@ -241,6 +241,7 @@ def test_export_attribution_graph_command(tmp_path: Path):
 
     graph = tmp_path / "graph.json"
     markdown = tmp_path / "graph.md"
+    html = tmp_path / "graph.html"
     exit_code = main(
         [
             "export-attribution-graph",
@@ -250,6 +251,8 @@ def test_export_attribution_graph_command(tmp_path: Path):
             str(graph),
             "--markdown-out",
             str(markdown),
+            "--html-out",
+            str(html),
         ]
     )
 
@@ -257,6 +260,7 @@ def test_export_attribution_graph_command(tmp_path: Path):
     assert exit_code == 0
     assert data["schema_version"] == "interp-lab.attribution_graph.v1"
     assert "# Attribution Graph" in markdown.read_text(encoding="utf-8")
+    assert "feature-search" in html.read_text(encoding="utf-8")
 
 
 def test_export_attribution_graph_command_accepts_path_records(tmp_path: Path):
@@ -401,11 +405,13 @@ def test_validate_attribution_graph_command(tmp_path: Path):
     assert out.with_suffix(".md").exists()
     assert (tmp_path / "validated-graph.json").exists()
     assert (tmp_path / "validated-graph.md").exists()
+    assert (tmp_path / "validated-graph.html").exists()
     graph_markdown = (tmp_path / "validated-graph.md").read_text(encoding="utf-8")
     assert "Path validation: `robust=1`" in graph_markdown
     assert "validated" in graph_markdown
     assert "broader held-out prompts" in graph_markdown
     assert "passed_effect_control_and_sign_thresholds" in graph_markdown
+    assert "feature-search" in (tmp_path / "validated-graph.html").read_text(encoding="utf-8")
 
 
 def test_run_config_writes_manifest_and_report(tmp_path: Path):
@@ -654,6 +660,7 @@ def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
     assert validation_args["dataset"] == str(tmp_path / "heldout.jsonl")
     assert validation_args["top_k"] == 3
     assert validation_args["graph_out"] == "{run_dir}/validated-graph.json"
+    assert validation_args["graph_html_out"] == "{run_dir}/validated-graph.html"
     assert data["steps"][9]["name"] == "summarize-validated-graph"
 
     assert main(["run", str(config), "--dry-run"]) == 0

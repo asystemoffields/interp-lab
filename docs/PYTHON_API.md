@@ -174,6 +174,7 @@ written_graph = attribution_graph(
     "reports/model-a/report.json",
     out="reports/model-a/graph.json",
     markdown_out="reports/model-a/graph.md",
+    html_out="reports/model-a/graph.html",
 )
 
 validation = validate_attribution_graph(

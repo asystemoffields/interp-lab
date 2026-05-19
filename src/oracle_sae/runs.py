@@ -44,7 +44,9 @@ OUTPUT_PATH_KEYS = {
     "causal_out",
     "path_records_out",
     "graph_out",
+    "graph_html_out",
     "graph_markdown_out",
+    "html_out",
     "markdown_out",
 }
 

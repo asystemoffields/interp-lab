@@ -1,4 +1,9 @@
-from oracle_sae.graphs import build_attribution_graph, render_attribution_graph_markdown, summarize_attribution_graph
+from oracle_sae.graphs import (
+    build_attribution_graph,
+    render_attribution_graph_html,
+    render_attribution_graph_markdown,
+    summarize_attribution_graph,
+)
 from oracle_sae.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
 
 
@@ -121,6 +126,19 @@ def test_attribution_graph_summary_is_agent_friendly():
     assert summary["validation"]["overall_claim_grade"] == "validated_paths_present"
     assert summary["candidate_paths"][0]["claim_grade"] == "validated"
     assert summary["agent_next_actions"][0]["id"] == "replicate_validated_paths"
+
+
+def test_attribution_graph_html_is_self_contained_viewer():
+    html = render_attribution_graph_html(_validated_graph())
+
+    assert "<!doctype html>" in html
+    assert "interp-lab attribution graph" in html
+    assert "Candidate Paths" in html
+    assert "feature-search" in html
+    assert "graph-data" in html
+    assert "summary-data" in html
+    assert "robust" in html
+    assert "</script>{\"bad\"" not in html
 
 
 def _validated_graph():

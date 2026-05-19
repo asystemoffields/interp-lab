@@ -29,6 +29,7 @@ The target workflow:
 - SAE-latent path patching between source and target layer SAEs.
 - Graph validation with held-out path records, matched controls, and annotated graph exports.
 - Compact graph summaries for agents and scripts.
+- Self-contained HTML attribution graph viewer.
 - Hugging Face artifact publishing for reports and records.
 - Scale planning for very large model runs.
 - Config-driven runs with manifests for reproducibility.

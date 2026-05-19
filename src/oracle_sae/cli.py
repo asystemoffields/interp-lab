@@ -483,6 +483,8 @@ def run_validate_hf_sae_paths(args: argparse.Namespace) -> int:
         print(f"Wrote {result.validation.annotated_graph_path}")
     if result.validation.annotated_graph_markdown_path is not None:
         print(f"Wrote {result.validation.annotated_graph_markdown_path}")
+    if result.validation.annotated_graph_html_path is not None:
+        print(f"Wrote {result.validation.annotated_graph_html_path}")
     return 0
 
 
@@ -500,6 +502,8 @@ def run_export_attribution_graph(args: argparse.Namespace) -> int:
     print(f"Wrote {path}")
     if args.markdown_out:
         print(f"Wrote {args.markdown_out}")
+    if args.html_out:
+        print(f"Wrote {args.html_out}")
     return 0
 
 
@@ -517,6 +521,8 @@ def run_validate_attribution_graph(args: argparse.Namespace) -> int:
         print(f"Wrote {result.annotated_graph_path}")
     if result.annotated_graph_markdown_path is not None:
         print(f"Wrote {result.annotated_graph_markdown_path}")
+    if result.annotated_graph_html_path is not None:
+        print(f"Wrote {result.annotated_graph_html_path}")
     return 0
 
 

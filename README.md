@@ -272,10 +272,11 @@ interp-lab export-attribution-graph \
   --report reports/sae-layer10/report/report.json \
   --path-records reports/sae-paths/layer6-to-layer10.jsonl \
   --out reports/sae-paths/graph.json \
-  --markdown-out reports/sae-paths/graph.md
+  --markdown-out reports/sae-paths/graph.md \
+  --html-out reports/sae-paths/graph.html
 ```
 
-The Markdown graph digest summarizes strong causal features, measured candidate paths, validation status counts when present, feature groups, and the next validation checks.
+The Markdown graph digest summarizes strong causal features, measured candidate paths, validation status counts when present, feature groups, and the next validation checks. The HTML graph viewer is a self-contained local file with summary metrics, searchable feature rows, candidate paths, agent actions, and an SVG graph.
 
 For automation, write a compact graph summary JSON:
 
@@ -295,7 +296,7 @@ interp-lab validate-attribution-graph \
   --graph-out reports/sae-paths/validated-graph.json
 ```
 
-This writes JSON and Markdown summaries with effect sizes, control comparisons, sign consistency, confidence intervals, path status, claim grade, validation reason codes, run-level `agent_next_actions`, and a next action for each path. `--graph-out` writes a copy of the attribution graph with validation attached to matching path edges and candidate paths, plus a `validated-graph.md` digest by default.
+This writes JSON and Markdown summaries with effect sizes, control comparisons, sign consistency, confidence intervals, path status, claim grade, validation reason codes, run-level `agent_next_actions`, and a next action for each path. `--graph-out` writes a copy of the attribution graph with validation attached to matching path edges and candidate paths, plus `validated-graph.md` and `validated-graph.html` digests by default.
 
 Rerun the graph's top SAE paths on held-out prompts and validate them in one step:
 
@@ -310,6 +311,7 @@ interp-lab validate-hf-sae-paths \
   --out reports/sae-paths/heldout-validation.json \
   --graph-out reports/sae-paths/heldout-validated-graph.json \
   --graph-markdown-out reports/sae-paths/heldout-validated-graph.md \
+  --graph-html-out reports/sae-paths/heldout-validated-graph.html \
   --random-source-controls 2
 ```
 
@@ -425,10 +427,11 @@ interp-lab export-attribution-graph \
   --report reports/eval-awareness/report.json \
   --out reports/eval-awareness/graph.json \
   --markdown-out reports/eval-awareness/graph.md \
+  --html-out reports/eval-awareness/graph.html \
   --include-similarity-edges
 ```
 
-Repeat `--report` to fuse reports from multiple layers. Graph exports include feature nodes, criterion edges, candidate feature-group supernodes, coactivation edges from aligned activation signatures, a readable Markdown digest, and a `mechanism_summary` with candidate paths plus validation next steps. `summarize-attribution-graph` writes a compact JSON view with counts, top path claims, validation assessment, and agent actions.
+Repeat `--report` to fuse reports from multiple layers. Graph exports include feature nodes, criterion edges, candidate feature-group supernodes, coactivation edges from aligned activation signatures, a readable Markdown digest, an offline HTML viewer, and a `mechanism_summary` with candidate paths plus validation next steps. `summarize-attribution-graph` writes a compact JSON view with counts, top path claims, validation assessment, and agent actions.
 
 Plan a large run before harvesting activations:
 

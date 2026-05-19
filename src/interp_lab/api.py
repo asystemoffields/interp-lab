@@ -30,6 +30,7 @@ from oracle_sae.graphs import (
     export_attribution_graph_summary,
     load_graph_report,
     load_path_patch_records,
+    write_attribution_graph_html,
     summarize_attribution_graph,
     write_attribution_graph_markdown,
 )
@@ -87,6 +88,7 @@ class WrittenGraph:
     graph: dict[str, Any]
     json_path: Path | None = None
     markdown_path: Path | None = None
+    html_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,7 @@ class WrittenGraphValidation:
     markdown_path: Path
     annotated_graph_path: Path | None = None
     annotated_graph_markdown_path: Path | None = None
+    annotated_graph_html_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,7 @@ class HfSaePathValidation:
     validation_report: dict[str, Any]
     annotated_graph_path: Path | None = None
     annotated_graph_markdown_path: Path | None = None
+    annotated_graph_html_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -570,6 +574,7 @@ def attribution_graph(
     *,
     out: str | Path | None = None,
     markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
     include_similarity_edges: bool = False,
     similarity_threshold: float = 0.9,
     include_coactivation_edges: bool = True,
@@ -598,7 +603,8 @@ def attribution_graph(
 
         path.write_text(json.dumps(graph, indent=2, sort_keys=True), encoding="utf-8")
         markdown_path = write_attribution_graph_markdown(graph, markdown_out) if markdown_out is not None else None
-        return WrittenGraph(graph=graph, json_path=path, markdown_path=markdown_path)
+        html_path = write_attribution_graph_html(graph, html_out) if html_out is not None else None
+        return WrittenGraph(graph=graph, json_path=path, markdown_path=markdown_path, html_path=html_path)
     if out is None:
         loaded = load_graph_report(report)
         return build_attribution_graph(
@@ -615,6 +621,7 @@ def attribution_graph(
         report_path=report,
         out_path=out,
         markdown_out_path=markdown_out,
+        html_out_path=html_out,
         include_similarity_edges=include_similarity_edges,
         similarity_threshold=similarity_threshold,
         include_coactivation_edges=include_coactivation_edges,
@@ -634,7 +641,8 @@ def attribution_graph(
         path_records=loaded_path_records,
     )
     markdown_path = Path(markdown_out) if markdown_out is not None else None
-    return WrittenGraph(graph=graph, json_path=path, markdown_path=markdown_path)
+    html_path = Path(html_out) if html_out is not None else None
+    return WrittenGraph(graph=graph, json_path=path, markdown_path=markdown_path, html_path=html_path)
 
 
 def attribution_graph_summary(
@@ -667,6 +675,7 @@ def validate_attribution_graph(
     markdown_out: str | Path | None = None,
     graph_out: str | Path | None = None,
     graph_markdown_out: str | Path | None = None,
+    graph_html_out: str | Path | None = None,
     top_k: int = 8,
     min_effect: float = 0.05,
     min_specificity: float = 0.02,
@@ -709,15 +718,31 @@ def validate_attribution_graph(
                 annotated_graph,
                 graph_markdown_out if graph_markdown_out is not None else annotated_graph_path.with_suffix(".md"),
             )
+            annotated_graph_html_path = write_attribution_graph_html(
+                annotated_graph,
+                graph_html_out if graph_html_out is not None else annotated_graph_path.with_suffix(".html"),
+            )
         elif graph_markdown_out is not None:
             annotated_graph = annotate_graph_with_validation(graph, report)
             annotated_graph_markdown_path = write_attribution_graph_markdown(annotated_graph, graph_markdown_out)
+            annotated_graph_path = None
+            annotated_graph_html_path = (
+                write_attribution_graph_html(annotated_graph, graph_html_out) if graph_html_out is not None else None
+            )
+        elif graph_html_out is not None:
+            annotated_graph = annotate_graph_with_validation(graph, report)
+            annotated_graph_path = None
+            annotated_graph_markdown_path = None
+            annotated_graph_html_path = write_attribution_graph_html(annotated_graph, graph_html_out)
+        else:
+            annotated_graph_html_path = None
         return WrittenGraphValidation(
             report=report,
             json_path=path,
             markdown_path=markdown_path,
             annotated_graph_path=annotated_graph_path,
             annotated_graph_markdown_path=annotated_graph_markdown_path,
+            annotated_graph_html_path=annotated_graph_html_path,
         )
     if out is None:
         loaded_graph = json.loads(Path(graph).read_text(encoding="utf-8"))
@@ -741,6 +766,7 @@ def validate_attribution_graph(
         markdown_out_path=markdown_out,
         graph_out_path=graph_out,
         graph_markdown_out_path=graph_markdown_out,
+        graph_html_out_path=graph_html_out,
         top_k=top_k,
         min_effect=min_effect,
         min_specificity=min_specificity,
@@ -755,6 +781,7 @@ def validate_attribution_graph(
         markdown_path=result.markdown_path,
         annotated_graph_path=result.annotated_graph_path,
         annotated_graph_markdown_path=result.annotated_graph_markdown_path,
+        annotated_graph_html_path=result.annotated_graph_html_path,
     )
 
 
@@ -771,6 +798,7 @@ def validate_hf_sae_paths(
     markdown_out: str | Path | None = None,
     graph_out: str | Path | None = None,
     graph_markdown_out: str | Path | None = None,
+    graph_html_out: str | Path | None = None,
     source_report: str | Path | None = None,
     target_report: str | Path | None = None,
     top_k: int = 8,
@@ -809,6 +837,7 @@ def validate_hf_sae_paths(
         markdown_out_path=markdown_out,
         graph_out_path=graph_out,
         graph_markdown_out_path=graph_markdown_out,
+        graph_html_out_path=graph_html_out,
         source_report_path=source_report,
         target_report_path=target_report,
         top_k=top_k,
@@ -842,6 +871,7 @@ def validate_hf_sae_paths(
         validation_report=result.validation.report,
         annotated_graph_path=result.validation.annotated_graph_path,
         annotated_graph_markdown_path=result.validation.annotated_graph_markdown_path,
+        annotated_graph_html_path=result.validation.annotated_graph_html_path,
     )
 
 

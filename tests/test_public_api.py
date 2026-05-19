@@ -144,6 +144,7 @@ def test_scaffold_run_public_api_writes_sae_path_workflow(tmp_path: Path):
     assert result.config["steps"][7]["args"]["model_class"] == "auto-image-text-to-text"
     saved = json.loads(result.path.read_text(encoding="utf-8"))
     assert saved["steps"][-2]["args"]["graph_out"] == "{run_dir}/validated-graph.json"
+    assert saved["steps"][-2]["args"]["graph_html_out"] == "{run_dir}/validated-graph.html"
     assert saved["steps"][-1]["args"]["out"] == "{run_dir}/validated-graph-summary.json"
 
 
@@ -214,6 +215,7 @@ def test_graph_publish_and_scale_public_apis(tmp_path: Path):
         result.json_path,
         out=tmp_path / "graph.json",
         markdown_out=tmp_path / "graph.md",
+        html_out=tmp_path / "graph.html",
     )
     graph_summary = attribution_graph_summary(written_graph.graph, out=tmp_path / "graph-summary.json")
     dry_run = publish_hf_artifact(
@@ -228,6 +230,8 @@ def test_graph_publish_and_scale_public_apis(tmp_path: Path):
     assert written_graph.json_path == tmp_path / "graph.json"
     assert written_graph.markdown_path == tmp_path / "graph.md"
     assert written_graph.markdown_path.exists()
+    assert written_graph.html_path == tmp_path / "graph.html"
+    assert written_graph.html_path.exists()
     assert graph_summary.json_path == tmp_path / "graph-summary.json"
     assert graph_summary.summary["schema_version"] == "interp-lab.attribution_graph_summary.v1"
     assert dry_run.uploaded == ["report.json"]
@@ -284,6 +288,8 @@ def test_validate_attribution_graph_public_api(tmp_path: Path):
     assert written.annotated_graph_path.exists()
     assert written.annotated_graph_markdown_path == tmp_path / "validated-graph.md"
     assert written.annotated_graph_markdown_path.exists()
+    assert written.annotated_graph_html_path == tmp_path / "validated-graph.html"
+    assert written.annotated_graph_html_path.exists()
 
 
 def test_validate_hf_sae_paths_public_api(tmp_path: Path, monkeypatch):
@@ -296,6 +302,7 @@ def test_validate_hf_sae_paths_public_api(tmp_path: Path, monkeypatch):
                 json_path=tmp_path / "validation.json",
                 markdown_path=tmp_path / "validation.md",
                 annotated_graph_path=tmp_path / "validated-graph.json",
+                annotated_graph_html_path=tmp_path / "validated-graph.html",
             ),
         )
 
@@ -318,6 +325,7 @@ def test_validate_hf_sae_paths_public_api(tmp_path: Path, monkeypatch):
     assert result.selected_path_pairs == [("SAE:L1:F1", "SAE:L2:F8")]
     assert result.validation_report == {"ok": True}
     assert result.annotated_graph_path == tmp_path / "validated-graph.json"
+    assert result.annotated_graph_html_path == tmp_path / "validated-graph.html"
 
 
 def _row(model: str, prompt_id: str, score: float, features: dict[str, float]):

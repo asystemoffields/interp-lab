@@ -48,6 +48,7 @@ def test_hf_sae_path_validation_reruns_selected_graph_pairs(tmp_path: Path, monk
             annotated_graph_markdown_path=(
                 Path(kwargs["graph_markdown_out_path"]) if kwargs.get("graph_markdown_out_path") else None
             ),
+            annotated_graph_html_path=Path(kwargs["graph_html_out_path"]) if kwargs.get("graph_html_out_path") else None,
         )
 
     monkeypatch.setattr("oracle_sae.hf_sae_validation.export_hf_sae_path_records", fake_export_paths)
@@ -63,6 +64,7 @@ def test_hf_sae_path_validation_reruns_selected_graph_pairs(tmp_path: Path, monk
         validation_out_path=tmp_path / "validation.json",
         graph_out_path=tmp_path / "validated-graph.json",
         graph_markdown_out_path=tmp_path / "validated-graph.md",
+        graph_html_out_path=tmp_path / "validated-graph.html",
         top_k=1,
         random_source_controls=3,
     )
@@ -74,5 +76,7 @@ def test_hf_sae_path_validation_reruns_selected_graph_pairs(tmp_path: Path, monk
     assert captured["validation_kwargs"]["path_records_path"] == tmp_path / "paths.jsonl"
     assert captured["validation_kwargs"]["graph_out_path"] == tmp_path / "validated-graph.json"
     assert captured["validation_kwargs"]["graph_markdown_out_path"] == tmp_path / "validated-graph.md"
+    assert captured["validation_kwargs"]["graph_html_out_path"] == tmp_path / "validated-graph.html"
     assert result.validation.annotated_graph_path == tmp_path / "validated-graph.json"
     assert result.validation.annotated_graph_markdown_path == tmp_path / "validated-graph.md"
+    assert result.validation.annotated_graph_html_path == tmp_path / "validated-graph.html"

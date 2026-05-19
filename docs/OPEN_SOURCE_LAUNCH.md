@@ -42,7 +42,6 @@ For outreach, send:
 ## First Issues To File
 
 - Add HTML feature-card report.
-- Add HTML attribution graph viewer.
 - Add criterion dataset generator.
 - Add cross-model transfer validation.
 - Add distributed SAE training manifests.

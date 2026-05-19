@@ -298,11 +298,12 @@ def build_run_template(
         )
         _add_graph_step(
             config,
-            report=[source_report_path, target_report_path],
-            path_records=path_records_path,
-            out=graph_path,
-            markdown_out="{run_dir}/graph.md",
-        )
+        report=[source_report_path, target_report_path],
+        path_records=path_records_path,
+        out=graph_path,
+        markdown_out="{run_dir}/graph.md",
+        html_out="{run_dir}/graph.html",
+    )
         _add_graph_summary_step(
             config,
             name="summarize-graph",
@@ -324,6 +325,7 @@ def build_run_template(
                 "markdown_out": "{run_dir}/validation.md",
                 "graph_out": "{run_dir}/validated-graph.json",
                 "graph_markdown_out": "{run_dir}/validated-graph.md",
+                "graph_html_out": "{run_dir}/validated-graph.html",
                 "top_k": path_top_k,
                 "random_source_controls": random_source_controls,
                 "pool": pool,
@@ -585,6 +587,7 @@ def _add_inspect_and_graph_steps(
         report=f"{inspect_out}/report.json",
         out="{run_dir}/graph.json",
         markdown_out="{run_dir}/graph.md",
+        html_out="{run_dir}/graph.html",
     )
 
 
@@ -627,6 +630,7 @@ def _add_graph_step(
     report: str | list[str],
     out: str,
     markdown_out: str,
+    html_out: str | None = None,
     path_records: str | None = None,
 ) -> None:
     args: dict[str, Any] = {
@@ -634,6 +638,8 @@ def _add_graph_step(
         "out": out,
         "markdown_out": markdown_out,
     }
+    if html_out is not None:
+        args["html_out"] = html_out
     if path_records is not None:
         args["path_records"] = path_records
     config["steps"].append(
