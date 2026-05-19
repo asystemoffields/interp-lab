@@ -13,7 +13,7 @@ This checklist is for publishing interp-lab as a useful public tool.
 
 - `interp-lab doctor` succeeds on a clean environment.
 - `interp-lab run examples/run_records.json` writes a manifest and report.
-- `from interp_lab import inspect, compare, train_sae` works from an installed wheel.
+- `from interp_lab import inspect, compare, validate_matches, train_sae` works from an installed wheel.
 - Unit tests pass on Ubuntu, macOS, and Windows.
 - Package build succeeds for Python 3.10, 3.11, and 3.12.
 - README quickstart works from a fresh clone.
@@ -43,7 +43,7 @@ For outreach, send:
 
 - Add HTML feature-card report.
 - Add criterion dataset generator.
-- Add cross-model transfer validation.
+- Add held-out transfer calibration datasets for cross-model validation.
 - Add distributed SAE training manifests.
 - Add remote causal validation workers.
 - Add Goodfire activation-record export once the desired API shape is settled.

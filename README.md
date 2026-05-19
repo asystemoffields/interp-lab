@@ -17,7 +17,7 @@ interp-lab inspect \
 Python API:
 
 ```python
-from interp_lab import compare, inspect
+from interp_lab import compare, inspect, validate_matches
 
 left = inspect(
     "toy/model-a",
@@ -32,6 +32,7 @@ right = inspect(
     out="reports/model-b",
 )
 matches = compare(left.report, right.report, out="reports/matches.json")
+validation = validate_matches(matches.report, out="reports/match-validation.json")
 ```
 
 The package includes toy, JSONL, activation-record, Neuronpedia, SAE Lens, Goodfire, Gemma Scope/Qwen-Scope, Hugging Face, TransformerLens, NNsight, contrast-direction, and on-demand SAE training paths. It is shaped around adapter interfaces for real activation hooks, SAEs, crosscoders, and natural-language autoencoders.
@@ -90,6 +91,16 @@ interp-lab match \
 ```
 
 This writes both `matches.json` and a readable markdown report with labels, component scores, and signed effects when present.
+
+Validate the match claims:
+
+```bash
+interp-lab validate-matches \
+  --matches reports/matches.json \
+  --out reports/match-validation.json
+```
+
+This grades each pair as `validated`, `needs_causal_evidence`, `plausible`, `contradicted`, or `weak`, with reason codes and next actions for agents or researchers.
 
 Create a demo run:
 
@@ -591,7 +602,7 @@ activation signature
 + examples
 ```
 
-Cross-model equivalence is scored by fingerprint similarity. A match becomes interesting when it also preserves intervention effects.
+Cross-model equivalence is scored by fingerprint similarity. `validate-matches` turns those candidates into explicit evidence grades using score, text/activation/decoder components, causal fingerprint similarity, signed-effect direction, and signed-effect calibration.
 
 Adapters are intentionally small:
 

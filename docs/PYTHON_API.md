@@ -41,6 +41,17 @@ matches = compare(left, right, out="reports/matches.json")
 
 `compare` accepts in-memory reports or `report.json` paths.
 
+Validate candidate equivalents:
+
+```python
+from interp_lab import validate_matches
+
+validation = validate_matches(matches.report, out="reports/match-validation.json")
+print(validation.report["summary"]["overall_claim_grade"])
+```
+
+`validate_matches` accepts an in-memory `MatchReport` or a `matches.json` path and writes JSON plus Markdown when `out` is supplied.
+
 ## Build Prompts
 
 ```python

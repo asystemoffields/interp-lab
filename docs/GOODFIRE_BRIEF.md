@@ -25,6 +25,7 @@ The target workflow:
 - Specificity-aware strength sweeps using negative prompts as side-effect checks.
 - Confidence intervals, control rows, and a `strong_causal_score` for causal evidence.
 - Cross-model feature matching through text, activation, decoder, and causal fingerprints.
+- Cross-model match validation with explicit claim grades, reason codes, and agent next actions.
 - Attribution graph export from inspection reports.
 - SAE-latent path patching between source and target layer SAEs.
 - Graph validation with held-out path records, matched controls, and annotated graph exports.
@@ -63,7 +64,7 @@ The tool aims to be an orchestration layer for interpretability workflows:
 
 - criterion dataset generation from natural language;
 - HTML reports for feature cards and cross-model matches;
-- transfer tests for cross-model feature equivalence.
+- held-out transfer tests for cross-model feature equivalence.
 - distributed SAE training manifests;
 - remote causal validation workers.
 

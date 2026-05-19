@@ -16,6 +16,7 @@ from interp_lab import (
     train_sae,
     validate_attribution_graph,
     validate_hf_sae_paths,
+    validate_matches,
 )
 from oracle_sae.graph_validation import GraphValidationWriteResult
 from oracle_sae.hf_sae_validation import HfSaePathValidationResult
@@ -59,6 +60,27 @@ def test_compare_api_accepts_reports_and_paths(tmp_path: Path):
     assert result.json_path == tmp_path / "matches.json"
     assert result.markdown_path == tmp_path / "matches.md"
     assert result.report.matches
+
+
+def test_validate_matches_public_api_accepts_report_and_path(tmp_path: Path):
+    matches = compare(
+        inspect("toy/a", "benchmark awareness", backend="toy", top_k=2),
+        inspect("toy/b", "benchmark awareness", backend="toy", top_k=2),
+        top_k=2,
+        out=tmp_path / "matches.json",
+    )
+
+    in_memory = validate_matches(matches.report, top_k=1)
+    assert in_memory["summary"]["match_count"] == 1
+    assert in_memory["validations"][0]["claim_grade"]
+
+    written = validate_matches(matches.report, out=tmp_path / "match-validation.json")
+    assert written.json_path == tmp_path / "match-validation.json"
+    assert written.markdown_path == tmp_path / "match-validation.md"
+    assert written.report["summary"]["match_count"] == len(matches.report.matches)
+
+    loaded = validate_matches(matches.json_path, out=tmp_path / "match-validation-2.json")
+    assert loaded.json_path == tmp_path / "match-validation-2.json"
 
 
 def test_build_prompts_public_api_accepts_files_and_inline_prompts(tmp_path: Path):

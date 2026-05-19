@@ -6,12 +6,13 @@ The north star:
 
 ## Milestone 1: Useful Local Skeleton
 
-- CLI for `inspect`, `match`, and `demo`.
+- CLI for `inspect`, `match`, `validate-matches`, and `demo`.
 - Typed feature evidence, feature cards, reports, and match reports.
 - JSONL feature import.
 - Activation records backend for per-prompt feature activations.
 - Deterministic toy backend.
 - Fingerprint similarity across models.
+- Match validation with claim grades and agent next actions.
 - Markdown and JSON reports.
 
 ## Milestone 2: Real Feature Sources

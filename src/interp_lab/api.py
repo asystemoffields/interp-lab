@@ -44,9 +44,19 @@ from oracle_sae.hf_publish import PublishResult, publish_hf_artifact as _publish
 from oracle_sae.hf_records import PromptDatasetSummary, build_prompt_dataset
 from oracle_sae.hf_sae_paths import export_hf_sae_path_records
 from oracle_sae.hf_sae_validation import export_hf_sae_path_validation
+from oracle_sae.match_validation import (
+    DEFAULT_MAX_SIGNED_EFFECT_DELTA,
+    DEFAULT_MIN_ABS_SIGNED_EFFECT,
+    DEFAULT_MIN_CAUSAL_COMPONENT,
+    DEFAULT_MIN_COMPONENT,
+    DEFAULT_MIN_SCORE,
+    build_match_validation_report,
+    render_match_validation_markdown,
+)
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
     load_inspection_report,
+    load_match_report,
     write_inspection_report,
     write_match_markdown,
     write_match_report,
@@ -72,6 +82,13 @@ class WrittenInspection:
 @dataclass(frozen=True)
 class WrittenMatch:
     report: MatchReport
+    json_path: Path
+    markdown_path: Path
+
+
+@dataclass(frozen=True)
+class WrittenMatchValidation:
+    report: dict[str, Any]
     json_path: Path
     markdown_path: Path
 
@@ -339,6 +356,46 @@ def compare(
     json_path = write_match_report(report, out)
     markdown_path = write_match_markdown(report, _match_markdown_path(out))
     return WrittenMatch(report=report, json_path=json_path, markdown_path=markdown_path)
+
+
+def validate_matches(
+    matches: MatchReport | str | Path,
+    *,
+    out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+    top_k: int | None = None,
+    min_score: float = DEFAULT_MIN_SCORE,
+    min_component: float = DEFAULT_MIN_COMPONENT,
+    min_causal_component: float = DEFAULT_MIN_CAUSAL_COMPONENT,
+    max_signed_effect_delta: float = DEFAULT_MAX_SIGNED_EFFECT_DELTA,
+    min_abs_signed_effect: float = DEFAULT_MIN_ABS_SIGNED_EFFECT,
+) -> dict[str, Any] | WrittenMatchValidation:
+    """Validate cross-model candidate matches and grade equivalence evidence."""
+    match_path = None
+    if isinstance(matches, MatchReport):
+        match_report = matches
+    else:
+        match_path = str(matches)
+        match_report = load_match_report(matches)
+    report = build_match_validation_report(
+        match_report,
+        match_path=match_path,
+        top_k=top_k,
+        min_score=min_score,
+        min_component=min_component,
+        min_causal_component=min_causal_component,
+        max_signed_effect_delta=max_signed_effect_delta,
+        min_abs_signed_effect=min_abs_signed_effect,
+    )
+    if out is None:
+        return report
+    path = Path(out)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    markdown_path = Path(markdown_out) if markdown_out is not None else path.with_suffix(".md")
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.write_text(render_match_validation_markdown(report), encoding="utf-8")
+    return WrittenMatchValidation(report=report, json_path=path, markdown_path=markdown_path)
 
 
 def train_sae(

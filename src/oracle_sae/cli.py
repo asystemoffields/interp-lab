@@ -39,6 +39,7 @@ from oracle_sae.hf_records import (
 )
 from oracle_sae.hf_sae_paths import build_hf_sae_paths_parser, run_hf_sae_paths_from_args
 from oracle_sae.hf_sae_validation import build_hf_sae_validation_parser, run_hf_sae_validation_from_args
+from oracle_sae.match_validation import build_match_validation_parser, run_match_validation_from_args
 from oracle_sae.nnsight_records import build_nnsight_export_parser, run_nnsight_export_from_args
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
@@ -174,6 +175,14 @@ def build_parser() -> argparse.ArgumentParser:
     match.add_argument("--top-k", type=int, default=10, help="Number of matches to keep.")
     match.add_argument("--out", default="reports/matches.json", help="Output JSON path.")
     match.set_defaults(func=run_match)
+
+    validate_matches = subparsers.add_parser(
+        "validate-matches",
+        help="Validate cross-model candidate feature matches.",
+        parents=[build_match_validation_parser()],
+        add_help=False,
+    )
+    validate_matches.set_defaults(func=run_validate_matches)
 
     demo = subparsers.add_parser("demo", help="Run two toy inspections and match their features.")
     demo.add_argument("--out", default="reports/demo", help="Output directory.")
@@ -350,6 +359,13 @@ def run_match(args: argparse.Namespace) -> int:
     markdown_path = write_match_markdown(report, _match_markdown_path(args.out))
     print(f"Wrote {path}")
     print(f"Wrote {markdown_path}")
+    return 0
+
+
+def run_validate_matches(args: argparse.Namespace) -> int:
+    result = run_match_validation_from_args(args)
+    print(f"Wrote {result.json_path}")
+    print(f"Wrote {result.markdown_path}")
     return 0
 
 

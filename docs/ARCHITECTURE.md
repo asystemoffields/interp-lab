@@ -137,7 +137,9 @@ score =
 
 The weights are defaults. Real projects should tune them against held-out transfer tests.
 
-Match reports preserve labels and signed effects. Candidate equivalents with opposite signed causal effects are downgraded by the causal fingerprint component and surfaced in the markdown report.
+Match reports preserve labels and signed effects. `validate-matches` adds a claim layer on top of raw rankings: it grades each pair as `validated`, `needs_causal_evidence`, `plausible`, `contradicted`, or `weak`, and records reason codes such as `missing_signed_effects`, `causal_component_neutral`, and `signed_effect_direction_conflict`.
+
+The validation report is intentionally machine-readable. It includes per-match next actions and run-level `agent_next_actions`, so an AI agent can decide whether to replicate a validated pair, collect intervention records, or treat a pair as a contrast feature.
 
 ## Attribution Graphs
 

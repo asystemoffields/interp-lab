@@ -21,6 +21,7 @@ from interp_lab.api import (
     WrittenGraphValidation,
     WrittenInspection,
     WrittenMatch,
+    WrittenMatchValidation,
     attribution_graph,
     attribution_graph_summary,
     build_prompts,
@@ -36,6 +37,7 @@ from interp_lab.api import (
     train_sae,
     validate_attribution_graph,
     validate_hf_sae_paths,
+    validate_matches,
 )
 
 __all__ = [
@@ -56,6 +58,7 @@ __all__ = [
     "WrittenGraphValidation",
     "WrittenInspection",
     "WrittenMatch",
+    "WrittenMatchValidation",
     "attribution_graph",
     "attribution_graph_summary",
     "build_prompts",
@@ -71,6 +74,7 @@ __all__ = [
     "train_sae",
     "validate_attribution_graph",
     "validate_hf_sae_paths",
+    "validate_matches",
 ]
 
 __version__ = "0.2.0"

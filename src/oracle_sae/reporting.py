@@ -44,6 +44,11 @@ def load_inspection_report(path: str | Path) -> InspectionReport:
     return InspectionReport.from_dict(data)
 
 
+def load_match_report(path: str | Path) -> MatchReport:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return MatchReport.from_dict(data)
+
+
 def render_inspection_markdown(report: InspectionReport) -> str:
     lines = [
         f"# interp-lab Report: {report.model}",
