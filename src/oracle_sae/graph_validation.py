@@ -5,7 +5,7 @@ import copy
 import json
 import math
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -131,7 +131,7 @@ def build_graph_validation_report(
     run_assessment = _validation_run_assessment(validations)
     return {
         "schema_version": "interp-lab.graph_validation.v1",
-        "created_at": datetime.now(UTC).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "graph_path": graph_path,
         "model": graph.get("model"),
         "criterion": graph.get("criterion"),
