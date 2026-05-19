@@ -124,6 +124,10 @@ def build_graph_validation_report(
     for validation in validations:
         status = str(validation["status"])
         status_counts[status] = status_counts.get(status, 0) + 1
+    claim_grade_counts: dict[str, int] = {}
+    for validation in validations:
+        grade = str(validation["claim_grade"])
+        claim_grade_counts[grade] = claim_grade_counts.get(grade, 0) + 1
     return {
         "schema_version": "interp-lab.graph_validation.v1",
         "created_at": datetime.now(UTC).isoformat(),
@@ -135,6 +139,7 @@ def build_graph_validation_report(
             "candidate_count": len(candidates),
             "path_record_count": len(path_records),
             "validated_path_count": len(validations),
+            "claim_grade_counts": dict(sorted(claim_grade_counts.items())),
             "status_counts": dict(sorted(status_counts.items())),
         },
         "path_validations": validations,
@@ -189,13 +194,14 @@ def render_graph_validation_markdown(report: dict[str, Any]) -> str:
         f"Model: `{report.get('model', '')}`",
         f"Path records: `{report['summary']['path_record_count']}`",
         "",
-        "| Status | Path | Effect | Control | Specificity | Sign | Prompts |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        "| Status | Claim | Path | Effect | Control | Specificity | Sign | Prompts |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for item in report.get("path_validations", []):
         lines.append(
             "| "
             f"{item['status']} | "
+            f"{item['claim_grade']} | "
             f"`{item['source_feature_id']} -> {item['target_feature_id']}` | "
             f"{_markdown_number(item['mean_abs_target_activation_delta'])} | "
             f"{_markdown_number(item['control_mean_abs_target_activation_delta'])} | "
@@ -206,7 +212,8 @@ def render_graph_validation_markdown(report: dict[str, Any]) -> str:
     lines.extend(["", "## Notes", ""])
     for item in report.get("path_validations", []):
         lines.append(
-            f"- `{item['source_feature_id']} -> {item['target_feature_id']}`: {item['interpretation']}"
+            f"- `{item['source_feature_id']} -> {item['target_feature_id']}`: "
+            f"{item['interpretation']} Next: {item['next_action']}"
         )
     lines.append("")
     return "\n".join(lines)
@@ -291,7 +298,9 @@ def _path_patch_candidates(graph: dict[str, Any]) -> list[dict[str, Any]]:
 def _validation_annotation(item: dict[str, Any]) -> dict[str, Any]:
     keys = [
         "status",
+        "claim_grade",
         "interpretation",
+        "next_action",
         "reason_codes",
         "record_count",
         "control_record_count",
@@ -365,14 +374,17 @@ def _validate_path(
         sign_consistency=sign_consistency,
         thresholds=thresholds,
     )
+    claim_grade = _claim_grade(status, reason_codes)
     return {
         "source_feature_id": candidate["source_feature_id"],
         "target_feature_id": candidate["target_feature_id"],
         "source_label": candidate.get("source_label"),
         "target_label": candidate.get("target_label"),
         "status": status,
+        "claim_grade": claim_grade,
         "reason_codes": reason_codes,
         "interpretation": _interpret_status(status, reason_codes),
+        "next_action": _next_action(claim_grade, reason_codes),
         "record_count": len(effect_rows),
         "control_record_count": len(control_rows),
         "prompt_count": prompt_count,
@@ -482,6 +494,42 @@ def _interpret_status(status: str, reason_codes: list[str] | None = None) -> str
     if "sign_consistency_below_threshold" in reasons:
         return "The target-latent effect changes sign across records more often than the current threshold allows."
     return "The available path records are weak for this candidate."
+
+
+def _claim_grade(status: str, reason_codes: list[str]) -> str:
+    reasons = set(reason_codes)
+    if status == "robust":
+        return "validated"
+    if status == "suggestive":
+        return "needs_replication"
+    if status == "failed_control":
+        if "missing_control_records" in reasons:
+            return "needs_controls"
+        return "control_failed"
+    if "prompt_count_below_threshold" in reasons:
+        return "underpowered"
+    if "effect_below_threshold" in reasons:
+        return "low_effect"
+    return "insufficient_evidence"
+
+
+def _next_action(claim_grade: str, reason_codes: list[str]) -> str:
+    reasons = set(reason_codes)
+    if claim_grade == "validated":
+        return "Use as a causal path candidate and replicate on broader held-out prompts before broad claims."
+    if claim_grade == "needs_replication":
+        return "Increase prompt count, rerun controls, and check sign consistency on held-out prompts."
+    if claim_grade == "needs_controls":
+        return "Rerun with random-source or matched-source control rows."
+    if claim_grade == "control_failed":
+        return "Improve control separation with matched controls, more prompts, or a narrower source-target pair."
+    if claim_grade == "underpowered":
+        return "Add more distinct prompts before interpreting this path."
+    if claim_grade == "low_effect" and "sign_consistency_below_threshold" in reasons:
+        return "Try a richer strength sweep, then rerun only if the sign becomes stable."
+    if claim_grade == "low_effect":
+        return "Lower priority or rerun with a stronger intervention sweep."
+    return "Collect more path records or deprioritize this candidate."
 
 
 def _is_control(record: dict[str, Any]) -> bool:

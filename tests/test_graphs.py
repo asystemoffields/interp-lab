@@ -125,7 +125,9 @@ def test_attribution_graph_markdown_summarizes_validated_paths():
                     "record_count": 2,
                     "validation": {
                         "status": "robust",
+                        "claim_grade": "validated",
                         "interpretation": "The path replicated with a target-latent effect that beat controls.",
+                        "next_action": "Replicate on broader held-out prompts.",
                         "reason_codes": ["passed_effect_control_and_sign_thresholds"],
                     },
                 }
@@ -142,6 +144,8 @@ def test_attribution_graph_markdown_summarizes_validated_paths():
     assert "Path validation: `robust=1`" in markdown
     assert "`SAE:L12:F1 -> SAE:L24:F8`" in markdown
     assert "robust" in markdown
+    assert "validated" in markdown
+    assert "Replicate on broader held-out prompts" in markdown
     assert "### Path Notes" in markdown
     assert "passed_effect_control_and_sign_thresholds" in markdown
 

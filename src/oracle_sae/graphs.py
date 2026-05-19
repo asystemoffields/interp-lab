@@ -699,12 +699,13 @@ def _candidate_path_markdown(paths: list[dict[str, Any]]) -> list[str]:
     lines = [
         "## Candidate Paths",
         "",
-        "| Status | Path | Evidence | Effect | Control | Specificity | Records |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: |",
+        "| Status | Claim | Path | Evidence | Effect | Control | Specificity | Records |",
+        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
     ]
     for path in paths[:12]:
         validation = path.get("validation") if isinstance(path.get("validation"), dict) else {}
         status = validation.get("status", "")
+        claim_grade = validation.get("claim_grade", "")
         effect = path.get("mean_abs_target_activation_delta", validation.get("mean_abs_target_activation_delta"))
         control = path.get(
             "control_mean_abs_target_activation_delta",
@@ -715,6 +716,7 @@ def _candidate_path_markdown(paths: list[dict[str, Any]]) -> list[str]:
         lines.append(
             "| "
             f"{_cell(status)} | "
+            f"{_cell(claim_grade)} | "
             f"`{_cell(path.get('source_feature_id'))} -> {_cell(path.get('target_feature_id'))}` | "
             f"{_cell(path.get('evidence'))} | "
             f"{_number(effect)} | "
@@ -740,10 +742,12 @@ def _candidate_path_note_markdown(paths: list[dict[str, Any]]) -> list[str]:
         target = _cell(path.get("target_feature_id"))
         status = _cell(validation.get("status"))
         reason_codes = validation.get("reason_codes")
+        next_action = validation.get("next_action")
         reason_text = ""
         if isinstance(reason_codes, list) and reason_codes:
             reason_text = f" Reasons: `{', '.join(_cell(reason) for reason in reason_codes)}`."
-        notes.append(f"- `{source} -> {target}` {status}: {_cell(interpretation)}{reason_text}")
+        next_text = f" Next: {_cell(next_action)}" if next_action else ""
+        notes.append(f"- `{source} -> {target}` {status}: {_cell(interpretation)}{next_text}{reason_text}")
     if not notes:
         return []
     return ["### Path Notes", "", *notes, ""]

@@ -25,7 +25,10 @@ def test_graph_validation_classifies_robust_path_against_controls():
     validation = report["path_validations"][0]
     assert report["schema_version"] == "interp-lab.graph_validation.v1"
     assert validation["status"] == "robust"
+    assert validation["claim_grade"] == "validated"
     assert validation["reason_codes"] == ["passed_effect_control_and_sign_thresholds"]
+    assert "broader held-out prompts" in validation["next_action"]
+    assert report["summary"]["claim_grade_counts"] == {"validated": 1}
     assert validation["record_count"] == 3
     assert validation["control_record_count"] == 3
     assert validation["path_specificity_score"] == 0.19
@@ -49,7 +52,9 @@ def test_graph_validation_marks_control_matched_path_as_failed_control():
 
     validation = report["path_validations"][0]
     assert validation["status"] == "failed_control"
+    assert validation["claim_grade"] == "control_failed"
     assert "control_specificity_below_threshold" in validation["reason_codes"]
+    assert "matched controls" in validation["next_action"]
     assert "comparable target-latent deltas" in validation["interpretation"]
 
 
@@ -86,11 +91,13 @@ def test_export_graph_validation_report_writes_json_and_markdown(tmp_path: Path)
     assert result.annotated_graph_markdown_path.exists()
     annotated = json.loads(result.annotated_graph_path.read_text(encoding="utf-8"))
     assert annotated["edges"][0]["validation"]["status"] == "robust"
+    assert annotated["edges"][0]["validation"]["claim_grade"] == "validated"
     assert annotated["edges"][0]["validation"]["reason_codes"] == ["passed_effect_control_and_sign_thresholds"]
     assert annotated["mechanism_summary"]["candidate_paths"][0]["validation"]["status"] == "robust"
     assert "Attribution Graph Validation" in result.markdown_path.read_text(encoding="utf-8")
     annotated_markdown = result.annotated_graph_markdown_path.read_text(encoding="utf-8")
     assert "Path validation: `robust=1`" in annotated_markdown
+    assert "validated" in annotated_markdown
     assert "`SAE:L1:F1 -> SAE:L2:F8`" in annotated_markdown
 
 
@@ -107,6 +114,7 @@ def test_annotate_graph_with_validation_preserves_input_graph():
 
     assert "validation" not in graph["edges"][0]
     assert annotated["edges"][0]["validation"]["status"] == "robust"
+    assert annotated["edges"][0]["validation"]["next_action"]
     assert annotated["metadata"]["graph_validation"]["summary"]["validated_path_count"] == 1
 
 
