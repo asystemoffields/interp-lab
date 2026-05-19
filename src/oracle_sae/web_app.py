@@ -40,6 +40,32 @@ COMMAND_SPECS: list[dict[str, Any]] = [
         ],
     },
     {
+        "id": "criterion-lab",
+        "group": "Guided Labs",
+        "label": "Criterion Lab",
+        "description": "Scaffold a guided behavior workflow, starting with overconfidence and calibration.",
+        "fields": [
+            {"key": "model", "flag": "--model", "label": "Model", "required": True, "placeholder": "distilgpt2"},
+            {"key": "preset", "flag": "--preset", "label": "Preset", "type": "select", "default": "overconfidence", "options": ["overconfidence"]},
+            {"key": "criterion", "flag": "--criterion", "label": "Criterion override"},
+            {"key": "workflow", "flag": "--workflow", "label": "Workflow", "type": "select", "default": "sae", "options": ["hf-records", "sae", "sae-paths"]},
+            {"key": "training_preset", "flag": "--training-preset", "label": "SAE preset", "type": "select", "default": "minimal", "options": ["minimal", "production", "custom"]},
+            {"key": "run_dir", "flag": "--run-dir", "label": "Run directory", "default": "reports/criterion-lab"},
+            {"key": "out", "flag": "--out", "label": "Run config path", "default": "reports/criterion-lab/run.json"},
+            {"key": "positive_prompt", "flag": "--positive-prompt", "label": "Extra positive prompts", "type": "repeat"},
+            {"key": "negative_prompt", "flag": "--negative-prompt", "label": "Extra negative prompts", "type": "repeat"},
+            {"key": "no_preset_prompts", "flag": "--no-preset-prompts", "label": "Use only my prompts", "type": "boolean"},
+            {"key": "skip_causal", "flag": "--skip-causal", "label": "Skip first-pass causal scoring", "type": "boolean"},
+            {"key": "target_token", "flag": "--target-token", "label": "Target tokens", "type": "repeat"},
+            {"key": "layer", "flag": "--layer", "label": "SAE layer", "type": "number"},
+            {"key": "source_layer", "flag": "--source-layer", "label": "Source layer", "type": "number"},
+            {"key": "target_layer", "flag": "--target-layer", "label": "Target layer", "type": "number"},
+            {"key": "device", "flag": "--device", "label": "Device", "default": "cpu"},
+            {"key": "execute", "flag": "--execute", "label": "Execute after writing config", "type": "boolean"},
+            {"key": "force", "flag": "--force", "label": "Overwrite config", "type": "boolean"},
+        ],
+    },
+    {
         "id": "export-hf-records",
         "group": "Data",
         "label": "Export HF Records",
@@ -691,6 +717,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     const commandSpecs = JSON.parse(document.getElementById("command-specs").textContent);
     const workflows = [
       {{ title: "Start with a toy tour", command: "demo", values: {{ out: "reports/demo" }} }},
+      {{ title: "Overconfidence lab", command: "criterion-lab", values: {{ model: "distilgpt2", preset: "overconfidence", workflow: "sae", training_preset: "minimal", run_dir: "reports/overconfidence-lab", out: "reports/overconfidence-lab/run.json", layer: "6", execute: false, force: true }} }},
       {{ title: "Inspect a local/open model", command: "inspect", values: {{ backend: "records", out: "reports/inspection", html_out: "reports/inspection/report.html" }} }},
       {{ title: "Train and inspect an SAE", command: "train-sae", values: {{ preset: "production", out: "reports/sae/sae.json", records_out: "reports/sae/records.jsonl" }} }},
       {{ title: "Compare two models", command: "match", values: {{ left: "reports/a/report.json", right: "reports/b/report.json", out: "reports/matches.json" }} }},
@@ -879,6 +906,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
         match: "Run validate-matches on the match report before treating pairs as equivalents.",
         "validate-matches": "Use validated pairs in graph review; collect interventions for pairs that need evidence.",
         "export-attribution-graph": "Open graph.html, then validate candidate paths with held-out path records.",
+        "criterion-lab": "Run the generated config, then open the inspection report and graph artifacts from Reports And Graphs.",
         demo: "Open the generated HTML reports in the output folder for a quick product tour.",
       }};
       return actions[id] || "Copy the command or run-config step, then run it in the environment that has access to the model and data.";

@@ -133,6 +133,19 @@ interp-lab studio --serve --reports-dir reports
 
 The served app keeps job history for the current session, launches known interp-lab commands, and exposes generated HTML, JSON, Markdown, and graph artifacts under the current workspace. The static file remains useful for sharing commands and configs; served mode adds the local runner.
 
+Start a guided Criterion Lab for a behavior such as overconfidence:
+
+```bash
+interp-lab criterion-lab \
+  --model distilgpt2 \
+  --preset overconfidence \
+  --layer 6 \
+  --run-dir reports/overconfidence-lab \
+  --out reports/overconfidence-lab/run.json
+```
+
+This writes an editable run config with paired calibration prompts, SAE training, first-pass causal scoring, feature inspection, and graph export. Add your own `--positive-prompt` and `--negative-prompt` examples to adapt the lab to a domain. In served Studio, use the “Overconfidence lab” guided start, review the generated config, then run it from the Local Runner.
+
 Run a reproducible workflow from config:
 
 ```bash

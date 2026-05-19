@@ -22,6 +22,7 @@ from oracle_sae.adapters.saelens import (
 from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.cli import main as _cli_main
+from oracle_sae.criterion_lab import CriterionLabWriteResult, write_criterion_lab_config
 from oracle_sae.doctor import collect_diagnostics
 from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
 from oracle_sae.graphs import (
@@ -251,6 +252,70 @@ def scaffold_run(
         max_length=max_length,
         include_causal=include_causal,
         target_token=_as_optional_list(target_token),
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs_json=model_kwargs_json,
+        tokenizer_kwargs_json=tokenizer_kwargs_json,
+    )
+
+
+def criterion_lab(
+    *,
+    out: str | Path = "reports/criterion-lab/run.json",
+    model: str,
+    preset: str = "overconfidence",
+    criterion: str | None = None,
+    workflow: str = "sae",
+    run_dir: str | Path = "reports/criterion-lab",
+    positive_prompt: str | list[str] | None = None,
+    negative_prompt: str | list[str] | None = None,
+    include_preset_prompts: bool = True,
+    training_preset: str = "minimal",
+    top_k: int = 8,
+    features_per_layer: int = 16,
+    layers: str | None = None,
+    layer: int | None = None,
+    source_layer: int | None = None,
+    target_layer: int | None = None,
+    include_causal: bool = True,
+    target_token: str | list[str] | None = None,
+    device: str = "cpu",
+    max_length: int | None = None,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs_json: str | None = None,
+    tokenizer_kwargs_json: str | None = None,
+    force: bool = False,
+) -> CriterionLabWriteResult:
+    """Write an editable Criterion Lab config for a behavior such as overconfidence."""
+    return write_criterion_lab_config(
+        out=out,
+        force=force,
+        model=model,
+        preset=preset,
+        criterion=criterion,
+        workflow=workflow,
+        run_dir=run_dir,
+        positive_prompt=_as_optional_list(positive_prompt),
+        negative_prompt=_as_optional_list(negative_prompt),
+        include_preset_prompts=include_preset_prompts,
+        training_preset=training_preset,
+        top_k=top_k,
+        features_per_layer=features_per_layer,
+        layers=layers,
+        layer=layer,
+        source_layer=source_layer,
+        target_layer=target_layer,
+        include_causal=include_causal,
+        target_token=_as_optional_list(target_token),
+        device=device,
+        max_length=max_length,
         model_class=model_class,
         trust_remote_code=trust_remote_code,
         local_files_only=local_files_only,

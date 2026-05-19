@@ -22,6 +22,7 @@ def test_command_specs_cover_cli_subcommands():
         "validate-matches",
         "export-attribution-graph",
         "validate-attribution-graph",
+        "criterion-lab",
         "studio",
         "demo",
     } <= ids
@@ -38,6 +39,8 @@ def test_render_web_app_contains_required_surfaces():
     assert "generated-command" in html
     assert "run-config-output" in html
     assert "validate-hf-sae-paths" in html
+    assert "criterion-lab" in html
+    assert "Overconfidence lab" in html
     assert "--trust-remote-code" in html
     assert "Choose..." in html
     assert "splitExtraFlags" in html

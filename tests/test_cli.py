@@ -666,6 +666,82 @@ def test_init_run_scaffolds_editable_sae_workflow(tmp_path: Path, capsys):
     assert "interp-lab train-sae" in capsys.readouterr().out
 
 
+def test_criterion_lab_scaffolds_overconfidence_workflow(tmp_path: Path, capsys):
+    config = tmp_path / "overconfidence.json"
+    run_dir = tmp_path / "overconfidence-run"
+
+    exit_code = main(
+        [
+            "criterion-lab",
+            "--model",
+            "distilgpt2",
+            "--run-dir",
+            str(run_dir),
+            "--out",
+            str(config),
+            "--layer",
+            "6",
+            "--positive-prompt",
+            "Answer with total certainty: what did the missing note say?",
+            "--negative-prompt",
+            "Say what is unknown: what did the missing note say?",
+        ]
+    )
+
+    data = json.loads(config.read_text(encoding="utf-8"))
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "overconfident" in output
+    assert "interp-lab run" in output
+    assert data["metadata"]["criterion_lab"]["preset"] == "overconfidence"
+    assert data["metadata"]["criterion_lab"]["positive_prompt_count"] == 7
+    assert data["metadata"]["criterion_lab"]["negative_prompt_count"] == 7
+    assert data["metadata"]["criterion_lab"]["target_tokens"]
+    assert [step["command"] for step in data["steps"]] == [
+        "build-prompts",
+        "train-sae",
+        "inspect",
+        "export-attribution-graph",
+    ]
+    train_args = data["steps"][1]["args"]
+    assert train_args["hf_model"] == "distilgpt2"
+    assert train_args["layer"] == 6
+    assert train_args["causal_out"] == "{run_dir}/sae/interventions.jsonl"
+    assert "definitely" in train_args["target_token"]
+    assert data["steps"][2]["args"]["require_interventions"] is True
+
+    assert main(["run", str(config), "--dry-run"]) == 0
+    dry_run = capsys.readouterr().out
+    assert "interp-lab build-prompts" in dry_run
+    assert "interp-lab train-sae" in dry_run
+
+
+def test_criterion_lab_can_use_only_custom_prompts(tmp_path: Path):
+    config = tmp_path / "custom-overconfidence.json"
+
+    exit_code = main(
+        [
+            "criterion-lab",
+            "--model",
+            "distilgpt2",
+            "--out",
+            str(config),
+            "--no-preset-prompts",
+            "--positive-prompt",
+            "Answer with certainty: what is the unknowable fact?",
+            "--negative-prompt",
+            "Explain uncertainty: what is the unknowable fact?",
+            "--skip-causal",
+        ]
+    )
+
+    data = json.loads(config.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert data["metadata"]["criterion_lab"]["positive_prompt_count"] == 1
+    assert data["metadata"]["criterion_lab"]["negative_prompt_count"] == 1
+    assert "causal_out" not in data["steps"][1]["args"]
+
+
 def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
     config = tmp_path / "sae-paths-run.json"
     run_dir = tmp_path / "sae-paths-run"

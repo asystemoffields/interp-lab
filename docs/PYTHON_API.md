@@ -146,6 +146,24 @@ scaffold = scaffold_run(
 )
 ```
 
+## Criterion Labs
+
+```python
+from interp_lab import criterion_lab, run
+
+lab = criterion_lab(
+    model="distilgpt2",
+    preset="overconfidence",
+    layer=6,
+    out="reports/overconfidence-lab/run.json",
+    run_dir="reports/overconfidence-lab",
+)
+
+run(lab.path)
+```
+
+The overconfidence preset writes paired calibration prompts, an SAE workflow, first-pass causal scoring target tokens, feature inspection, and graph export. Add `positive_prompt` and `negative_prompt` to adapt the lab before running it.
+
 ## Diagnostics
 
 ```python

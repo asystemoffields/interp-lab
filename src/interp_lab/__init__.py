@@ -10,6 +10,7 @@ from oracle_sae.schema import (
     MatchReport,
 )
 from oracle_sae.hf_records import PromptDatasetSummary
+from oracle_sae.criterion_lab import CriterionLabWriteResult
 from oracle_sae.workflows import RunTemplateWriteResult
 
 from interp_lab.api import (
@@ -26,6 +27,7 @@ from interp_lab.api import (
     attribution_graph_summary,
     build_prompts,
     compare,
+    criterion_lab,
     doctor,
     inspect,
     path_patch,
@@ -42,6 +44,7 @@ from interp_lab.api import (
 
 __all__ = [
     "CandidateMatch",
+    "CriterionLabWriteResult",
     "Criterion",
     "FeatureCard",
     "FeatureEvidence",
@@ -63,6 +66,7 @@ __all__ = [
     "attribution_graph_summary",
     "build_prompts",
     "compare",
+    "criterion_lab",
     "doctor",
     "inspect",
     "path_patch",

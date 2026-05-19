@@ -20,6 +20,7 @@ from oracle_sae.adapters.saelens import (
 )
 from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
+from oracle_sae.criterion_lab import build_criterion_lab_parser, run_criterion_lab_from_args
 from oracle_sae.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
 from oracle_sae.env_profile import build_environment_profile_parser, run_environment_profile_from_args
 from oracle_sae.graphs import (
@@ -237,6 +238,14 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     init_run.set_defaults(func=run_init_run)
+
+    criterion_lab = subparsers.add_parser(
+        "criterion-lab",
+        help="Write a guided Criterion Lab run config for a behavior such as overconfidence.",
+        parents=[build_criterion_lab_parser()],
+        add_help=False,
+    )
+    criterion_lab.set_defaults(func=run_criterion_lab)
 
     export_hf = subparsers.add_parser(
         "export-hf-records",
@@ -505,6 +514,19 @@ def run_config(args: argparse.Namespace) -> int:
 def run_init_run(args: argparse.Namespace) -> int:
     result = run_init_run_from_args(args)
     print(f"Wrote {result.path}")
+    print(f"Run with: interp-lab run {result.path}")
+    return 0
+
+
+def run_criterion_lab(args: argparse.Namespace) -> int:
+    result = run_criterion_lab_from_args(args)
+    print(f"Wrote {result.path}")
+    print(f"Criterion: {result.criterion}")
+    if args.execute:
+        return run_config_file(
+            RunOptions(config_path=Path(result.path)),
+            command_runner=main,
+        )
     print(f"Run with: interp-lab run {result.path}")
     return 0
 
