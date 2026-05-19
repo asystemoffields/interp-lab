@@ -55,6 +55,7 @@ def inspect_model(
     cards.sort(key=lambda card: card.importance, reverse=True)
     metadata = {"feature_count": len(evidence_items), "kept_feature_count": len(cards)}
     metadata.update(_provider_report_metadata(feature_provider))
+    metadata.update(_runner_report_metadata(intervention_runner))
     return InspectionReport(
         model=model,
         criterion=criterion,
@@ -106,6 +107,14 @@ def _should_keep_evidence(
 
 def _provider_report_metadata(feature_provider: FeatureProvider) -> dict:
     metadata_for_report = getattr(feature_provider, "report_metadata", None)
+    if metadata_for_report is None:
+        return {}
+    metadata = metadata_for_report()
+    return dict(metadata) if metadata else {}
+
+
+def _runner_report_metadata(intervention_runner: InterventionRunner) -> dict:
+    metadata_for_report = getattr(intervention_runner, "report_metadata", None)
     if metadata_for_report is None:
         return {}
     metadata = metadata_for_report()

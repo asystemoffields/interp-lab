@@ -120,6 +120,7 @@ def test_records_backend_accepts_intervention_records(tmp_path: Path):
     assert exit_code == 0
     assert card["causal_effect"] == 0.5
     assert card["metadata"]["interventions"]["count"] == 1
+    assert report["metadata"]["interventions"]["record_count"] == 1
 
 
 def test_doctor_command_reports_environment(capsys):
@@ -556,6 +557,7 @@ def test_init_run_scaffolds_editable_sae_workflow(tmp_path: Path, capsys):
     assert data["steps"][1]["args"]["preset"] == "production"
     assert data["steps"][1]["args"]["causal_out"] == "{run_dir}/sae/interventions.jsonl"
     assert data["steps"][1]["args"]["target_token"] == ["auto"]
+    assert data["steps"][2]["args"]["require_interventions"] is True
 
     assert main(["run", str(config), "--dry-run"]) == 0
     assert "interp-lab train-sae" in capsys.readouterr().out

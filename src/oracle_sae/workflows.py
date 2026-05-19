@@ -144,6 +144,7 @@ def build_run_template(
             criterion=criterion,
             records=records_path,
             interventions=causal_path,
+            require_interventions=causal_path is not None,
             top_k=top_k,
         )
         return config
@@ -259,6 +260,7 @@ def _add_inspect_and_graph_steps(
     criterion: str,
     records: str,
     interventions: str | None,
+    require_interventions: bool = False,
     top_k: int,
 ) -> None:
     inspect_args: dict[str, Any] = {
@@ -271,6 +273,8 @@ def _add_inspect_and_graph_steps(
     }
     if interventions is not None:
         inspect_args["interventions"] = interventions
+    if require_interventions:
+        inspect_args["require_interventions"] = True
     config["steps"].append(
         {
             "name": "inspect",

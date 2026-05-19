@@ -80,8 +80,7 @@ def render_inspection_markdown(report: InspectionReport) -> str:
                 "",
                 f"Importance: {card.importance:.3f}",
                 "",
-                f"Association: {card.association:.3f} | Effect: {card.causal_effect:.3f} | "
-                f"Specificity: {card.specificity:.3f} | Stability: {card.stability:.3f}",
+                _metric_line(card),
                 "",
             ]
         )
@@ -205,6 +204,14 @@ def _evidence_summary_lines(raw_value: object) -> list[str]:
     return ["Evidence summary: " + "; ".join(parts) + ".", ""]
 
 
+def _metric_line(card) -> str:
+    effect_label = "Causal effect" if _has_measured_intervention(card) else "Criterion score"
+    return (
+        f"Association: {card.association:.3f} | {effect_label}: {card.causal_effect:.3f} | "
+        f"Specificity: {card.specificity:.3f} | Stability: {card.stability:.3f}"
+    )
+
+
 def _report_scope_line(metadata: dict) -> str:
     feature_count = metadata.get("feature_count")
     kept_count = metadata.get("kept_feature_count")
@@ -266,11 +273,23 @@ def _evidence_gap_lines(report: InspectionReport) -> list[str]:
             "Feature-level causal tests are present. Use export-attribution-graph, optionally with repeated "
             "--report arguments, to inspect candidate feature groups and cross-layer coactivation paths."
         )
+    elif _attached_intervention_count(report.metadata) > 0:
+        gaps.append(
+            "Intervention records were attached, but none matched the kept features. Use --require-interventions "
+            "to focus the report on tested features, increase --top-k, or add causal rows for the ranked features."
+        )
     else:
-        gaps.append("No intervention records were attached, so causal claims should be treated as untested.")
+        gaps.append("No intervention records were attached; causal claims are untested.")
     if not any(float(card.causal_effects.get("strong_causal_score", 0.0)) >= PROMOTING_THRESHOLD for card in report.cards):
         gaps.append("No feature currently meets the strong-effect threshold; broaden prompts, test more layers, or use graph attribution.")
     return gaps
+
+
+def _attached_intervention_count(metadata: dict) -> int:
+    value = metadata.get("interventions")
+    if not isinstance(value, dict):
+        return 0
+    return int(value.get("record_count", 0) or 0)
 
 
 def _card_interpretation_lines(card) -> list[str]:
@@ -299,7 +318,7 @@ def _card_interpretation_lines(card) -> list[str]:
             f"Causal readout: steering or ablating this feature {verb} the criterion "
             f"with strong causal score {strong:.3f}."
         )
-    elif card.metadata.get("interventions"):
+    elif _has_measured_intervention(card):
         lines.append(
             f"Causal readout: tested interventions produced a small or uncertain effect "
             f"(strong causal score {strong:.3f})."
@@ -339,6 +358,12 @@ def _display_token(token: str) -> str:
 
 def _has_generic_label(card) -> bool:
     return str(card.label).strip().lower().startswith(GENERIC_LABEL_PREFIXES)
+
+
+def _has_measured_intervention(card) -> bool:
+    if isinstance(card.metadata.get("interventions"), dict):
+        return True
+    return float(card.causal_effects.get("intervention_record_count", 0.0) or 0.0) > 0.0
 
 
 def _direction_line(card) -> str:

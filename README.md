@@ -120,7 +120,7 @@ interp-lab init-run \
   --out runs/distilgpt2-sae.json
 ```
 
-Then run it with `interp-lab run runs/distilgpt2-sae.json`. The generated JSON is meant to be edited before larger runs.
+Then run it with `interp-lab run runs/distilgpt2-sae.json`. The generated JSON is meant to be edited before larger runs. With `--include-causal`, the generated SAE inspection focuses on features that received causal intervention rows.
 
 Export activation records from a real Hugging Face model:
 

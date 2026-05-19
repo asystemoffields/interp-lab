@@ -206,6 +206,22 @@ class InterventionRecordRunner:
             summary["behavior_score"] = behavior_score
         return {"interventions": summary}
 
+    def report_metadata(self) -> dict[str, Any]:
+        records = self._load_records()
+        effect_records = [record for record in records if not record.is_control]
+        control_records = [record for record in records if record.is_control]
+        criteria = sorted({record.criterion for record in records if record.criterion})
+        return {
+            "interventions": {
+                "path": str(self.path),
+                "record_count": len(records),
+                "effect_record_count": len(effect_records),
+                "control_record_count": len(control_records),
+                "feature_count": len({record.feature_id for record in records}),
+                "criteria": criteria[:8],
+            }
+        }
+
     def should_keep(self, evidence: FeatureEvidence, criterion: Criterion) -> bool:
         if not self.require_records:
             return True
