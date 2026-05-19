@@ -140,6 +140,8 @@ interp-lab init-run \
   --out runs/distilgpt2-sae-paths.json
 ```
 
+HF-backed scaffolds also accept model-loading flags such as `--model-class`, `--trust-remote-code`, `--torch-dtype`, `--device-map`, and `--local-files-only`, and pass them through to every generated HF step.
+
 Export activation records from a real Hugging Face model:
 
 ```bash

@@ -600,6 +600,13 @@ def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
             "--validate-paths",
             "--max-length",
             "64",
+            "--model-class",
+            "gemma4-conditional",
+            "--trust-remote-code",
+            "--torch-dtype",
+            "bfloat16",
+            "--device-map",
+            "auto",
             "--run-dir",
             str(run_dir),
             "--out",
@@ -626,11 +633,16 @@ def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
     assert source_train["layer"] == 2
     assert target_train["layer"] == 4
     assert source_train["causal_out"] == "{run_dir}/source-sae/interventions.jsonl"
+    assert source_train["model_class"] == "gemma4-conditional"
+    assert source_train["trust_remote_code"] is True
+    assert source_train["torch_dtype"] == "bfloat16"
+    assert source_train["device_map"] == "auto"
     assert target_train["target_token"] == ["auto"]
     assert data["steps"][3]["name"] == "inspect-source"
     assert data["steps"][3]["args"]["require_interventions"] is True
     assert data["steps"][5]["args"]["source_top_k"] == 2
     assert data["steps"][5]["args"]["target_top_k"] == 5
+    assert data["steps"][5]["args"]["model_class"] == "gemma4-conditional"
     graph_args = data["steps"][6]["args"]
     assert graph_args["report"] == [
         "{run_dir}/source-report/report.json",

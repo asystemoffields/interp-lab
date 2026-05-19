@@ -115,6 +115,9 @@ def test_scaffold_run_public_api_writes_sae_path_workflow(tmp_path: Path):
         include_causal=True,
         target_token="auto",
         validate_paths=True,
+        model_class="auto-image-text-to-text",
+        torch_dtype="auto",
+        device_map="auto",
     )
 
     commands = [step["command"] for step in result.config["steps"]]
@@ -131,10 +134,14 @@ def test_scaffold_run_public_api_writes_sae_path_workflow(tmp_path: Path):
     ]
     assert result.config["steps"][0]["args"]["layer"] == 2
     assert result.config["steps"][1]["args"]["layer"] == 4
+    assert result.config["steps"][0]["args"]["model_class"] == "auto-image-text-to-text"
+    assert result.config["steps"][0]["args"]["torch_dtype"] == "auto"
+    assert result.config["steps"][0]["args"]["device_map"] == "auto"
     assert result.config["steps"][2]["args"]["require_interventions"] is True
     assert result.config["steps"][5]["args"]["path_records"] == "{run_dir}/paths.jsonl"
     assert result.config["steps"][6]["args"]["out"] == "{run_dir}/graph-summary.json"
     assert result.config["steps"][7]["args"]["dataset"] == str(tmp_path / "heldout.jsonl")
+    assert result.config["steps"][7]["args"]["model_class"] == "auto-image-text-to-text"
     saved = json.loads(result.path.read_text(encoding="utf-8"))
     assert saved["steps"][-2]["args"]["graph_out"] == "{run_dir}/validated-graph.json"
     assert saved["steps"][-1]["args"]["out"] == "{run_dir}/validated-graph-summary.json"

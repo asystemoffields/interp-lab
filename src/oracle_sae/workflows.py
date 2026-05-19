@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from oracle_sae.hf_loading import MODEL_CLASS_CHOICES
+
 
 @dataclass(frozen=True)
 class RunTemplateWriteResult:
@@ -46,11 +48,27 @@ def build_run_template(
     max_length: int | None = None,
     include_causal: bool = False,
     target_token: list[str] | None = None,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs_json: str | None = None,
+    tokenizer_kwargs_json: str | None = None,
 ) -> dict[str, Any]:
     """Build an editable run config for common interp-lab workflows."""
     if top_k <= 0:
         raise ValueError("top_k must be positive")
     workflow = workflow.lower()
+    hf_loading_args = _hf_loading_step_args(
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs_json=model_kwargs_json,
+        tokenizer_kwargs_json=tokenizer_kwargs_json,
+    )
     config: dict[str, Any] = {
         "out": str(run_dir),
         "steps": [],
@@ -97,6 +115,7 @@ def build_run_template(
             "features_per_layer": features_per_layer,
             "device": device,
         }
+        export_args.update(hf_loading_args)
         if layers is not None:
             export_args["layers"] = layers
         if max_length is not None:
@@ -130,6 +149,7 @@ def build_run_template(
             "records_out": records_path,
             "device": device,
         }
+        train_args.update(hf_loading_args)
         if layer is not None:
             train_args["layer"] = layer
         if max_length is not None:
@@ -202,6 +222,7 @@ def build_run_template(
                     device=device,
                     max_length=max_length,
                     target_token=target_token,
+                    hf_loading_args=hf_loading_args,
                 ),
             }
         )
@@ -222,6 +243,7 @@ def build_run_template(
                     device=device,
                     max_length=max_length,
                     target_token=target_token,
+                    hf_loading_args=hf_loading_args,
                 ),
             }
         )
@@ -262,6 +284,7 @@ def build_run_template(
             "out": path_records_path,
             "device": device,
         }
+        path_args.update(hf_loading_args)
         if max_length is not None:
             path_args["max_length"] = max_length
         if target_token:
@@ -306,6 +329,7 @@ def build_run_template(
                 "pool": pool,
                 "device": device,
             }
+            validation_args.update(hf_loading_args)
             if max_length is not None:
                 validation_args["max_length"] = max_length
             if target_token:
@@ -384,6 +408,13 @@ def build_init_run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-length", type=int)
     parser.add_argument("--include-causal", action="store_true", help="Add SAE causal validation output to SAE runs.")
     parser.add_argument("--target-token", action="append", default=[], help="Target token for SAE causal scoring.")
+    parser.add_argument("--model-class", choices=MODEL_CLASS_CHOICES, default="auto-causal-lm")
+    parser.add_argument("--trust-remote-code", action="store_true")
+    parser.add_argument("--local-files-only", action="store_true")
+    parser.add_argument("--torch-dtype", choices=["auto", "float32", "float16", "bfloat16"])
+    parser.add_argument("--device-map", help="Optional device_map passed to HF model loading, e.g. auto.")
+    parser.add_argument("--model-kwargs-json", help="Extra JSON object passed to model from_pretrained.")
+    parser.add_argument("--tokenizer-kwargs-json", help="Extra JSON object passed to tokenizer from_pretrained.")
     parser.add_argument("--force", action="store_true", help="Overwrite an existing config path.")
     return parser
 
@@ -424,6 +455,13 @@ def run_init_run_from_args(args: argparse.Namespace) -> RunTemplateWriteResult:
             max_length=args.max_length,
             include_causal=args.include_causal,
             target_token=args.target_token,
+            model_class=args.model_class,
+            trust_remote_code=args.trust_remote_code,
+            local_files_only=args.local_files_only,
+            torch_dtype=args.torch_dtype,
+            device_map=args.device_map,
+            model_kwargs_json=args.model_kwargs_json,
+            tokenizer_kwargs_json=args.tokenizer_kwargs_json,
         )
     except (FileExistsError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
@@ -455,6 +493,34 @@ def _prompt_step_args(
     return args
 
 
+def _hf_loading_step_args(
+    *,
+    model_class: str,
+    trust_remote_code: bool,
+    local_files_only: bool,
+    torch_dtype: str | None,
+    device_map: str | None,
+    model_kwargs_json: str | None,
+    tokenizer_kwargs_json: str | None,
+) -> dict[str, Any]:
+    args: dict[str, Any] = {}
+    if model_class != "auto-causal-lm":
+        args["model_class"] = model_class
+    if trust_remote_code:
+        args["trust_remote_code"] = True
+    if local_files_only:
+        args["local_files_only"] = True
+    if torch_dtype is not None:
+        args["torch_dtype"] = torch_dtype
+    if device_map is not None:
+        args["device_map"] = device_map
+    if model_kwargs_json is not None:
+        args["model_kwargs_json"] = model_kwargs_json
+    if tokenizer_kwargs_json is not None:
+        args["tokenizer_kwargs_json"] = tokenizer_kwargs_json
+    return args
+
+
 def _hf_sae_train_args(
     *,
     model: str,
@@ -469,6 +535,7 @@ def _hf_sae_train_args(
     device: str,
     max_length: int | None,
     target_token: list[str] | None,
+    hf_loading_args: dict[str, Any],
 ) -> dict[str, Any]:
     args: dict[str, Any] = {
         "hf_model": model,
@@ -481,6 +548,7 @@ def _hf_sae_train_args(
         "records_out": records_out,
         "device": device,
     }
+    args.update(hf_loading_args)
     if max_length is not None:
         args["max_length"] = max_length
     if causal_out is not None:

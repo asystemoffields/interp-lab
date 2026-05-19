@@ -182,6 +182,13 @@ def scaffold_run(
     max_length: int | None = None,
     include_causal: bool = False,
     target_token: str | list[str] | None = None,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs_json: str | None = None,
+    tokenizer_kwargs_json: str | None = None,
     force: bool = False,
 ) -> RunTemplateWriteResult:
     """Write an editable `interp-lab run` config for a common workflow."""
@@ -219,6 +226,13 @@ def scaffold_run(
         max_length=max_length,
         include_causal=include_causal,
         target_token=_as_optional_list(target_token),
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs_json=model_kwargs_json,
+        tokenizer_kwargs_json=tokenizer_kwargs_json,
     )
 
 

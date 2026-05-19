@@ -123,6 +123,8 @@ scaffold = scaffold_run(
     include_causal=True,
     target_token="auto",
     validate_paths=True,
+    torch_dtype="auto",
+    device_map="auto",
     run_dir="reports/distilgpt2-sae-paths",
 )
 ```

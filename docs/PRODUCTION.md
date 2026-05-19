@@ -40,6 +40,8 @@ interp-lab init-run --workflow records --model toy-records/model --criterion "be
 
 `sae-paths` is the paper-inspired path workflow: it trains source and target layer SAEs, writes causal feature reports, measures SAE-latent path patches, exports graph files, writes compact graph summaries for agents, and can add held-out validation with `--validate-paths`. Use `--validation-dataset` to point validation at a separate prompt set.
 
+HF-backed scaffolds accept the same loading flags as the generated commands: `--model-class`, `--trust-remote-code`, `--local-files-only`, `--torch-dtype`, `--device-map`, `--model-kwargs-json`, and `--tokenizer-kwargs-json`.
+
 Minimal config:
 
 ```json
