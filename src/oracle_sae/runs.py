@@ -24,6 +24,7 @@ DEFAULT_HASH_LIMIT_BYTES = 64 * 1024 * 1024
 INPUT_PATH_KEYS = {
     "dataset",
     "features",
+    "graph",
     "records",
     "interventions",
     "neuronpedia_features",
@@ -32,6 +33,10 @@ INPUT_PATH_KEYS = {
     "right",
     "report",
     "path",
+    "source_sae",
+    "target_sae",
+    "source_report",
+    "target_report",
 }
 OUTPUT_PATH_KEYS = {
     "out",

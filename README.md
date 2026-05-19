@@ -122,7 +122,7 @@ interp-lab init-run \
 
 Then run it with `interp-lab run runs/distilgpt2-sae.json`. The generated JSON is meant to be edited before larger runs. With `--include-causal`, the generated SAE inspection focuses on features that received causal intervention rows.
 
-For a two-layer path-patching workflow, use `--workflow sae-paths` with `--source-layer` and `--target-layer`. This scaffolds source and target SAE training, causal feature reports, measured SAE-latent paths, a graph export, and optional held-out path validation:
+For a two-layer path-patching workflow, use `--workflow sae-paths` with `--source-layer` and `--target-layer`. This scaffolds source and target SAE training, causal feature reports, measured SAE-latent paths, graph exports, compact graph summaries, and optional held-out path validation. Add `--validation-dataset` when you have a separate held-out prompt set:
 
 ```bash
 interp-lab init-run \

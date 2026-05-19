@@ -580,6 +580,8 @@ def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
             "The answer is measured in meters.",
             "--negative-prompt",
             "The answer is a person's name.",
+            "--validation-dataset",
+            str(tmp_path / "heldout.jsonl"),
             "--source-layer",
             "2",
             "--target-layer",
@@ -615,7 +617,9 @@ def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
         "inspect",
         "export-hf-sae-paths",
         "export-attribution-graph",
+        "summarize-attribution-graph",
         "validate-hf-sae-paths",
+        "summarize-attribution-graph",
     ]
     source_train = data["steps"][1]["args"]
     target_train = data["steps"][2]["args"]
@@ -633,11 +637,15 @@ def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
         "{run_dir}/target-report/report.json",
     ]
     assert graph_args["path_records"] == "{run_dir}/paths.jsonl"
-    validation_args = data["steps"][7]["args"]
+    assert data["steps"][7]["name"] == "summarize-graph"
+    validation_args = data["steps"][8]["args"]
+    assert validation_args["dataset"] == str(tmp_path / "heldout.jsonl")
     assert validation_args["top_k"] == 3
     assert validation_args["graph_out"] == "{run_dir}/validated-graph.json"
+    assert data["steps"][9]["name"] == "summarize-validated-graph"
 
     assert main(["run", str(config), "--dry-run"]) == 0
     dry_run = capsys.readouterr().out
     assert "interp-lab export-hf-sae-paths" in dry_run
     assert "interp-lab validate-hf-sae-paths" in dry_run
+    assert "interp-lab summarize-attribution-graph" in dry_run

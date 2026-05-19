@@ -38,7 +38,7 @@ Use `interp-lab init-run` when you want a starting config for `records`, `hf-rec
 interp-lab init-run --workflow records --model toy-records/model --criterion "benchmark awareness" --records examples/activation_records.jsonl --out runs/records.json
 ```
 
-`sae-paths` is the paper-inspired path workflow: it trains source and target layer SAEs, writes causal feature reports, measures SAE-latent path patches, exports a graph, and can add held-out validation with `--validate-paths`.
+`sae-paths` is the paper-inspired path workflow: it trains source and target layer SAEs, writes causal feature reports, measures SAE-latent path patches, exports graph files, writes compact graph summaries for agents, and can add held-out validation with `--validate-paths`. Use `--validation-dataset` to point validation at a separate prompt set.
 
 Minimal config:
 

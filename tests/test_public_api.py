@@ -109,6 +109,7 @@ def test_scaffold_run_public_api_writes_sae_path_workflow(tmp_path: Path):
         criterion="unit prediction",
         run_dir=tmp_path / "run",
         dataset=tmp_path / "prompts.jsonl",
+        validation_dataset=tmp_path / "heldout.jsonl",
         source_layer=2,
         target_layer=4,
         include_causal=True,
@@ -124,14 +125,19 @@ def test_scaffold_run_public_api_writes_sae_path_workflow(tmp_path: Path):
         "inspect",
         "export-hf-sae-paths",
         "export-attribution-graph",
+        "summarize-attribution-graph",
         "validate-hf-sae-paths",
+        "summarize-attribution-graph",
     ]
     assert result.config["steps"][0]["args"]["layer"] == 2
     assert result.config["steps"][1]["args"]["layer"] == 4
     assert result.config["steps"][2]["args"]["require_interventions"] is True
     assert result.config["steps"][5]["args"]["path_records"] == "{run_dir}/paths.jsonl"
+    assert result.config["steps"][6]["args"]["out"] == "{run_dir}/graph-summary.json"
+    assert result.config["steps"][7]["args"]["dataset"] == str(tmp_path / "heldout.jsonl")
     saved = json.loads(result.path.read_text(encoding="utf-8"))
-    assert saved["steps"][-1]["args"]["graph_out"] == "{run_dir}/validated-graph.json"
+    assert saved["steps"][-2]["args"]["graph_out"] == "{run_dir}/validated-graph.json"
+    assert saved["steps"][-1]["args"]["out"] == "{run_dir}/validated-graph-summary.json"
 
 
 def test_train_sae_api_from_records(tmp_path: Path):

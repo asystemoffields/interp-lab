@@ -22,6 +22,7 @@ def build_run_template(
     records: str | Path | None = None,
     interventions: str | Path | None = None,
     dataset: str | Path | None = None,
+    validation_dataset: str | Path | None = None,
     positive: list[str | Path] | None = None,
     negative: list[str | Path] | None = None,
     positive_prompt: list[str] | None = None,
@@ -183,6 +184,7 @@ def build_run_template(
         target_report_path = "{run_dir}/target-report/report.json"
         path_records_path = "{run_dir}/paths.jsonl"
         graph_path = "{run_dir}/graph.json"
+        validation_dataset_ref = str(validation_dataset) if validation_dataset is not None else dataset_ref
         config["steps"].append(
             {
                 "name": "train-source-sae",
@@ -278,11 +280,17 @@ def build_run_template(
             out=graph_path,
             markdown_out="{run_dir}/graph.md",
         )
+        _add_graph_summary_step(
+            config,
+            name="summarize-graph",
+            graph=graph_path,
+            out="{run_dir}/graph-summary.json",
+        )
         if validate_paths:
             validation_args: dict[str, Any] = {
                 "graph": graph_path,
                 "model": model,
-                "dataset": dataset_ref,
+                "dataset": validation_dataset_ref,
                 "criterion": criterion,
                 "source_sae": source_sae_path,
                 "target_sae": target_sae_path,
@@ -308,6 +316,12 @@ def build_run_template(
                     "command": "validate-hf-sae-paths",
                     "args": validation_args,
                 }
+            )
+            _add_graph_summary_step(
+                config,
+                name="summarize-validated-graph",
+                graph="{run_dir}/validated-graph.json",
+                out="{run_dir}/validated-graph-summary.json",
             )
         return config
     raise ValueError("workflow must be one of: records, hf-records, sae, sae-paths")
@@ -338,6 +352,10 @@ def build_init_run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--records", help="Activation-record JSONL for --workflow records.")
     parser.add_argument("--interventions", help="Optional intervention JSONL for --workflow records.")
     parser.add_argument("--dataset", help="Prompt JSONL for HF-backed workflows.")
+    parser.add_argument(
+        "--validation-dataset",
+        help="Held-out prompt JSONL for --workflow sae-paths --validate-paths. Defaults to --dataset.",
+    )
     parser.add_argument("--positive", action="append", default=[], help="Positive prompt file. Repeatable.")
     parser.add_argument("--negative", action="append", default=[], help="Negative prompt file. Repeatable.")
     parser.add_argument("--positive-prompt", action="append", default=[], help="Inline positive prompt. Repeatable.")
@@ -382,6 +400,7 @@ def run_init_run_from_args(args: argparse.Namespace) -> RunTemplateWriteResult:
             records=args.records,
             interventions=args.interventions,
             dataset=args.dataset,
+            validation_dataset=args.validation_dataset,
             positive=args.positive,
             negative=args.negative,
             positive_prompt=args.positive_prompt,
@@ -554,5 +573,24 @@ def _add_graph_step(
             "name": "graph",
             "command": "export-attribution-graph",
             "args": args,
+        }
+    )
+
+
+def _add_graph_summary_step(
+    config: dict[str, Any],
+    *,
+    name: str,
+    graph: str,
+    out: str,
+) -> None:
+    config["steps"].append(
+        {
+            "name": name,
+            "command": "summarize-attribution-graph",
+            "args": {
+                "graph": graph,
+                "out": out,
+            },
         }
     )
