@@ -119,6 +119,37 @@ def test_inspection_markdown_distinguishes_attached_unmatched_interventions():
     assert "No intervention records were attached" not in markdown
 
 
+def test_empty_intervention_metadata_is_not_rendered_as_measured_causal_evidence():
+    report = InspectionReport(
+        model="m",
+        criterion=Criterion(text="unit prediction"),
+        cards=[
+            FeatureCard(
+                feature_id="SAE:L5:F1",
+                model="m",
+                layer=5,
+                label="trained SAE latent 1",
+                explanation="",
+                importance=0.5,
+                association=0.62,
+                specificity=0.4,
+                causal_effect=0.62,
+                stability=0.8,
+                examples=[],
+                source="activation-records",
+                fingerprint=_fingerprint(),
+                causal_effects={"signed_association": 0.62},
+                metadata={"interventions": {}},
+            )
+        ],
+    )
+
+    markdown = render_inspection_markdown(report)
+
+    assert "Criterion score: 0.620" in markdown
+    assert "Interventions: n=" not in markdown
+
+
 def test_inspection_html_renders_searchable_feature_cards(tmp_path):
     report = InspectionReport(
         model="m",

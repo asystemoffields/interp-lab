@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from oracle_sae.cli import main
 from oracle_sae.env_profile import build_environment_routing, collect_environment_profile
 from oracle_sae.scaling import ScalePlan
@@ -108,6 +110,18 @@ def test_scale_plan_flags_model_weights_that_exceed_local_memory():
     ).to_dict()
 
     assert any("model weights exceed local available RAM" in item["message"] for item in plan["risk_flags"])
+
+
+def test_scale_plan_rejects_negative_core_sizes():
+    with pytest.raises(ValueError, match="model_params must be positive"):
+        ScalePlan(
+            model_params=-1,
+            tokens=1000,
+            d_model=1024,
+            selected_layers=1,
+            latent_dim=4096,
+            dtype="bf16",
+        ).to_dict()
 
 
 def test_scale_plan_env_profile_path_cli(tmp_path: Path):

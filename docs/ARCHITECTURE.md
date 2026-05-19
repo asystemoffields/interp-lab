@@ -158,7 +158,7 @@ For human review, `--html-out` writes a self-contained match-validation viewer w
 - measured path-patch edges from `export-hf-sae-paths`;
 - a `mechanism_summary` with strong causal features, candidate paths, feature groups, and validation next steps.
 
-The graph schema keeps effect sizes, signed effects, specificity, side effects, strong causal scores, confidence intervals, intervention record counts, coactivation correlations, measured target-latent deltas, behavior-score deltas, and group-level aggregate causal scores. Repeating `--report` fuses layer-specific reports into one graph so cross-layer candidate paths can be inspected together.
+The graph schema keeps effect sizes, signed effects, specificity, side effects, strong causal scores, confidence intervals, intervention record counts, coactivation correlations, measured target-latent deltas, behavior-score deltas, and group-level aggregate scores. Criterion edges are typed as `criterion_association` until measured intervention evidence is present; measured intervention edges are typed as `causal_effect`. Feature node IDs are namespaced by model while raw feature IDs are preserved for path validation and downstream tooling. Repeating `--report` fuses same-criterion layer-specific reports into one graph so cross-layer candidate paths can be inspected together.
 
 Graph export can also write Markdown and HTML digests for human and agent review. The Markdown digest lists strong causal features, candidate paths with validation details when present, candidate feature groups, and the validation plan. The self-contained HTML viewer adds summary metrics, a searchable feature table, candidate path tables, agent next actions, and an SVG graph.
 

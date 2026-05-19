@@ -726,7 +726,12 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     }}
 
     function buildCommand(spec, data) {{
-      const command = ["interp-lab", spec.id];
+      return buildArgv(spec, data, true).map(shellQuote).join(" ");
+    }}
+
+    function buildArgv(spec, data, includeProgram = false) {{
+      const command = includeProgram ? ["interp-lab", spec.id] : [];
+      if (!includeProgram) command.push(spec.id);
       for (const field of spec.positional || []) {{
         appendValue(command, null, data[field.key]);
       }}
@@ -737,9 +742,8 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
           appendValue(command, field.flag, data[field.key]);
         }}
       }}
-      const parts = command.map(shellQuote);
-      if (data.__extra) parts.push(data.__extra);
-      return parts.join(" ");
+      if (data.__extra) command.push(...splitExtraFlags(data.__extra));
+      return command;
     }}
 
     function appendValue(command, flag, value) {{
@@ -752,13 +756,14 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     }}
 
     function buildRunConfig(spec, data) {{
+      const usesListArgs = (spec.positional || []).length > 0 || Boolean(data.__extra);
       const args = {{}};
       for (const field of [...(spec.positional || []), ...(spec.fields || [])]) {{
         const value = data[field.key];
         if (value === undefined || value === null || value === "") continue;
         args[field.key] = value;
       }}
-      if (data.__extra) args.extra_flags = data.__extra;
+      const stepArgs = usesListArgs ? buildArgv(spec, data, false).slice(1) : args;
       return {{
         schema_version: "interp-lab.run.v1",
         out: "reports/studio-run",
@@ -766,7 +771,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
           {{
             name: spec.id,
             command: spec.id,
-            args,
+            args: stepArgs,
           }},
         ],
       }};
@@ -786,7 +791,45 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
 
     function shellQuote(value) {{
       if (/^[A-Za-z0-9_./:=,@+-]+$/.test(value)) return value;
-      return `"${{String(value).replace(/\\\\/g, "\\\\\\\\").replace(/"/g, '\\\\"')}}"`;
+      return "'" + String(value).replace(/'/g, "'\\\"'\\\"'") + "'";
+    }}
+
+    function splitExtraFlags(value) {{
+      const tokens = [];
+      let current = "";
+      let quote = null;
+      let escaped = false;
+      for (const char of String(value)) {{
+        if (escaped) {{
+          current += char;
+          escaped = false;
+          continue;
+        }}
+        if (char === "\\\\") {{
+          escaped = true;
+          continue;
+        }}
+        if (quote) {{
+          if (char === quote) quote = null;
+          else current += char;
+          continue;
+        }}
+        if (char === "'" || char === '"') {{
+          quote = char;
+          continue;
+        }}
+        if (/\\s/.test(char)) {{
+          if (current) {{
+            tokens.push(current);
+            current = "";
+          }}
+          continue;
+        }}
+        current += char;
+      }}
+      if (escaped) current += "\\\\";
+      if (current) tokens.push(current);
+      return tokens;
     }}
 
     function escapeHtml(value) {{

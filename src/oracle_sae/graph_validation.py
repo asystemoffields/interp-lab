@@ -185,7 +185,12 @@ def annotate_graph_with_validation(graph: dict[str, Any], report: dict[str, Any]
     for edge in annotated.get("edges", []):
         if edge.get("type") != "path_patch":
             continue
-        validation = validations.get((str(edge.get("source")), str(edge.get("target"))))
+        validation = validations.get(
+            (
+                str(edge.get("source_feature_id", edge.get("source"))),
+                str(edge.get("target_feature_id", edge.get("target"))),
+            )
+        )
         if validation is not None:
             edge["validation"] = validation
     mechanism_summary = annotated.setdefault("mechanism_summary", {})
@@ -313,18 +318,25 @@ def _path_patch_candidates(graph: dict[str, Any]) -> list[dict[str, Any]]:
         and path.get("source_feature_id")
         and path.get("target_feature_id")
     ]
-    if candidates:
-        return candidates
-    return [
+    edge_candidates = [
         {
-            "source_feature_id": str(edge["source"]),
-            "target_feature_id": str(edge["target"]),
+            "source_feature_id": str(edge.get("source_feature_id", edge.get("source"))),
+            "target_feature_id": str(edge.get("target_feature_id", edge.get("target"))),
             "source_label": None,
             "target_label": None,
         }
         for edge in graph.get("edges", [])
         if edge.get("type") == "path_patch" and edge.get("source") and edge.get("target")
     ]
+    merged = []
+    seen = set()
+    for candidate in [*candidates, *edge_candidates]:
+        pair = (candidate["source_feature_id"], candidate["target_feature_id"])
+        if pair in seen:
+            continue
+        merged.append(candidate)
+        seen.add(pair)
+    return merged
 
 
 def _validation_annotation(item: dict[str, Any]) -> dict[str, Any]:

@@ -43,7 +43,9 @@ def match_feature_cards(
             left_signed = _signed_effect(left)
             right_signed = _signed_effect(right)
             if left_signed is not None and right_signed is not None:
-                components["signed_effect"] = round(_signed_effect_similarity(left_signed, right_signed), 6)
+                signed_component = _signed_effect_similarity(left_signed, right_signed)
+                components["signed_effect"] = round(signed_component, 6)
+                score = _score_with_signed_effect(score, signed_component, left_signed, right_signed)
             if score >= min_score:
                 matches.append(
                     CandidateMatch(
@@ -76,6 +78,13 @@ def _signed_effect(card: FeatureCard) -> float | None:
 
 def _signed_effect_similarity(left: float, right: float) -> float:
     return clamp(1.0 - abs(left - right) / 2.0)
+
+
+def _score_with_signed_effect(score: float, signed_component: float, left: float, right: float) -> float:
+    adjusted = clamp(0.85 * score + 0.15 * signed_component)
+    if left * right < 0 and min(abs(left), abs(right)) >= 0.05:
+        adjusted = min(adjusted, 0.49)
+    return round(adjusted, 6)
 
 
 def _causal_similarity(left: list[float], right: list[float]) -> float:

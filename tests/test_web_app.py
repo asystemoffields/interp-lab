@@ -34,6 +34,9 @@ def test_render_web_app_contains_required_surfaces():
     assert "validate-hf-sae-paths" in html
     assert "--trust-remote-code" in html
     assert "Choose..." in html
+    assert "splitExtraFlags" in html
+    assert "buildArgv(spec, data, false).slice(1)" in html
+    assert "args: stepArgs" in html
 
 
 def test_optional_select_fields_do_not_receive_parser_choice_defaults():

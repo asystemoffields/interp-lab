@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from oracle_sae.adapters.goodfire import GoodfireFeatureProvider
@@ -716,5 +717,5 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError, FileNotFoundError, json.JSONDecodeError) as exc:
         parser.exit(2, f"{parser.prog}: error: {exc}\n")

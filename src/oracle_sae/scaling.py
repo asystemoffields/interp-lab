@@ -96,6 +96,7 @@ class ScalePlan:
     environment_profile: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        self._validate()
         dtype_bytes = DTYPE_BYTES[self.dtype]
         model_weight_bytes = (
             self.model_weight_bytes
@@ -250,6 +251,26 @@ class ScalePlan:
         if self.environment_profile is not None:
             result["environment_profile"] = self.environment_profile
         return result
+
+    def _validate(self) -> None:
+        for name in [
+            "model_params",
+            "tokens",
+            "d_model",
+            "selected_layers",
+            "latent_dim",
+            "top_k_active",
+            "causal_features",
+            "causal_prompts",
+            "interventions_per_feature",
+            "train_batch_size",
+        ]:
+            if float(getattr(self, name)) <= 0:
+                raise ValueError(f"{name} must be positive")
+        for name in ["shards", "target_shard_size_bytes", "model_weight_bytes"]:
+            value = getattr(self, name)
+            if value is not None and int(value) <= 0:
+                raise ValueError(f"{name} must be positive")
 
 
 def build_scale_plan_parser() -> argparse.ArgumentParser:

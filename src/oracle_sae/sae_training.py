@@ -746,6 +746,7 @@ def encode_with_artifact(values: list[list[float]], artifact: dict[str, Any]) ->
     mean_vector = list(artifact["mean"])
     encoder_weight = list(artifact["encoder_weight"])
     encoder_bias = list(artifact["encoder_bias"])
+    validate_sae_artifact_shapes(artifact, values=values)
     config = dict(artifact.get("config", {}))
     sparsity = str(config.get("sparsity", "relu-l1"))
     top_k = config.get("top_k")
@@ -758,6 +759,48 @@ def encode_with_artifact(values: list[list[float]], artifact: dict[str, Any]) ->
             latent.append(sum(value * weight for value, weight in zip(centered, weights)) + bias)
         encoded.append(_apply_sparsity_list(latent, sparsity=sparsity, top_k=top_k, jump_threshold=jump_threshold))
     return encoded
+
+
+def validate_sae_artifact_shapes(artifact: dict[str, Any], *, values: list[list[float]] | None = None) -> None:
+    mean_vector = list(artifact.get("mean", []))
+    encoder_weight = [list(row) for row in artifact.get("encoder_weight", [])]
+    encoder_bias = list(artifact.get("encoder_bias", []))
+    decoder_weight = [list(row) for row in artifact.get("decoder_weight", [])]
+    input_dim = int(artifact.get("input_dim", len(mean_vector)) or 0)
+    latent_dim = int(artifact.get("latent_dim", len(encoder_weight)) or 0)
+    if input_dim <= 0:
+        raise ValueError("SAE artifact input_dim must be positive")
+    if latent_dim <= 0:
+        raise ValueError("SAE artifact latent_dim must be positive")
+    if len(mean_vector) != input_dim:
+        raise ValueError(f"SAE artifact mean length {len(mean_vector)} does not match input_dim={input_dim}")
+    if len(encoder_weight) != latent_dim:
+        raise ValueError(
+            f"SAE artifact encoder_weight row count {len(encoder_weight)} does not match latent_dim={latent_dim}"
+        )
+    if len(encoder_bias) != latent_dim:
+        raise ValueError(f"SAE artifact encoder_bias length {len(encoder_bias)} does not match latent_dim={latent_dim}")
+    for index, row in enumerate(encoder_weight):
+        if len(row) != input_dim:
+            raise ValueError(
+                f"SAE artifact encoder_weight[{index}] length {len(row)} does not match input_dim={input_dim}"
+            )
+    if decoder_weight:
+        if len(decoder_weight) != latent_dim:
+            raise ValueError(
+                f"SAE artifact decoder_weight row count {len(decoder_weight)} does not match latent_dim={latent_dim}"
+            )
+        for index, row in enumerate(decoder_weight):
+            if len(row) != input_dim:
+                raise ValueError(
+                    f"SAE artifact decoder_weight[{index}] length {len(row)} does not match input_dim={input_dim}"
+                )
+    source_feature_ids = artifact.get("source_feature_ids")
+    if source_feature_ids is not None and len(list(source_feature_ids)) != input_dim:
+        raise ValueError("SAE artifact source_feature_ids length does not match input_dim")
+    for index, row in enumerate(values or []):
+        if len(row) != input_dim:
+            raise ValueError(f"activation row {index} length {len(row)} does not match SAE input_dim={input_dim}")
 
 
 def build_train_sae_parser() -> argparse.ArgumentParser:

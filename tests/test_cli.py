@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 
 from oracle_sae.cli import main
+from oracle_sae.runs import _input_file_records
 
 
 def test_demo_command_writes_reports(tmp_path: Path):
@@ -556,6 +557,65 @@ def test_run_config_list_args_record_outputs(tmp_path: Path):
     assert exit_code == 0
     assert manifest["steps"][0]["outputs"][0]["path"] == str((run_dir / "demo").resolve())
     assert manifest["outputs"][0]["kind"] == "directory"
+
+
+def test_run_config_dry_run_quotes_arguments_with_spaces(tmp_path: Path, capsys):
+    config = tmp_path / "run.json"
+    config.write_text(
+        json.dumps(
+            {
+                "model": "toy-records/model",
+                "criterion": "benchmark awareness",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["run", str(config), "--dry-run"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "--criterion" in output
+    assert '"benchmark awareness"' in output or "'benchmark awareness'" in output
+
+
+def test_run_config_parse_errors_are_cli_errors(tmp_path: Path, capsys):
+    config = tmp_path / "bad.json"
+    config.write_text("{", encoding="utf-8")
+
+    try:
+        main(["run", str(config)])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected SystemExit")
+
+    assert "interp-lab: error:" in capsys.readouterr().err
+
+
+def test_run_manifest_input_scan_preserves_list_path_keys(tmp_path: Path):
+    graph = tmp_path / "graph.json"
+    paths = tmp_path / "paths.jsonl"
+    graph.write_text("{}", encoding="utf-8")
+    paths.write_text("{}", encoding="utf-8")
+
+    records = _input_file_records(
+        {
+            "steps": [
+                {
+                    "command": "validate-attribution-graph",
+                    "args": {
+                        "graph": str(graph),
+                        "path_records": [str(paths)],
+                    },
+                }
+            ]
+        },
+        tmp_path,
+        {"config": {}},
+    )
+
+    assert {record["path"] for record in records} == {str(graph.resolve()), str(paths.resolve())}
 
 
 def test_init_run_scaffolds_editable_sae_workflow(tmp_path: Path, capsys):

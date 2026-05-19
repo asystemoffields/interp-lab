@@ -690,8 +690,12 @@ def _has_generic_label(card) -> bool:
 
 
 def _has_measured_intervention(card) -> bool:
-    if isinstance(card.metadata.get("interventions"), dict):
-        return True
+    interventions = card.metadata.get("interventions")
+    if isinstance(interventions, dict):
+        count = _float_or_none(interventions.get("count"))
+        mean_directed = _float_or_none(interventions.get("mean_directed_effect"))
+        if count is not None and count > 0.0 and mean_directed is not None:
+            return True
     return float(card.causal_effects.get("intervention_record_count", 0.0) or 0.0) > 0.0
 
 
@@ -729,10 +733,12 @@ def _intervention_lines(raw_value: object) -> list[str]:
     if not isinstance(raw_value, dict):
         return []
     count = raw_value.get("count")
-    mean_directed = raw_value.get("mean_directed_effect")
+    mean_directed = _float_or_none(raw_value.get("mean_directed_effect"))
+    if _float_or_none(count) is None or mean_directed is None:
+        return []
     side_effect = raw_value.get("mean_side_effect")
     lines = [
-        f"Interventions: n={count}, mean directed effect={float(mean_directed):.3f}"
+        f"Interventions: n={count}, mean directed effect={mean_directed:.3f}"
     ]
     if side_effect is not None:
         lines[0] += f", mean side effect={float(side_effect):.3f}"
@@ -763,6 +769,15 @@ def _intervention_lines(raw_value: object) -> list[str]:
             lines.append(f"- {example}")
     lines.append("")
     return lines
+
+
+def _float_or_none(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _sae_training_lines(raw_value: object) -> list[str]:

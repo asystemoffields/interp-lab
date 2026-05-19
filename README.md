@@ -448,7 +448,7 @@ interp-lab publish-hf-artifact \
   --tag activation-records
 ```
 
-Export a report as a causal attribution graph:
+Export a report as an attribution graph:
 
 ```bash
 interp-lab export-attribution-graph \
@@ -459,7 +459,7 @@ interp-lab export-attribution-graph \
   --include-similarity-edges
 ```
 
-Repeat `--report` to fuse reports from multiple layers. Graph exports include feature nodes, criterion edges, candidate feature-group supernodes, coactivation edges from aligned activation signatures, a readable Markdown digest, an offline HTML viewer, and a `mechanism_summary` with candidate paths plus validation next steps. `summarize-attribution-graph` writes a compact JSON view with counts, top path claims, validation assessment, and agent actions.
+Repeat `--report` to fuse reports for the same criterion. Graph exports include namespaced feature nodes, criterion-association edges, measured causal-effect edges when intervention evidence exists, candidate feature-group supernodes, coactivation edges from aligned activation signatures, a readable Markdown digest, an offline HTML viewer, and a `mechanism_summary` with candidate paths plus validation next steps. `summarize-attribution-graph` writes a compact JSON view with counts, top path claims, validation assessment, and agent actions.
 
 Plan a large run before harvesting activations:
 

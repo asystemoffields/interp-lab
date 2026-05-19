@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from oracle_sae.graphs import (
     build_attribution_graph,
     render_attribution_graph_html,
@@ -38,8 +41,10 @@ def test_attribution_graph_includes_candidate_mechanism_paths_and_groups():
     assert any(node["type"] == "supernode" for node in graph["nodes"])
     path_edges = [edge for edge in graph["edges"] if edge["type"] == "coactivation" and edge["candidate_path"]]
     assert path_edges
-    assert path_edges[0]["source"] == "SAE:L12:F1"
-    assert path_edges[0]["target"] == "SAE:L24:F8"
+    assert path_edges[0]["source"] == "feature:m:SAE:L12:F1"
+    assert path_edges[0]["target"] == "feature:m:SAE:L24:F8"
+    assert path_edges[0]["source_feature_id"] == "SAE:L12:F1"
+    assert path_edges[0]["target_feature_id"] == "SAE:L24:F8"
     assert graph["mechanism_summary"]["candidate_paths"]
     assert graph["mechanism_summary"]["validation_plan"]
 
@@ -89,6 +94,8 @@ def test_attribution_graph_accepts_measured_path_patch_edges():
     path_edges = [edge for edge in graph["edges"] if edge["type"] == "path_patch"]
     assert path_edges
     assert path_edges[0]["mean_target_activation_delta"] == 0.2
+    assert path_edges[0]["source"] == "feature:m:SAE:L12:F1"
+    assert path_edges[0]["source_feature_id"] == "SAE:L12:F1"
     assert path_edges[0]["record_count"] == 2
     assert path_edges[0]["control_record_count"] == 1
     assert path_edges[0]["control_mean_abs_target_activation_delta"] == 0.05
@@ -100,6 +107,63 @@ def test_attribution_graph_accepts_measured_path_patch_edges():
     assert graph["mechanism_summary"]["candidate_paths"][0]["best_strength"]["strength"] == 2.0
     assert graph["mechanism_summary"]["candidate_paths"][0]["path_specificity_score"] == 0.15
     assert "held-out prompts" in graph["mechanism_summary"]["validation_plan"][0]
+
+
+def test_attribution_graph_marks_activation_association_separately_from_causal_effect():
+    report = InspectionReport(
+        model="m",
+        criterion=Criterion(text="code-oriented completions"),
+        cards=[
+            _card(
+                "SAE:L12:F1",
+                12,
+                "source",
+                [0.0, 1.0],
+                examples=[],
+                signed=0.2,
+                strong=0.0,
+                causal=False,
+            ),
+        ],
+    )
+
+    graph = build_attribution_graph(report, include_supernodes=False, include_coactivation_edges=False)
+
+    criterion_edges = [edge for edge in graph["edges"] if edge["target"] == "criterion"]
+    assert criterion_edges[0]["type"] == "criterion_association"
+    assert criterion_edges[0]["evidence"] == "activation_criterion_association"
+
+
+def test_load_graph_report_rejects_mixed_criteria(tmp_path: Path):
+    left = tmp_path / "left.json"
+    right = tmp_path / "right.json"
+    _write_report(left, model="m1", criterion="criterion one", feature_id="F1")
+    _write_report(right, model="m2", criterion="criterion two", feature_id="F1")
+
+    from oracle_sae.graphs import load_graph_report
+
+    import pytest
+
+    with pytest.raises(ValueError, match="different criteria"):
+        load_graph_report([left, right])
+
+
+def test_multi_report_graph_namespaces_same_feature_ids(tmp_path: Path):
+    left = tmp_path / "left.json"
+    right = tmp_path / "right.json"
+    _write_report(left, model="m1", criterion="same criterion", feature_id="F1")
+    _write_report(right, model="m2", criterion="same criterion", feature_id="F1")
+
+    from oracle_sae.graphs import load_graph_report
+
+    graph = build_attribution_graph(
+        load_graph_report([left, right]),
+        include_supernodes=False,
+        include_coactivation_edges=False,
+    )
+
+    feature_ids = [node["id"] for node in graph["nodes"] if node.get("type") == "feature"]
+    assert sorted(feature_ids) == ["feature:m1:F1", "feature:m2:F1"]
 
 
 def test_attribution_graph_markdown_summarizes_validated_paths():
@@ -207,10 +271,12 @@ def _card(
     examples: list[str],
     signed: float,
     strong: float,
+    causal: bool = True,
+    model: str = "m",
 ) -> FeatureCard:
     fingerprint = FeatureFingerprint(
         feature_id=feature_id,
-        model="m",
+        model=model,
         layer=layer,
         text=label,
         text_vector=[],
@@ -220,7 +286,7 @@ def _card(
     )
     return FeatureCard(
         feature_id=feature_id,
-        model="m",
+        model=model,
         layer=layer,
         label=label,
         explanation="",
@@ -232,8 +298,37 @@ def _card(
         examples=examples,
         source="trained-sae",
         fingerprint=fingerprint,
-        causal_effects={
+        causal_effects=_causal_effects(signed=signed, strong=strong, causal=causal),
+    )
+
+
+def _causal_effects(*, signed: float, strong: float, causal: bool) -> dict[str, float]:
+    if causal:
+        return {
             "signed_causal_effect": signed,
             "strong_causal_score": strong,
-        },
+        }
+    return {
+        "criterion": abs(signed),
+        "signed_association": signed,
+    }
+
+
+def _write_report(path: Path, *, model: str, criterion: str, feature_id: str) -> None:
+    report = InspectionReport(
+        model=model,
+        criterion=Criterion(text=criterion),
+        cards=[
+            _card(
+                feature_id,
+                1,
+                "feature",
+                [0.0, 1.0],
+                examples=[],
+                signed=0.1,
+                strong=0.1,
+                model=model,
+            )
+        ],
     )
+    path.write_text(json.dumps(report.to_dict()), encoding="utf-8")

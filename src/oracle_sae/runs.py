@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import platform
+import shlex
+import subprocess
 import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -33,6 +35,7 @@ INPUT_PATH_KEYS = {
     "right",
     "report",
     "path",
+    "path_records",
     "source_sae",
     "target_sae",
     "source_report",
@@ -73,7 +76,7 @@ def run_config_file(options: RunOptions, *, command_runner: CommandRunner) -> in
     if options.dry_run:
         for step in steps:
             argv = _argv_from_step(step)
-            print(" ".join(["interp-lab", *argv]))
+            print(_format_command(["interp-lab", *argv]))
         return 0
 
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -257,6 +260,12 @@ def _dict_to_argv(args: Mapping[str, Any]) -> list[str]:
     return argv
 
 
+def _format_command(argv: list[str]) -> str:
+    if os.name == "nt":
+        return subprocess.list2cmdline(argv)
+    return shlex.join(argv)
+
+
 def _new_manifest(config_path: Path, run_dir: Path, config: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": "interp-lab.run.v1",
@@ -365,14 +374,16 @@ def _output_path_items(step: dict[str, Any]):
         index += 1
 
 
-def _walk_items(value: Any):
+def _walk_items(value: Any, parent_key: str | None = None):
     if isinstance(value, dict):
         for key, child in value.items():
             yield str(key), child
-            yield from _walk_items(child)
+            yield from _walk_items(child, str(key))
     elif isinstance(value, list):
         for child in value:
-            yield from _walk_items(child)
+            if parent_key is not None:
+                yield parent_key, child
+            yield from _walk_items(child, parent_key)
 
 
 def _resolve_existing_path(value: str, config_dir: Path) -> Path | None:

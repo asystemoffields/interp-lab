@@ -96,7 +96,7 @@ def test_attribution_graph_export(tmp_path: Path):
     graph = json.loads(path.read_text(encoding="utf-8"))
 
     assert graph["schema_version"] == "interp-lab.attribution_graph.v1"
-    assert any(edge["type"] == "causal_effect" for edge in graph["edges"])
+    assert any(edge["type"] == "criterion_association" for edge in graph["edges"])
     assert "# Attribution Graph" in markdown_out.read_text(encoding="utf-8")
 
 

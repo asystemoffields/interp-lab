@@ -109,6 +109,34 @@ def test_encode_with_artifact_applies_jumprelu_sparsity():
     assert encode_with_artifact([[1.0, 2.0]], artifact) == [[0.0, 2.0]]
 
 
+def test_encode_with_artifact_rejects_shape_mismatch():
+    artifact = {
+        "input_dim": 3,
+        "latent_dim": 2,
+        "mean": [0.0, 0.0, 0.0],
+        "encoder_weight": [[1.0, 0.0], [0.0, 1.0, 0.0]],
+        "encoder_bias": [0.0, 0.0],
+        "decoder_weight": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+    }
+
+    with pytest.raises(ValueError, match=r"encoder_weight\[0\] length"):
+        encode_with_artifact([[1.0, 2.0, 3.0]], artifact)
+
+
+def test_encode_with_artifact_rejects_activation_dimension_mismatch():
+    artifact = {
+        "input_dim": 2,
+        "latent_dim": 1,
+        "mean": [0.0, 0.0],
+        "encoder_weight": [[1.0, 0.0]],
+        "encoder_bias": [0.0],
+        "decoder_weight": [[1.0, 0.0]],
+    }
+
+    with pytest.raises(ValueError, match="activation row 0 length 3"):
+        encode_with_artifact([[1.0, 2.0, 3.0]], artifact)
+
+
 def test_train_sae_reports_validation_and_dead_latents(tmp_path: Path):
     source = tmp_path / "source.jsonl"
     rows = [

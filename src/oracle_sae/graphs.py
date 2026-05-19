@@ -228,13 +228,17 @@ def build_attribution_graph(
     ]
     edges = []
     for card in report.cards:
-        nodes.append(_feature_node(card))
+        nodes.append(_feature_node(card, strong_causal_threshold=strong_causal_threshold))
         edge = _criterion_edge(card, criterion_id=criterion_id)
         if edge is not None:
             edges.append(edge)
     supernodes: list[dict[str, Any]] = []
     if include_supernodes:
-        supernodes, supernode_edges = _supernodes(report.cards, criterion_id=criterion_id)
+        supernodes, supernode_edges = _supernodes(
+            report.cards,
+            criterion_id=criterion_id,
+            strong_causal_threshold=strong_causal_threshold,
+        )
         nodes.extend(supernodes)
         edges.extend(supernode_edges)
     coactivation_edges: list[dict[str, Any]] = []
@@ -245,7 +249,7 @@ def build_attribution_graph(
             strong_causal_threshold=strong_causal_threshold,
         )
         edges.extend(coactivation_edges)
-    path_patch_edges = _path_patch_edges(path_records or [])
+    path_patch_edges = _path_patch_edges(path_records or [], report.cards)
     edges.extend(path_patch_edges)
     if include_similarity_edges:
         edges.extend(_similarity_edges(report.cards, threshold=similarity_threshold))
@@ -339,14 +343,15 @@ def run_graph_summary_from_args(args: argparse.Namespace) -> Path:
     return export_attribution_graph_summary(graph_path=args.graph, out_path=args.out)
 
 
-def _feature_node(card: FeatureCard) -> dict[str, Any]:
+def _feature_node(card: FeatureCard, *, strong_causal_threshold: float) -> dict[str, Any]:
     return {
-        "id": card.feature_id,
+        "id": _feature_node_id(card),
         "type": "feature",
+        "feature_id": card.feature_id,
         "model": card.model,
         "layer": card.layer,
         "label": card.label,
-        "role": _feature_role(card),
+        "role": _feature_role(card, strong_causal_threshold=strong_causal_threshold),
         "top_tokens": _top_tokens(card),
         "source": card.source,
         "importance": card.importance,
@@ -357,18 +362,31 @@ def _feature_node(card: FeatureCard) -> dict[str, Any]:
     }
 
 
+def _feature_node_id(card: FeatureCard) -> str:
+    return f"feature:{card.model}:{card.feature_id}"
+
+
 def _criterion_edge(card: FeatureCard, *, criterion_id: str) -> dict[str, Any] | None:
-    signed = card.causal_effects.get(
-        "signed_causal_effect",
-        card.causal_effects.get("signed_association"),
-    )
-    effect = card.causal_effects.get("criterion", card.causal_effect)
-    if effect is None:
-        return None
+    measured = _has_measured_causal_evidence(card)
+    if measured:
+        signed = card.causal_effects.get(
+            "signed_causal_effect",
+            card.causal_effects.get("signed_association"),
+        )
+        effect = card.causal_effects.get("criterion", card.causal_effect)
+        edge_type = "causal_effect"
+        evidence = "measured_intervention"
+    else:
+        signed = card.causal_effects.get("signed_association", card.metadata.get("signed_association"))
+        effect = card.causal_effects.get("criterion", abs(float(signed)) if signed is not None else card.association)
+        edge_type = "criterion_association"
+        evidence = "activation_criterion_association"
     return {
-        "source": card.feature_id,
+        "source": _feature_node_id(card),
         "target": criterion_id,
-        "type": "causal_effect",
+        "type": edge_type,
+        "evidence": evidence,
+        "source_feature_id": card.feature_id,
         "effect": float(effect),
         "signed_effect": float(signed) if signed is not None else None,
         "specificity": card.causal_effects.get("specificity", card.specificity),
@@ -387,6 +405,47 @@ def _confidence_interval(card: FeatureCard) -> dict[str, float] | None:
     return {"low": low, "high": high}
 
 
+def _has_measured_causal_evidence(card: FeatureCard) -> bool:
+    if "signed_causal_effect" in card.causal_effects:
+        return True
+    if float(card.causal_effects.get("intervention_record_count", 0.0) or 0.0) > 0.0:
+        return True
+    interventions = card.metadata.get("interventions")
+    if isinstance(interventions, dict):
+        try:
+            return float(interventions.get("count", 0.0) or 0.0) > 0.0
+        except (TypeError, ValueError):
+            return False
+    return False
+
+
+def _feature_node_lookup(cards: list[FeatureCard]) -> dict[tuple[str | None, str], str]:
+    lookup: dict[tuple[str | None, str], str] = {}
+    counts: dict[str, int] = {}
+    for card in cards:
+        counts[card.feature_id] = counts.get(card.feature_id, 0) + 1
+    for card in cards:
+        lookup[(card.model, card.feature_id)] = _feature_node_id(card)
+        if counts[card.feature_id] == 1:
+            lookup[(None, card.feature_id)] = _feature_node_id(card)
+    return lookup
+
+
+def _lookup_feature_node_id(
+    lookup: dict[tuple[str | None, str], str],
+    feature_id: str,
+    model: str | None,
+) -> str:
+    return lookup.get((model, feature_id)) or lookup.get((None, feature_id)) or feature_id
+
+
+def _path_edge_model(rows: list[dict[str, Any]]) -> str | None:
+    models = {str(row.get("model", "")) for row in rows if row.get("model")}
+    if len(models) == 1:
+        return next(iter(models))
+    return None
+
+
 def _similarity_edges(cards: list[FeatureCard], *, threshold: float) -> list[dict[str, Any]]:
     edges = []
     for left_index, left in enumerate(cards):
@@ -398,9 +457,11 @@ def _similarity_edges(cards: list[FeatureCard], *, threshold: float) -> list[dic
             if score >= threshold:
                 edges.append(
                     {
-                        "source": left.feature_id,
-                        "target": right.feature_id,
+                        "source": _feature_node_id(left),
+                        "target": _feature_node_id(right),
                         "type": "fingerprint_similarity",
+                        "source_feature_id": left.feature_id,
+                        "target_feature_id": right.feature_id,
                         "score": round(score, 6),
                     }
                 )
@@ -440,6 +501,11 @@ def load_graph_report(report_path: str | Path | list[str | Path]) -> InspectionR
         cards.extend(report.cards)
     model_names = sorted({report.model for report in reports})
     criterion_texts = sorted({report.criterion.text for report in reports})
+    if len(criterion_texts) != 1:
+        raise ValueError(
+            "cannot fuse reports with different criteria: "
+            + ", ".join(repr(text) for text in criterion_texts)
+        )
     metadata = dict(first.metadata)
     metadata.update(
         {
@@ -457,7 +523,8 @@ def load_graph_report(report_path: str | Path | list[str | Path]) -> InspectionR
     )
 
 
-def _path_patch_edges(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _path_patch_edges(records: list[dict[str, Any]], cards: list[FeatureCard]) -> list[dict[str, Any]]:
+    node_lookup = _feature_node_lookup(cards)
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for record in records:
         source = str(record.get("source_feature_id", ""))
@@ -489,11 +556,14 @@ def _path_patch_edges(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             default=None,
         )
         prompts = {str(row.get("prompt_id", "")) for row in effect_rows}
+        model = _path_edge_model(rows)
         edges.append(
             {
-                "source": source,
-                "target": target,
+                "source": _lookup_feature_node_id(node_lookup, source, model),
+                "target": _lookup_feature_node_id(node_lookup, target, model),
                 "type": "path_patch",
+                "source_feature_id": source,
+                "target_feature_id": target,
                 "evidence": "source_sae_latent_steering",
                 "mean_target_activation_delta": round(_mean(deltas), 6),
                 "mean_abs_target_activation_delta": round(mean_abs_delta, 6),
@@ -540,9 +610,11 @@ def _coactivation_edges(
                 continue
             source, target = _ordered_pair(left, right)
             edge = {
-                "source": source.feature_id,
-                "target": target.feature_id,
+                "source": _feature_node_id(source),
+                "target": _feature_node_id(target),
                 "type": "coactivation",
+                "source_feature_id": source.feature_id,
+                "target_feature_id": target.feature_id,
                 "correlation": round(score, 6),
                 "abs_correlation": round(abs(score), 6),
                 "evidence": "activation_signature_correlation",
@@ -569,10 +641,15 @@ def _is_candidate_path(source: FeatureCard, target: FeatureCard, *, strong_causa
     return _strong_causal_score(target) >= strong_causal_threshold
 
 
-def _supernodes(cards: list[FeatureCard], *, criterion_id: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _supernodes(
+    cards: list[FeatureCard],
+    *,
+    criterion_id: str,
+    strong_causal_threshold: float,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     grouped: dict[str, list[FeatureCard]] = {}
     for card in cards:
-        grouped.setdefault(_role_supernode_id(card), []).append(card)
+        grouped.setdefault(_role_supernode_id(card, strong_causal_threshold=strong_causal_threshold), []).append(card)
     for theme, members in _theme_groups(cards).items():
         grouped[f"theme:{theme}"] = members
 
@@ -590,26 +667,33 @@ def _supernodes(cards: list[FeatureCard], *, criterion_id: str) -> tuple[list[di
                 "type": "supernode",
                 "label": _supernode_label(group_id, members),
                 "member_count": len(members),
-                "role": _feature_role(max(members, key=_strong_causal_score)),
+                "role": _feature_role(
+                    max(members, key=_strong_causal_score),
+                    strong_causal_threshold=strong_causal_threshold,
+                ),
                 "mean_signed_effect": round(signed, 6),
                 "mean_strong_causal_score": round(strong, 6),
-                "members": [member.feature_id for member in members],
+                "members": [_feature_node_id(member) for member in members],
+                "member_feature_ids": [member.feature_id for member in members],
             }
         )
         for member in members:
             edges.append(
                 {
-                    "source": member.feature_id,
+                    "source": _feature_node_id(member),
                     "target": node_id,
                     "type": "member_of",
                     "evidence": "automatic_role_or_theme_grouping",
+                    "source_feature_id": member.feature_id,
                 }
             )
         edges.append(
             {
                 "source": node_id,
                 "target": criterion_id,
-                "type": "aggregate_causal_effect",
+                "type": "aggregate_causal_effect"
+                if any(_has_measured_causal_evidence(member) for member in members)
+                else "aggregate_criterion_association",
                 "signed_effect": round(signed, 6),
                 "strong_causal_score": round(strong, 6),
                 "member_count": len(members),
@@ -618,17 +702,17 @@ def _supernodes(cards: list[FeatureCard], *, criterion_id: str) -> tuple[list[di
     return nodes, edges
 
 
-def _role_supernode_id(card: FeatureCard) -> str:
+def _role_supernode_id(card: FeatureCard, *, strong_causal_threshold: float) -> str:
     layer = "unknown-layer" if card.layer is None else f"layer-{card.layer}"
-    return f"{layer}:{_feature_role(card)}"
+    return f"{layer}:{_feature_role(card, strong_causal_threshold=strong_causal_threshold)}"
 
 
-def _feature_role(card: FeatureCard) -> str:
+def _feature_role(card: FeatureCard, *, strong_causal_threshold: float = DEFAULT_STRONG_CAUSAL_THRESHOLD) -> str:
     strong = _strong_causal_score(card)
     signed = _signed_effect(card)
-    if strong >= DEFAULT_STRONG_CAUSAL_THRESHOLD and signed > 0:
+    if strong >= strong_causal_threshold and signed > 0:
         return "criterion_promoter"
-    if strong >= DEFAULT_STRONG_CAUSAL_THRESHOLD and signed < 0:
+    if strong >= strong_causal_threshold and signed < 0:
         return "criterion_suppressor"
     if abs(float(card.association)) >= 0.2:
         return "associated_detector"
@@ -710,7 +794,7 @@ def _mechanism_summary(
                 "layer": card.layer,
                 "signed_effect": round(_signed_effect(card), 6),
                 "strong_causal_score": round(_strong_causal_score(card), 6),
-                "role": _feature_role(card),
+                "role": _feature_role(card, strong_causal_threshold=strong_causal_threshold),
             }
             for card in strong_cards[:8]
         ],
@@ -742,14 +826,16 @@ def _candidate_path_summaries(
     by_id = {card.feature_id: card for card in cards}
     paths = []
     for edge in path_patch_edges:
-        source = by_id.get(str(edge["source"]))
-        target = by_id.get(str(edge["target"]))
+        source_feature_id = str(edge.get("source_feature_id", edge["source"]))
+        target_feature_id = str(edge.get("target_feature_id", edge["target"]))
+        source = by_id.get(source_feature_id)
+        target = by_id.get(target_feature_id)
         paths.append(
             {
-                "source_feature_id": str(edge["source"]),
+                "source_feature_id": source_feature_id,
                 "source_label": _display_label(source) if source is not None else str(edge["source"]),
                 "source_layer": source.layer if source is not None else None,
-                "target_feature_id": str(edge["target"]),
+                "target_feature_id": target_feature_id,
                 "target_label": _display_label(target) if target is not None else str(edge["target"]),
                 "target_layer": target.layer if target is not None else None,
                 "evidence": "path_patch",
@@ -766,8 +852,10 @@ def _candidate_path_summaries(
     for edge in coactivation_edges:
         if not edge.get("candidate_path"):
             continue
-        source = by_id.get(str(edge["source"]))
-        target = by_id.get(str(edge["target"]))
+        source_feature_id = str(edge.get("source_feature_id", edge["source"]))
+        target_feature_id = str(edge.get("target_feature_id", edge["target"]))
+        source = by_id.get(source_feature_id)
+        target = by_id.get(target_feature_id)
         if source is None or target is None:
             continue
         paths.append(

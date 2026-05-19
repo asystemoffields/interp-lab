@@ -1,4 +1,4 @@
-from oracle_sae.hf_hooks import register_hidden_ablations, register_hidden_steering
+from oracle_sae.hf_hooks import _direction_for_hidden, register_hidden_ablations, register_hidden_steering
 
 
 def test_hidden_hooks_find_gemma_style_decoder_stack():
@@ -25,6 +25,14 @@ def test_hidden_hooks_find_gpt2_style_decoder_stack():
     assert all(handle.removed for handle in model.handles)
 
 
+def test_steering_direction_moves_to_hidden_device_and_dtype():
+    direction = _Direction()
+    hidden = _Hidden(device="cuda:1", dtype="float16")
+
+    assert _direction_for_hidden(direction, hidden) is direction
+    assert direction.to_calls == [{"device": "cuda:1", "dtype": "float16"}]
+
+
 class _Layer:
     def __init__(self, model):
         self.model = model
@@ -46,8 +54,18 @@ class _Handle:
 
 
 class _Direction:
-    def to(self, _dtype):
+    def __init__(self):
+        self.to_calls = []
+
+    def to(self, *args, **kwargs):
+        self.to_calls.append({"args": args, **kwargs} if args else dict(kwargs))
         return self
+
+
+class _Hidden:
+    def __init__(self, *, device, dtype):
+        self.device = device
+        self.dtype = dtype
 
 
 class _GemmaStyleModel:

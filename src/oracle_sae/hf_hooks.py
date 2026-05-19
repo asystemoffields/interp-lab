@@ -121,5 +121,9 @@ def _apply_dimension_edits(hidden: Any, edits: list[tuple[int, float]]):
 
 
 def _add_last_token_direction(hidden: Any, direction: Any, strength: float):
-    hidden[:, -1, :] = hidden[:, -1, :] + strength * direction.to(hidden.dtype)
+    hidden[:, -1, :] = hidden[:, -1, :] + strength * _direction_for_hidden(direction, hidden)
     return hidden
+
+
+def _direction_for_hidden(direction: Any, hidden: Any):
+    return direction.to(device=hidden.device, dtype=hidden.dtype)

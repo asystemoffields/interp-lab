@@ -1,5 +1,7 @@
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
+from oracle_sae.matching import match_feature_cards
 from oracle_sae.pipeline import inspect_model, match_reports
+from oracle_sae.schema import FeatureCard, FeatureFingerprint
 
 
 def test_inspection_report_contains_ranked_feature_cards():
@@ -41,3 +43,44 @@ def test_match_reports_returns_candidates():
     assert len(matches.matches) == 3
     assert matches.matches[0].score >= matches.matches[-1].score
     assert matches.matches[0].left_label
+
+
+def test_match_ranking_penalizes_opposite_signed_effects():
+    left = _card("L", "left", 0.2)
+    same_direction = _card("R-same", "same", 0.19)
+    opposite_direction = _card("R-opposite", "opposite", -0.2)
+
+    matches = match_feature_cards([left], [opposite_direction, same_direction], top_k=2)
+
+    assert matches[0].right_feature_id == "R-same"
+    assert matches[1].right_feature_id == "R-opposite"
+    assert matches[1].score <= 0.49
+
+
+def _card(feature_id: str, label: str, signed: float) -> FeatureCard:
+    fingerprint = FeatureFingerprint(
+        feature_id=feature_id,
+        model="m",
+        layer=1,
+        text=label,
+        text_vector=[1.0, 0.0],
+        activation_signature=[1.0, 0.0],
+        decoder_signature=[1.0, 0.0],
+        causal_vector=[0.2, signed, 0.2, 0.0],
+    )
+    return FeatureCard(
+        feature_id=feature_id,
+        model="m",
+        layer=1,
+        label=label,
+        explanation="",
+        importance=1.0,
+        association=0.5,
+        specificity=0.5,
+        causal_effect=0.5,
+        stability=1.0,
+        examples=[],
+        source="test",
+        fingerprint=fingerprint,
+        causal_effects={"signed_causal_effect": signed},
+    )
