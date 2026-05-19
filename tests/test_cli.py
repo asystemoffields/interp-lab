@@ -358,6 +358,7 @@ def test_validate_attribution_graph_command(tmp_path: Path):
     assert (tmp_path / "validated-graph.md").exists()
     graph_markdown = (tmp_path / "validated-graph.md").read_text(encoding="utf-8")
     assert "Path validation: `robust=1`" in graph_markdown
+    assert "passed_effect_control_and_sign_thresholds" in graph_markdown
 
 
 def test_run_config_writes_manifest_and_report(tmp_path: Path):

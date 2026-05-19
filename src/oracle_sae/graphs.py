@@ -723,7 +723,30 @@ def _candidate_path_markdown(paths: list[dict[str, Any]]) -> list[str]:
             f"{_cell(records)} |"
         )
     lines.append("")
+    notes = _candidate_path_note_markdown(paths[:12])
+    if notes:
+        lines.extend(notes)
     return lines
+
+
+def _candidate_path_note_markdown(paths: list[dict[str, Any]]) -> list[str]:
+    notes = []
+    for path in paths:
+        validation = path.get("validation") if isinstance(path.get("validation"), dict) else {}
+        interpretation = validation.get("interpretation")
+        if not interpretation:
+            continue
+        source = _cell(path.get("source_feature_id"))
+        target = _cell(path.get("target_feature_id"))
+        status = _cell(validation.get("status"))
+        reason_codes = validation.get("reason_codes")
+        reason_text = ""
+        if isinstance(reason_codes, list) and reason_codes:
+            reason_text = f" Reasons: `{', '.join(_cell(reason) for reason in reason_codes)}`."
+        notes.append(f"- `{source} -> {target}` {status}: {_cell(interpretation)}{reason_text}")
+    if not notes:
+        return []
+    return ["### Path Notes", "", *notes, ""]
 
 
 def _feature_group_markdown(groups: list[dict[str, Any]]) -> list[str]:

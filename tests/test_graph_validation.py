@@ -25,6 +25,7 @@ def test_graph_validation_classifies_robust_path_against_controls():
     validation = report["path_validations"][0]
     assert report["schema_version"] == "interp-lab.graph_validation.v1"
     assert validation["status"] == "robust"
+    assert validation["reason_codes"] == ["passed_effect_control_and_sign_thresholds"]
     assert validation["record_count"] == 3
     assert validation["control_record_count"] == 3
     assert validation["path_specificity_score"] == 0.19
@@ -46,7 +47,10 @@ def test_graph_validation_marks_control_matched_path_as_failed_control():
 
     report = build_graph_validation_report(graph, path_records=records)
 
-    assert report["path_validations"][0]["status"] == "failed_control"
+    validation = report["path_validations"][0]
+    assert validation["status"] == "failed_control"
+    assert "control_specificity_below_threshold" in validation["reason_codes"]
+    assert "comparable target-latent deltas" in validation["interpretation"]
 
 
 def test_export_graph_validation_report_writes_json_and_markdown(tmp_path: Path):
@@ -82,6 +86,7 @@ def test_export_graph_validation_report_writes_json_and_markdown(tmp_path: Path)
     assert result.annotated_graph_markdown_path.exists()
     annotated = json.loads(result.annotated_graph_path.read_text(encoding="utf-8"))
     assert annotated["edges"][0]["validation"]["status"] == "robust"
+    assert annotated["edges"][0]["validation"]["reason_codes"] == ["passed_effect_control_and_sign_thresholds"]
     assert annotated["mechanism_summary"]["candidate_paths"][0]["validation"]["status"] == "robust"
     assert "Attribution Graph Validation" in result.markdown_path.read_text(encoding="utf-8")
     annotated_markdown = result.annotated_graph_markdown_path.read_text(encoding="utf-8")

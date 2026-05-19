@@ -123,7 +123,11 @@ def test_attribution_graph_markdown_summarizes_validated_paths():
                     "control_mean_abs_target_activation_delta": 0.05,
                     "path_specificity_score": 0.15,
                     "record_count": 2,
-                    "validation": {"status": "robust"},
+                    "validation": {
+                        "status": "robust",
+                        "interpretation": "The path replicated with a target-latent effect that beat controls.",
+                        "reason_codes": ["passed_effect_control_and_sign_thresholds"],
+                    },
                 }
             ],
             "candidate_feature_groups": [],
@@ -138,6 +142,8 @@ def test_attribution_graph_markdown_summarizes_validated_paths():
     assert "Path validation: `robust=1`" in markdown
     assert "`SAE:L12:F1 -> SAE:L24:F8`" in markdown
     assert "robust" in markdown
+    assert "### Path Notes" in markdown
+    assert "passed_effect_control_and_sign_thresholds" in markdown
 
 
 def _card(

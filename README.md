@@ -248,7 +248,7 @@ interp-lab validate-attribution-graph \
   --graph-out reports/sae-paths/validated-graph.json
 ```
 
-This writes JSON and Markdown summaries with effect sizes, control comparisons, sign consistency, confidence intervals, and a path status such as `robust`, `suggestive`, `weak`, or `failed_control`. `--graph-out` writes a copy of the attribution graph with validation attached to matching path edges and candidate paths, plus a `validated-graph.md` digest by default.
+This writes JSON and Markdown summaries with effect sizes, control comparisons, sign consistency, confidence intervals, path status, and validation reason codes. `--graph-out` writes a copy of the attribution graph with validation attached to matching path edges and candidate paths, plus a `validated-graph.md` digest by default.
 
 Rerun the graph's top SAE paths on held-out prompts and validate them in one step:
 

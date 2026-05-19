@@ -292,6 +292,7 @@ def _validation_annotation(item: dict[str, Any]) -> dict[str, Any]:
     keys = [
         "status",
         "interpretation",
+        "reason_codes",
         "record_count",
         "control_record_count",
         "prompt_count",
@@ -353,13 +354,25 @@ def _validate_path(
         sign_consistency=sign_consistency,
         thresholds=thresholds,
     )
+    reason_codes = _validation_reason_codes(
+        status=status,
+        effect_count=len(effect_rows),
+        control_count=len(control_rows),
+        prompt_count=prompt_count,
+        mean_abs_effect=mean_abs_effect,
+        specificity=specificity,
+        ratio=ratio,
+        sign_consistency=sign_consistency,
+        thresholds=thresholds,
+    )
     return {
         "source_feature_id": candidate["source_feature_id"],
         "target_feature_id": candidate["target_feature_id"],
         "source_label": candidate.get("source_label"),
         "target_label": candidate.get("target_label"),
         "status": status,
-        "interpretation": _interpret_status(status),
+        "reason_codes": reason_codes,
+        "interpretation": _interpret_status(status, reason_codes),
         "record_count": len(effect_rows),
         "control_record_count": len(control_rows),
         "prompt_count": prompt_count,
@@ -410,13 +423,64 @@ def _validation_status(
     return "weak"
 
 
-def _interpret_status(status: str) -> str:
+def _validation_reason_codes(
+    *,
+    status: str,
+    effect_count: int,
+    control_count: int,
+    prompt_count: int,
+    mean_abs_effect: float,
+    specificity: float,
+    ratio: float | None,
+    sign_consistency: float,
+    thresholds: dict[str, Any],
+) -> list[str]:
+    reasons: list[str] = []
+    if effect_count == 0:
+        return ["no_effect_records"]
+    if prompt_count < int(thresholds["min_prompt_count"]):
+        reasons.append("prompt_count_below_threshold")
+    if bool(thresholds["require_controls"]) and control_count == 0:
+        reasons.append("missing_control_records")
+    if control_count > 0:
+        if specificity < float(thresholds["min_specificity"]):
+            reasons.append("control_specificity_below_threshold")
+        if ratio is not None and ratio < float(thresholds["min_effect_control_ratio"]):
+            reasons.append("effect_control_ratio_below_threshold")
+    if mean_abs_effect < float(thresholds["min_effect"]):
+        reasons.append("effect_below_threshold")
+    if sign_consistency < float(thresholds["min_sign_consistency"]):
+        reasons.append("sign_consistency_below_threshold")
+    if reasons:
+        return reasons
+    if status == "robust":
+        return ["passed_effect_control_and_sign_thresholds"]
+    if status == "suggestive":
+        return ["passed_suggestive_effect_and_sign_thresholds"]
+    return [f"classified_{status}"]
+
+
+def _interpret_status(status: str, reason_codes: list[str] | None = None) -> str:
+    reasons = set(reason_codes or [])
     if status == "robust":
         return "The path replicated with a target-latent effect that beat controls and kept a consistent sign."
     if status == "suggestive":
         return "The path has measurable evidence but should be repeated with more prompts or stronger controls."
     if status == "failed_control":
+        if "missing_control_records" in reasons:
+            return "Control rows were required for this run, and no matching controls were present."
+        if (
+            "control_specificity_below_threshold" in reasons
+            or "effect_control_ratio_below_threshold" in reasons
+        ):
+            return "Control interventions produced comparable target-latent deltas, so this path needs better separation."
         return "The measured effect did not separate cleanly from control interventions."
+    if "prompt_count_below_threshold" in reasons:
+        return "The path has too few distinct prompts for the current validation threshold."
+    if "effect_below_threshold" in reasons:
+        return "The target-latent effect is below the current validation threshold."
+    if "sign_consistency_below_threshold" in reasons:
+        return "The target-latent effect changes sign across records more often than the current threshold allows."
     return "The available path records are weak for this candidate."
 
 
