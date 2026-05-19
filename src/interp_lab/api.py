@@ -24,7 +24,13 @@ from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, T
 from oracle_sae.cli import main as _cli_main
 from oracle_sae.doctor import collect_diagnostics
 from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
-from oracle_sae.graphs import build_attribution_graph, export_attribution_graph, load_graph_report, load_path_patch_records
+from oracle_sae.graphs import (
+    build_attribution_graph,
+    export_attribution_graph,
+    load_graph_report,
+    load_path_patch_records,
+    write_attribution_graph_markdown,
+)
 from oracle_sae.graph_validation import (
     annotate_graph_with_validation,
     build_graph_validation_report,
@@ -76,6 +82,7 @@ class SaeTrainingResult:
 class WrittenGraph:
     graph: dict[str, Any]
     json_path: Path | None = None
+    markdown_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -434,6 +441,7 @@ def attribution_graph(
     report: InspectionReport | str | Path | list[str | Path],
     *,
     out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
     include_similarity_edges: bool = False,
     similarity_threshold: float = 0.9,
     include_coactivation_edges: bool = True,
@@ -461,7 +469,8 @@ def attribution_graph(
         path.parent.mkdir(parents=True, exist_ok=True)
 
         path.write_text(json.dumps(graph, indent=2, sort_keys=True), encoding="utf-8")
-        return WrittenGraph(graph=graph, json_path=path)
+        markdown_path = write_attribution_graph_markdown(graph, markdown_out) if markdown_out is not None else None
+        return WrittenGraph(graph=graph, json_path=path, markdown_path=markdown_path)
     if out is None:
         loaded = load_graph_report(report)
         return build_attribution_graph(
@@ -477,6 +486,7 @@ def attribution_graph(
     path = export_attribution_graph(
         report_path=report,
         out_path=out,
+        markdown_out_path=markdown_out,
         include_similarity_edges=include_similarity_edges,
         similarity_threshold=similarity_threshold,
         include_coactivation_edges=include_coactivation_edges,
@@ -495,7 +505,8 @@ def attribution_graph(
         strong_causal_threshold=strong_causal_threshold,
         path_records=loaded_path_records,
     )
-    return WrittenGraph(graph=graph, json_path=path)
+    markdown_path = Path(markdown_out) if markdown_out is not None else None
+    return WrittenGraph(graph=graph, json_path=path, markdown_path=markdown_path)
 
 
 def validate_attribution_graph(

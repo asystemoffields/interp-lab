@@ -115,6 +115,12 @@ from interp_lab import attribution_graph, publish_hf_artifact, scale_plan
 
 graph = attribution_graph("reports/model-a/report.json")
 
+written_graph = attribution_graph(
+    "reports/model-a/report.json",
+    out="reports/model-a/graph.json",
+    markdown_out="reports/model-a/graph.md",
+)
+
 publish_hf_artifact(
     repo_id="your-user/interp-lab-demo",
     paths=["reports/model-a"],

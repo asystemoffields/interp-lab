@@ -121,7 +121,11 @@ def test_graph_publish_and_scale_public_apis(tmp_path: Path):
         encoding="utf-8",
     )
     graph_with_paths = attribution_graph(result.report, path_records=paths)
-    written_graph = attribution_graph(result.json_path, out=tmp_path / "graph.json")
+    written_graph = attribution_graph(
+        result.json_path,
+        out=tmp_path / "graph.json",
+        markdown_out=tmp_path / "graph.md",
+    )
     dry_run = publish_hf_artifact(
         repo_id="user/interp-lab-demo",
         paths=[result.json_path],
@@ -132,6 +136,8 @@ def test_graph_publish_and_scale_public_apis(tmp_path: Path):
     assert graph["schema_version"] == "interp-lab.attribution_graph.v1"
     assert any(edge["type"] == "path_patch" for edge in graph_with_paths["edges"])
     assert written_graph.json_path == tmp_path / "graph.json"
+    assert written_graph.markdown_path == tmp_path / "graph.md"
+    assert written_graph.markdown_path.exists()
     assert dry_run.uploaded == ["report.json"]
     assert plan["schema_version"] == "interp-lab.scale_plan.v2"
     assert any("1T+" in item for item in plan["recommendations"])

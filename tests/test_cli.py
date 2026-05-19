@@ -239,6 +239,7 @@ def test_export_attribution_graph_command(tmp_path: Path):
     assert exit_code == 0
 
     graph = tmp_path / "graph.json"
+    markdown = tmp_path / "graph.md"
     exit_code = main(
         [
             "export-attribution-graph",
@@ -246,12 +247,15 @@ def test_export_attribution_graph_command(tmp_path: Path):
             str(tmp_path / "demo" / "model-a" / "report.json"),
             "--out",
             str(graph),
+            "--markdown-out",
+            str(markdown),
         ]
     )
 
     data = json.loads(graph.read_text(encoding="utf-8"))
     assert exit_code == 0
     assert data["schema_version"] == "interp-lab.attribution_graph.v1"
+    assert "# Attribution Graph" in markdown.read_text(encoding="utf-8")
 
 
 def test_export_attribution_graph_command_accepts_path_records(tmp_path: Path):

@@ -1,4 +1,4 @@
-from oracle_sae.graphs import build_attribution_graph
+from oracle_sae.graphs import build_attribution_graph, render_attribution_graph_markdown
 from oracle_sae.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
 
 
@@ -95,6 +95,49 @@ def test_attribution_graph_accepts_measured_path_patch_edges():
     assert graph["mechanism_summary"]["candidate_paths"][0]["best_strength"]["strength"] == 2.0
     assert graph["mechanism_summary"]["candidate_paths"][0]["path_specificity_score"] == 0.15
     assert "held-out prompts" in graph["mechanism_summary"]["validation_plan"][0]
+
+
+def test_attribution_graph_markdown_summarizes_validated_paths():
+    graph = {
+        "model": "m",
+        "criterion": {"text": "code-oriented completions"},
+        "nodes": [{"id": "criterion"}],
+        "edges": [{"source": "SAE:L12:F1", "target": "SAE:L24:F8"}],
+        "mechanism_summary": {
+            "strong_causal_features": [
+                {
+                    "feature_id": "SAE:L24:F8",
+                    "label": "target",
+                    "layer": 24,
+                    "role": "criterion_promoter",
+                    "signed_effect": 0.08,
+                    "strong_causal_score": 0.07,
+                }
+            ],
+            "candidate_paths": [
+                {
+                    "source_feature_id": "SAE:L12:F1",
+                    "target_feature_id": "SAE:L24:F8",
+                    "evidence": "path_patch",
+                    "mean_abs_target_activation_delta": 0.2,
+                    "control_mean_abs_target_activation_delta": 0.05,
+                    "path_specificity_score": 0.15,
+                    "record_count": 2,
+                    "validation": {"status": "robust"},
+                }
+            ],
+            "candidate_feature_groups": [],
+            "path_validation_status_counts": {"robust": 1},
+            "validation_plan": ["Repeat on held-out prompts."],
+        },
+    }
+
+    markdown = render_attribution_graph_markdown(graph)
+
+    assert "# Attribution Graph" in markdown
+    assert "Path validation: `robust=1`" in markdown
+    assert "`SAE:L12:F1 -> SAE:L24:F8`" in markdown
+    assert "robust" in markdown
 
 
 def _card(

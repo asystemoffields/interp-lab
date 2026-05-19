@@ -20,6 +20,7 @@ def export_attribution_graph(
     *,
     report_path: str | Path | list[str | Path],
     out_path: str | Path,
+    markdown_out_path: str | Path | None = None,
     include_similarity_edges: bool = False,
     similarity_threshold: float = 0.9,
     include_coactivation_edges: bool = True,
@@ -43,7 +44,38 @@ def export_attribution_graph(
     path = Path(out_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(graph, indent=2, sort_keys=True), encoding="utf-8")
+    if markdown_out_path is not None:
+        write_attribution_graph_markdown(graph, markdown_out_path)
     return path
+
+
+def write_attribution_graph_markdown(graph: dict[str, Any], out_path: str | Path) -> Path:
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_attribution_graph_markdown(graph), encoding="utf-8")
+    return path
+
+
+def render_attribution_graph_markdown(graph: dict[str, Any]) -> str:
+    summary = graph.get("mechanism_summary", {})
+    lines = [
+        "# Attribution Graph",
+        "",
+        f"Model: `{graph.get('model', '')}`",
+        f"Criterion: {_criterion_text(graph)}",
+        f"Nodes: `{len(graph.get('nodes', []))}`",
+        f"Edges: `{len(graph.get('edges', []))}`",
+        "",
+    ]
+    status_counts = summary.get("path_validation_status_counts")
+    if isinstance(status_counts, dict) and status_counts:
+        rendered_counts = ", ".join(f"{status}={count}" for status, count in sorted(status_counts.items()))
+        lines.extend([f"Path validation: `{rendered_counts}`", ""])
+    lines.extend(_strong_feature_markdown(summary.get("strong_causal_features", [])))
+    lines.extend(_candidate_path_markdown(summary.get("candidate_paths", [])))
+    lines.extend(_feature_group_markdown(summary.get("candidate_feature_groups", [])))
+    lines.extend(_validation_plan_markdown(summary.get("validation_plan", [])))
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def build_attribution_graph(
@@ -121,6 +153,7 @@ def build_graph_export_parser() -> argparse.ArgumentParser:
         help="Inspection report JSON. Repeat to fuse multiple layer reports into one graph.",
     )
     parser.add_argument("--out", required=True, help="Output graph JSON path.")
+    parser.add_argument("--markdown-out", help="Optional output graph Markdown summary path.")
     parser.add_argument(
         "--include-similarity-edges",
         action="store_true",
@@ -154,6 +187,7 @@ def run_graph_export_from_args(args: argparse.Namespace) -> Path:
     return export_attribution_graph(
         report_path=args.report,
         out_path=args.out,
+        markdown_out_path=args.markdown_out,
         include_similarity_edges=args.include_similarity_edges,
         similarity_threshold=args.similarity_threshold,
         include_coactivation_edges=args.include_coactivation_edges,
@@ -634,6 +668,115 @@ def _validation_plan(strong_cards: list[FeatureCard], candidate_paths: list[dict
             f"with strong causal score {_strong_causal_score(card):.3f}."
         )
     return plan[:6]
+
+
+def _strong_feature_markdown(features: list[dict[str, Any]]) -> list[str]:
+    if not features:
+        return ["## Strong Causal Features", "", "No strong causal features met the current threshold.", ""]
+    lines = [
+        "## Strong Causal Features",
+        "",
+        "| Feature | Label | Layer | Role | Signed | Strong |",
+        "| --- | --- | ---: | --- | ---: | ---: |",
+    ]
+    for feature in features[:8]:
+        lines.append(
+            "| "
+            f"`{_cell(feature.get('feature_id'))}` | "
+            f"{_cell(feature.get('label'))} | "
+            f"{_cell(feature.get('layer'))} | "
+            f"{_cell(feature.get('role'))} | "
+            f"{_number(feature.get('signed_effect'))} | "
+            f"{_number(feature.get('strong_causal_score'))} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _candidate_path_markdown(paths: list[dict[str, Any]]) -> list[str]:
+    if not paths:
+        return ["## Candidate Paths", "", "No candidate paths are currently present.", ""]
+    lines = [
+        "## Candidate Paths",
+        "",
+        "| Status | Path | Evidence | Effect | Control | Specificity | Records |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: |",
+    ]
+    for path in paths[:12]:
+        validation = path.get("validation") if isinstance(path.get("validation"), dict) else {}
+        status = validation.get("status", "")
+        effect = path.get("mean_abs_target_activation_delta", validation.get("mean_abs_target_activation_delta"))
+        control = path.get(
+            "control_mean_abs_target_activation_delta",
+            validation.get("control_mean_abs_target_activation_delta"),
+        )
+        specificity = path.get("path_specificity_score", validation.get("path_specificity_score"))
+        records = path.get("record_count", validation.get("record_count", ""))
+        lines.append(
+            "| "
+            f"{_cell(status)} | "
+            f"`{_cell(path.get('source_feature_id'))} -> {_cell(path.get('target_feature_id'))}` | "
+            f"{_cell(path.get('evidence'))} | "
+            f"{_number(effect)} | "
+            f"{_number(control)} | "
+            f"{_number(specificity)} | "
+            f"{_cell(records)} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _feature_group_markdown(groups: list[dict[str, Any]]) -> list[str]:
+    if not groups:
+        return []
+    lines = [
+        "## Candidate Feature Groups",
+        "",
+        "| Group | Label | Members | Mean Strong |",
+        "| --- | --- | ---: | ---: |",
+    ]
+    for group in groups[:8]:
+        lines.append(
+            "| "
+            f"`{_cell(group.get('id'))}` | "
+            f"{_cell(group.get('label'))} | "
+            f"{_cell(group.get('member_count'))} | "
+            f"{_number(group.get('mean_strong_causal_score'))} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _validation_plan_markdown(plan: list[str]) -> list[str]:
+    if not plan:
+        return []
+    lines = ["## Validation Plan", ""]
+    for item in plan[:8]:
+        lines.append(f"- {_cell(item)}")
+    lines.append("")
+    return lines
+
+
+def _criterion_text(graph: dict[str, Any]) -> str:
+    criterion = graph.get("criterion")
+    if isinstance(criterion, dict):
+        return _cell(criterion.get("text", ""))
+    return _cell(criterion)
+
+
+def _cell(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).replace("|", "\\|").replace("\n", " ").strip()
+
+
+def _number(value: Any) -> str:
+    if value is None or value == "":
+        return ""
+    try:
+        return f"{float(value):.4f}"
+    except (TypeError, ValueError):
+        return _cell(value)
 
 
 def _signed_effect(card: FeatureCard) -> float:

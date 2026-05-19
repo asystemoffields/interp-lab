@@ -467,6 +467,8 @@ def run_publish_hf_artifact(args: argparse.Namespace) -> int:
 def run_export_attribution_graph(args: argparse.Namespace) -> int:
     path = run_graph_export_from_args(args)
     print(f"Wrote {path}")
+    if args.markdown_out:
+        print(f"Wrote {args.markdown_out}")
     return 0
 
 

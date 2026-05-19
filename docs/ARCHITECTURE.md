@@ -154,6 +154,8 @@ Match reports preserve labels and signed effects. Candidate equivalents with opp
 
 The graph schema keeps effect sizes, signed effects, specificity, side effects, strong causal scores, confidence intervals, intervention record counts, coactivation correlations, measured target-latent deltas, behavior-score deltas, and group-level aggregate causal scores. Repeating `--report` fuses layer-specific reports into one graph so cross-layer candidate paths can be inspected together.
 
+Graph export can also write a Markdown digest for human and agent review. The digest lists strong causal features, candidate paths with validation details when present, candidate feature groups, and the validation plan.
+
 `validate-attribution-graph` consumes a graph plus repeated or held-out path-patching JSONL and writes a validation report. It separates effect rows from control rows, computes target-latent effect size, control-adjusted specificity, effect/control ratio, sign consistency, confidence intervals, and assigns each candidate path a status: `robust`, `suggestive`, `weak`, or `failed_control`. With `--graph-out`, it writes a graph copy annotated with validation details on matching path edges and candidate paths.
 
 `validate-hf-sae-paths` closes the loop for Hugging Face models. It selects the top exact `path_patch` source-target pairs from a graph, reruns those pairs on a prompt JSONL, writes fresh path records with controls, and then writes the same validation report. `export-hf-sae-paths` also accepts `--path-pair SOURCE=TARGET` for manual exact-pair measurement.

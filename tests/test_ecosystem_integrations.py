@@ -85,12 +85,19 @@ def test_attribution_graph_export(tmp_path: Path):
     report = _toy_report()
     report_path, _ = write_inspection_report(report, tmp_path / "report")
     out = tmp_path / "graph.json"
+    markdown_out = tmp_path / "graph.md"
 
-    path = export_attribution_graph(report_path=report_path, out_path=out, include_similarity_edges=True)
+    path = export_attribution_graph(
+        report_path=report_path,
+        out_path=out,
+        markdown_out_path=markdown_out,
+        include_similarity_edges=True,
+    )
     graph = json.loads(path.read_text(encoding="utf-8"))
 
     assert graph["schema_version"] == "interp-lab.attribution_graph.v1"
     assert any(edge["type"] == "causal_effect" for edge in graph["edges"])
+    assert "# Attribution Graph" in markdown_out.read_text(encoding="utf-8")
 
 
 def test_scale_plan_marks_trillion_parameter_remote_path():

@@ -232,8 +232,11 @@ interp-lab export-attribution-graph \
   --report reports/sae-layer6/report/report.json \
   --report reports/sae-layer10/report/report.json \
   --path-records reports/sae-paths/layer6-to-layer10.jsonl \
-  --out reports/sae-paths/graph.json
+  --out reports/sae-paths/graph.json \
+  --markdown-out reports/sae-paths/graph.md
 ```
+
+The Markdown graph digest summarizes strong causal features, measured candidate paths, validation status counts when present, feature groups, and the next validation checks.
 
 Validate candidate graph paths with repeated or held-out path records:
 
@@ -373,10 +376,11 @@ Export a report as a causal attribution graph:
 interp-lab export-attribution-graph \
   --report reports/eval-awareness/report.json \
   --out reports/eval-awareness/graph.json \
+  --markdown-out reports/eval-awareness/graph.md \
   --include-similarity-edges
 ```
 
-Repeat `--report` to fuse reports from multiple layers. Graph exports include feature nodes, criterion edges, candidate feature-group supernodes, coactivation edges from aligned activation signatures, and a `mechanism_summary` with candidate paths plus validation next steps.
+Repeat `--report` to fuse reports from multiple layers. Graph exports include feature nodes, criterion edges, candidate feature-group supernodes, coactivation edges from aligned activation signatures, a readable Markdown digest, and a `mechanism_summary` with candidate paths plus validation next steps.
 
 Plan a large run before harvesting activations:
 
