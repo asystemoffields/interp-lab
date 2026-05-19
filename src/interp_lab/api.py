@@ -32,6 +32,7 @@ from oracle_sae.graph_validation import (
 )
 from oracle_sae.hf_publish import PublishResult, publish_hf_artifact as _publish_hf_artifact
 from oracle_sae.hf_sae_paths import export_hf_sae_path_records
+from oracle_sae.hf_sae_validation import export_hf_sae_path_validation
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
     load_inspection_report,
@@ -81,6 +82,15 @@ class WrittenGraphValidation:
     report: dict[str, Any]
     json_path: Path
     markdown_path: Path
+
+
+@dataclass(frozen=True)
+class HfSaePathValidation:
+    selected_path_pairs: list[tuple[str, str]]
+    path_records_path: Path
+    validation_json_path: Path
+    validation_markdown_path: Path
+    validation_report: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -555,6 +565,87 @@ def validate_attribution_graph(
         report=result.report,
         json_path=result.json_path,
         markdown_path=result.markdown_path,
+    )
+
+
+def validate_hf_sae_paths(
+    *,
+    graph: str | Path,
+    model: str,
+    dataset: str | Path,
+    source_sae: str | Path,
+    target_sae: str | Path,
+    path_records_out: str | Path,
+    out: str | Path,
+    criterion: str | None = None,
+    markdown_out: str | Path | None = None,
+    source_report: str | Path | None = None,
+    target_report: str | Path | None = None,
+    top_k: int = 8,
+    pool: str = "last",
+    strength_sweep: list[float] | None = None,
+    random_source_controls: int = 2,
+    control_seed: int = 0,
+    score_behavior: bool = True,
+    target_tokens: list[str] | None = None,
+    device: str = "cpu",
+    max_length: int = 128,
+    min_effect: float = 0.05,
+    min_specificity: float = 0.02,
+    min_effect_control_ratio: float = 1.5,
+    min_prompt_count: int = 3,
+    min_sign_consistency: float = 0.75,
+    require_controls: bool = True,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
+) -> HfSaePathValidation:
+    """Rerun graph candidate SAE paths on a prompt set and validate the results."""
+    result = export_hf_sae_path_validation(
+        graph_path=graph,
+        model_name=model,
+        dataset_path=dataset,
+        source_artifact_path=source_sae,
+        target_artifact_path=target_sae,
+        path_records_out_path=path_records_out,
+        validation_out_path=out,
+        criterion=criterion,
+        markdown_out_path=markdown_out,
+        source_report_path=source_report,
+        target_report_path=target_report,
+        top_k=top_k,
+        pool=pool,
+        strength_sweep=strength_sweep,
+        random_source_controls=random_source_controls,
+        control_seed=control_seed,
+        score_behavior=score_behavior,
+        target_tokens=target_tokens,
+        device=device,
+        max_length=max_length,
+        min_effect=min_effect,
+        min_specificity=min_specificity,
+        min_effect_control_ratio=min_effect_control_ratio,
+        min_prompt_count=min_prompt_count,
+        min_sign_consistency=min_sign_consistency,
+        require_controls=require_controls,
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs=model_kwargs,
+        tokenizer_kwargs=tokenizer_kwargs,
+    )
+    return HfSaePathValidation(
+        selected_path_pairs=result.selected_path_pairs,
+        path_records_path=result.path_records_path,
+        validation_json_path=result.validation.json_path,
+        validation_markdown_path=result.validation.markdown_path,
+        validation_report=result.validation.report,
     )
 
 

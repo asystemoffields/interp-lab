@@ -246,6 +246,22 @@ interp-lab validate-attribution-graph \
 
 This writes JSON and Markdown summaries with effect sizes, control comparisons, sign consistency, confidence intervals, and a path status such as `robust`, `suggestive`, `weak`, or `failed_control`.
 
+Rerun the graph's top SAE paths on held-out prompts and validate them in one step:
+
+```bash
+interp-lab validate-hf-sae-paths \
+  --graph reports/sae-paths/graph.json \
+  --model distilgpt2 \
+  --dataset prompts/heldout-code-criterion.jsonl \
+  --source-sae reports/sae-layer6/sae.json \
+  --target-sae reports/sae-layer10/sae.json \
+  --path-records-out reports/sae-paths/heldout-paths.jsonl \
+  --out reports/sae-paths/heldout-validation.json \
+  --random-source-controls 2
+```
+
+The validation command selects exact graph path pairs, reruns only those source-target pairs, adds random-source controls, and writes the validation report. To measure specific pairs manually, pass `--path-pair SOURCE=TARGET` to `export-hf-sae-paths`.
+
 `train-sae` can also train from an existing activation-record JSONL:
 
 ```bash

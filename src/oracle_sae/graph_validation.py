@@ -115,6 +115,20 @@ def build_graph_validation_report(
     }
 
 
+def select_graph_path_pairs(graph: dict[str, Any], *, top_k: int = 8) -> list[tuple[str, str]]:
+    pairs = []
+    seen = set()
+    for candidate in _path_patch_candidates(graph):
+        pair = (candidate["source_feature_id"], candidate["target_feature_id"])
+        if pair in seen:
+            continue
+        pairs.append(pair)
+        seen.add(pair)
+        if len(pairs) >= top_k:
+            break
+    return pairs
+
+
 def render_graph_validation_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Attribution Graph Validation",

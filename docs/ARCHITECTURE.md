@@ -156,6 +156,8 @@ The graph schema keeps effect sizes, signed effects, specificity, side effects, 
 
 `validate-attribution-graph` consumes a graph plus repeated or held-out path-patching JSONL and writes a validation report. It separates effect rows from control rows, computes target-latent effect size, control-adjusted specificity, effect/control ratio, sign consistency, confidence intervals, and assigns each candidate path a status: `robust`, `suggestive`, `weak`, or `failed_control`.
 
+`validate-hf-sae-paths` closes the loop for Hugging Face models. It selects the top exact `path_patch` source-target pairs from a graph, reruns those pairs on a prompt JSONL, writes fresh path records with controls, and then writes the same validation report. `export-hf-sae-paths` also accepts `--path-pair SOURCE=TARGET` for manual exact-pair measurement.
+
 ## Scaling Model
 
 For very large models, interp-lab treats model execution as an adapter concern. A 1T+ model can harvest activations through a colocated runtime, Goodfire-style API, NNsight remote execution, or a custom cluster job. The stable interchange layer is sharded activation records, SAE artifacts, intervention records, and manifests.

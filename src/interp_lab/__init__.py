@@ -12,6 +12,7 @@ from oracle_sae.schema import (
 
 from interp_lab.api import (
     PathPatchResult,
+    HfSaePathValidation,
     SaeTrainingResult,
     WrittenGraph,
     WrittenGraphValidation,
@@ -28,6 +29,7 @@ from interp_lab.api import (
     scale_plan,
     train_sae,
     validate_attribution_graph,
+    validate_hf_sae_paths,
 )
 
 __all__ = [
@@ -39,6 +41,7 @@ __all__ = [
     "InspectionReport",
     "MatchReport",
     "PathPatchResult",
+    "HfSaePathValidation",
     "SaeTrainingResult",
     "WrittenGraph",
     "WrittenGraphValidation",
@@ -55,6 +58,7 @@ __all__ = [
     "scale_plan",
     "train_sae",
     "validate_attribution_graph",
+    "validate_hf_sae_paths",
 ]
 
 __version__ = "0.2.0"

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from oracle_sae.graph_validation import build_graph_validation_report, export_graph_validation_report
+from oracle_sae.graph_validation import build_graph_validation_report, export_graph_validation_report, select_graph_path_pairs
 
 
 def test_graph_validation_classifies_robust_path_against_controls():
@@ -63,6 +63,29 @@ def test_export_graph_validation_report_writes_json_and_markdown(tmp_path: Path)
     assert result.json_path.exists()
     assert result.markdown_path.exists()
     assert "Attribution Graph Validation" in result.markdown_path.read_text(encoding="utf-8")
+
+
+def test_select_graph_path_pairs_deduplicates_candidate_paths():
+    graph = _graph()
+    graph["mechanism_summary"]["candidate_paths"].append(
+        {
+            "source_feature_id": "SAE:L1:F1",
+            "target_feature_id": "SAE:L2:F8",
+            "evidence": "path_patch",
+        }
+    )
+    graph["mechanism_summary"]["candidate_paths"].append(
+        {
+            "source_feature_id": "SAE:L1:F2",
+            "target_feature_id": "SAE:L2:F9",
+            "evidence": "path_patch",
+        }
+    )
+
+    assert select_graph_path_pairs(graph, top_k=2) == [
+        ("SAE:L1:F1", "SAE:L2:F8"),
+        ("SAE:L1:F2", "SAE:L2:F9"),
+    ]
 
 
 def _graph() -> dict:

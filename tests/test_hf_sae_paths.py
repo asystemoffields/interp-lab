@@ -4,6 +4,8 @@ import pytest
 
 from oracle_sae.hf_sae_paths import (
     build_hf_sae_paths_parser,
+    parse_path_pair,
+    parse_path_pairs,
     parse_sae_feature_ref,
     _random_source_control_refs,
     resolve_sae_feature_refs,
@@ -76,6 +78,8 @@ def test_hf_sae_paths_parser_accepts_core_options():
             "2",
             "--control-seed",
             "17",
+            "--path-pair",
+            "SAE:L12:F1=SAE:L24:F8",
         ]
     )
 
@@ -83,6 +87,15 @@ def test_hf_sae_paths_parser_accepts_core_options():
     assert args.target_feature == ["SAE:L24:F8"]
     assert args.random_source_controls == 2
     assert args.control_seed == 17
+    assert parse_path_pairs(args.path_pair) == [("SAE:L12:F1", "SAE:L24:F8")]
+
+
+def test_parse_path_pair_accepts_common_separators():
+    assert parse_path_pair("SAE:L1:F2=SAE:L2:F3") == ("SAE:L1:F2", "SAE:L2:F3")
+    assert parse_path_pair("SAE:L1:F2, SAE:L2:F3") == ("SAE:L1:F2", "SAE:L2:F3")
+    assert parse_path_pair("SAE:L1:F2->SAE:L2:F3") == ("SAE:L1:F2", "SAE:L2:F3")
+    with pytest.raises(ValueError, match="Path pairs"):
+        parse_path_pair("SAE:L1:F2")
 
 
 def test_random_source_controls_are_deterministic_and_exclude_source_latent():

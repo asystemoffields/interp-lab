@@ -12,7 +12,10 @@ from interp_lab import (
     scale_plan,
     train_sae,
     validate_attribution_graph,
+    validate_hf_sae_paths,
 )
+from oracle_sae.graph_validation import GraphValidationWriteResult
+from oracle_sae.hf_sae_validation import HfSaePathValidationResult
 from interp_lab.artifacts import InspectionReport, load_inspection_report
 
 
@@ -178,6 +181,37 @@ def test_validate_attribution_graph_public_api(tmp_path: Path):
     assert report["path_validations"][0]["status"] == "robust"
     assert written.json_path.exists()
     assert written.markdown_path.exists()
+
+
+def test_validate_hf_sae_paths_public_api(tmp_path: Path, monkeypatch):
+    def fake_export_hf_sae_path_validation(**_kwargs):
+        return HfSaePathValidationResult(
+            selected_path_pairs=[("SAE:L1:F1", "SAE:L2:F8")],
+            path_records_path=tmp_path / "paths.jsonl",
+            validation=GraphValidationWriteResult(
+                report={"ok": True},
+                json_path=tmp_path / "validation.json",
+                markdown_path=tmp_path / "validation.md",
+            ),
+        )
+
+    monkeypatch.setattr(
+        "interp_lab.api.export_hf_sae_path_validation",
+        fake_export_hf_sae_path_validation,
+    )
+
+    result = validate_hf_sae_paths(
+        graph=tmp_path / "graph.json",
+        model="m",
+        dataset=tmp_path / "heldout.jsonl",
+        source_sae=tmp_path / "source.json",
+        target_sae=tmp_path / "target.json",
+        path_records_out=tmp_path / "paths.jsonl",
+        out=tmp_path / "validation.json",
+    )
+
+    assert result.selected_path_pairs == [("SAE:L1:F1", "SAE:L2:F8")]
+    assert result.validation_report == {"ok": True}
 
 
 def _row(model: str, prompt_id: str, score: float, features: dict[str, float]):

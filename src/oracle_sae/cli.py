@@ -33,6 +33,7 @@ from oracle_sae.hf_records import (
     run_export_from_args,
 )
 from oracle_sae.hf_sae_paths import build_hf_sae_paths_parser, run_hf_sae_paths_from_args
+from oracle_sae.hf_sae_validation import build_hf_sae_validation_parser, run_hf_sae_validation_from_args
 from oracle_sae.nnsight_records import build_nnsight_export_parser, run_nnsight_export_from_args
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
@@ -259,6 +260,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     hf_sae_paths.set_defaults(func=run_export_hf_sae_paths)
 
+    hf_sae_validation = subparsers.add_parser(
+        "validate-hf-sae-paths",
+        help="Rerun graph candidate SAE paths on held-out HF prompts and validate them.",
+        parents=[build_hf_sae_validation_parser()],
+        add_help=False,
+    )
+    hf_sae_validation.set_defaults(func=run_validate_hf_sae_paths)
+
     publish_hf = subparsers.add_parser(
         "publish-hf-artifact",
         help="Publish reports and artifacts to Hugging Face Hub.",
@@ -432,6 +441,15 @@ def run_train_sae(args: argparse.Namespace) -> int:
 def run_export_hf_sae_paths(args: argparse.Namespace) -> int:
     path = run_hf_sae_paths_from_args(args)
     print(f"Wrote {path}")
+    return 0
+
+
+def run_validate_hf_sae_paths(args: argparse.Namespace) -> int:
+    result = run_hf_sae_validation_from_args(args)
+    print(f"Validated {len(result.selected_path_pairs)} path pair(s)")
+    print(f"Wrote {result.path_records_path}")
+    print(f"Wrote {result.validation.json_path}")
+    print(f"Wrote {result.validation.markdown_path}")
     return 0
 
 

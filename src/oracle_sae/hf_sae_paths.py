@@ -45,6 +45,7 @@ def export_hf_sae_path_records(
     criterion: str,
     source_features: list[str] | None = None,
     target_features: list[str] | None = None,
+    path_pairs: list[tuple[str, str]] | None = None,
     source_report_path: str | Path | None = None,
     target_report_path: str | Path | None = None,
     source_top_k: int = 4,
@@ -79,15 +80,22 @@ def export_hf_sae_path_records(
     if source_layer >= target_layer:
         raise ValueError("SAE path patching requires the source SAE layer to be earlier than the target SAE layer")
 
+    normalized_path_pairs = _resolve_path_pairs(
+        path_pairs or [],
+        source_artifact=source_artifact,
+        target_artifact=target_artifact,
+    )
+    pair_source_features = [source for source, _ in normalized_path_pairs]
+    pair_target_features = [target for _, target in normalized_path_pairs]
     source_refs = resolve_sae_feature_refs(
-        explicit_features=source_features,
+        explicit_features=[*(source_features or []), *pair_source_features],
         report_path=source_report_path,
         artifact=source_artifact,
         top_k=source_top_k,
         role="source",
     )
     target_refs = resolve_sae_feature_refs(
-        explicit_features=target_features,
+        explicit_features=[*(target_features or []), *pair_target_features],
         report_path=target_report_path,
         artifact=target_artifact,
         top_k=target_top_k,
@@ -134,6 +142,7 @@ def export_hf_sae_path_records(
 
     strengths = strength_sweep or DEFAULT_PATH_STRENGTHS
     decoder_rows = list(source_artifact["decoder_weight"])
+    allowed_targets_by_source = _allowed_targets_by_source(normalized_path_pairs)
     control_refs_by_source = {
         source_ref.feature_id: _random_source_control_refs(
             source_ref,
@@ -163,6 +172,13 @@ def export_hf_sae_path_records(
                     max_length=max_length,
                 )
                 for source_ref in source_refs:
+                    target_refs_for_source = _target_refs_for_source(
+                        source_ref,
+                        target_refs,
+                        allowed_targets_by_source=allowed_targets_by_source,
+                    )
+                    if not target_refs_for_source:
+                        continue
                     direction = torch.tensor(
                         decoder_rows[source_ref.latent_index],
                         dtype=torch.float32,
@@ -183,7 +199,7 @@ def export_hf_sae_path_records(
                             device=runtime_device,
                             max_length=max_length,
                         )
-                        for target_ref in target_refs:
+                        for target_ref in target_refs_for_source:
                             row = _path_row(
                                 model_name=model_name,
                                 criterion=criterion,
@@ -225,7 +241,7 @@ def export_hf_sae_path_records(
                                 device=runtime_device,
                                 max_length=max_length,
                             )
-                            for target_ref in target_refs:
+                            for target_ref in target_refs_for_source:
                                 row = _path_row(
                                     model_name=model_name,
                                     criterion=criterion,
@@ -326,6 +342,17 @@ def parse_sae_feature_ref(
     )
 
 
+def parse_path_pair(value: str) -> tuple[str, str]:
+    for separator in ["=", ",", "->"]:
+        if separator in value:
+            source, target = value.split(separator, 1)
+            source = source.strip()
+            target = target.strip()
+            if source and target:
+                return source, target
+    raise ValueError("Path pairs must look like SOURCE=TARGET, SOURCE,TARGET, or SOURCE->TARGET")
+
+
 def build_hf_sae_paths_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Patch source SAE latents and measure downstream SAE latent paths.")
     parser.add_argument("--model", required=True, help="Hugging Face model name.")
@@ -336,6 +363,12 @@ def build_hf_sae_paths_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", required=True, help="Output path-patch JSONL path.")
     parser.add_argument("--source-feature", action="append", default=[], help="Source SAE feature id. Repeatable.")
     parser.add_argument("--target-feature", action="append", default=[], help="Target SAE feature id. Repeatable.")
+    parser.add_argument(
+        "--path-pair",
+        action="append",
+        default=[],
+        help="Specific source-to-target SAE path to measure, such as SAE:L6:F1=SAE:L10:F4. Repeatable.",
+    )
     parser.add_argument("--source-report", help="Report JSON used to select source features.")
     parser.add_argument("--target-report", help="Report JSON used to select target features.")
     parser.add_argument("--source-top-k", type=int, default=4)
@@ -371,6 +404,7 @@ def run_hf_sae_paths_from_args(args: argparse.Namespace) -> Path:
         criterion=args.criterion,
         source_features=args.source_feature,
         target_features=args.target_feature,
+        path_pairs=parse_path_pairs(args.path_pair),
         source_report_path=args.source_report,
         target_report_path=args.target_report,
         source_top_k=args.source_top_k,
@@ -385,6 +419,13 @@ def run_hf_sae_paths_from_args(args: argparse.Namespace) -> Path:
         max_length=args.max_length,
         **loading_options,
     )
+
+
+def parse_path_pairs(values: list[str] | None) -> list[tuple[str, str]]:
+    pairs = []
+    for value in values or []:
+        pairs.append(parse_path_pair(value))
+    return pairs
 
 
 @dataclass(frozen=True)
@@ -518,6 +559,41 @@ def _random_source_control_refs(
         )
         for latent_index in selected
     ]
+
+
+def _resolve_path_pairs(
+    path_pairs: list[tuple[str, str]],
+    *,
+    source_artifact: dict[str, Any],
+    target_artifact: dict[str, Any],
+) -> list[tuple[str, str]]:
+    normalized = []
+    for source_feature, target_feature in path_pairs:
+        source_ref = parse_sae_feature_ref(source_feature, artifact=source_artifact, role="source")
+        target_ref = parse_sae_feature_ref(target_feature, artifact=target_artifact, role="target")
+        normalized.append((source_ref.feature_id, target_ref.feature_id))
+    return normalized
+
+
+def _allowed_targets_by_source(path_pairs: list[tuple[str, str]]) -> dict[str, set[str]]:
+    allowed: dict[str, set[str]] = {}
+    for source, target in path_pairs:
+        allowed.setdefault(source, set()).add(target)
+    return allowed
+
+
+def _target_refs_for_source(
+    source_ref: SaeFeatureRef,
+    target_refs: list[SaeFeatureRef],
+    *,
+    allowed_targets_by_source: dict[str, set[str]],
+) -> list[SaeFeatureRef]:
+    allowed_targets = allowed_targets_by_source.get(source_ref.feature_id)
+    if allowed_targets is None:
+        if allowed_targets_by_source:
+            return []
+        return target_refs
+    return [target_ref for target_ref in target_refs if target_ref.feature_id in allowed_targets]
 
 
 def _load_sae_artifact(path: str | Path) -> dict[str, Any]:
