@@ -154,6 +154,8 @@ Match reports preserve labels and signed effects. Candidate equivalents with opp
 
 The graph schema keeps effect sizes, signed effects, specificity, side effects, strong causal scores, confidence intervals, intervention record counts, coactivation correlations, measured target-latent deltas, behavior-score deltas, and group-level aggregate causal scores. Repeating `--report` fuses layer-specific reports into one graph so cross-layer candidate paths can be inspected together.
 
+`validate-attribution-graph` consumes a graph plus repeated or held-out path-patching JSONL and writes a validation report. It separates effect rows from control rows, computes target-latent effect size, control-adjusted specificity, effect/control ratio, sign consistency, confidence intervals, and assigns each candidate path a status: `robust`, `suggestive`, `weak`, or `failed_control`.
+
 ## Scaling Model
 
 For very large models, interp-lab treats model execution as an adapter concern. A 1T+ model can harvest activations through a colocated runtime, Goodfire-style API, NNsight remote execution, or a custom cluster job. The stable interchange layer is sharded activation records, SAE artifacts, intervention records, and manifests.

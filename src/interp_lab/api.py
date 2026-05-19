@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,11 @@ from oracle_sae.cli import main as _cli_main
 from oracle_sae.doctor import collect_diagnostics
 from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
 from oracle_sae.graphs import build_attribution_graph, export_attribution_graph, load_graph_report, load_path_patch_records
+from oracle_sae.graph_validation import (
+    build_graph_validation_report,
+    export_graph_validation_report,
+    render_graph_validation_markdown,
+)
 from oracle_sae.hf_publish import PublishResult, publish_hf_artifact as _publish_hf_artifact
 from oracle_sae.hf_sae_paths import export_hf_sae_path_records
 from oracle_sae.pipeline import inspect_model, match_reports
@@ -68,6 +74,13 @@ class SaeTrainingResult:
 class WrittenGraph:
     graph: dict[str, Any]
     json_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class WrittenGraphValidation:
+    report: dict[str, Any]
+    json_path: Path
+    markdown_path: Path
 
 
 @dataclass(frozen=True)
@@ -433,7 +446,6 @@ def attribution_graph(
             return graph
         path = Path(out)
         path.parent.mkdir(parents=True, exist_ok=True)
-        import json
 
         path.write_text(json.dumps(graph, indent=2, sort_keys=True), encoding="utf-8")
         return WrittenGraph(graph=graph, json_path=path)
@@ -471,6 +483,79 @@ def attribution_graph(
         path_records=loaded_path_records,
     )
     return WrittenGraph(graph=graph, json_path=path)
+
+
+def validate_attribution_graph(
+    graph: dict[str, Any] | str | Path,
+    *,
+    path_records: str | Path | list[str | Path],
+    out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+    top_k: int = 8,
+    min_effect: float = 0.05,
+    min_specificity: float = 0.02,
+    min_effect_control_ratio: float = 1.5,
+    min_prompt_count: int = 3,
+    min_sign_consistency: float = 0.75,
+    require_controls: bool = True,
+) -> dict[str, Any] | WrittenGraphValidation:
+    """Validate measured attribution graph paths with path-patching records."""
+    if isinstance(graph, dict):
+        records = load_path_patch_records(path_records)
+        report = build_graph_validation_report(
+            graph,
+            path_records=records,
+            top_k=top_k,
+            min_effect=min_effect,
+            min_specificity=min_specificity,
+            min_effect_control_ratio=min_effect_control_ratio,
+            min_prompt_count=min_prompt_count,
+            min_sign_consistency=min_sign_consistency,
+            require_controls=require_controls,
+        )
+        if out is None:
+            return report
+        path = Path(out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        markdown_path = Path(markdown_out) if markdown_out is not None else path.with_suffix(".md")
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(render_graph_validation_markdown(report), encoding="utf-8")
+        return WrittenGraphValidation(report=report, json_path=path, markdown_path=markdown_path)
+    if out is None:
+        loaded_graph = json.loads(Path(graph).read_text(encoding="utf-8"))
+        records = load_path_patch_records(path_records)
+        return build_graph_validation_report(
+            loaded_graph,
+            path_records=records,
+            graph_path=str(graph),
+            top_k=top_k,
+            min_effect=min_effect,
+            min_specificity=min_specificity,
+            min_effect_control_ratio=min_effect_control_ratio,
+            min_prompt_count=min_prompt_count,
+            min_sign_consistency=min_sign_consistency,
+            require_controls=require_controls,
+        )
+    result = export_graph_validation_report(
+        graph_path=graph,
+        path_records_path=path_records,
+        out_path=out,
+        markdown_out_path=markdown_out,
+        top_k=top_k,
+        min_effect=min_effect,
+        min_specificity=min_specificity,
+        min_effect_control_ratio=min_effect_control_ratio,
+        min_prompt_count=min_prompt_count,
+        min_sign_consistency=min_sign_consistency,
+        require_controls=require_controls,
+    )
+    return WrittenGraphValidation(
+        report=result.report,
+        json_path=result.json_path,
+        markdown_path=result.markdown_path,
+    )
 
 
 def publish_hf_artifact(

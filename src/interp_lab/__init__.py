@@ -14,6 +14,7 @@ from interp_lab.api import (
     PathPatchResult,
     SaeTrainingResult,
     WrittenGraph,
+    WrittenGraphValidation,
     WrittenInspection,
     WrittenMatch,
     attribution_graph,
@@ -26,6 +27,7 @@ from interp_lab.api import (
     run,
     scale_plan,
     train_sae,
+    validate_attribution_graph,
 )
 
 __all__ = [
@@ -39,6 +41,7 @@ __all__ = [
     "PathPatchResult",
     "SaeTrainingResult",
     "WrittenGraph",
+    "WrittenGraphValidation",
     "WrittenInspection",
     "WrittenMatch",
     "attribution_graph",
@@ -51,6 +54,7 @@ __all__ = [
     "run",
     "scale_plan",
     "train_sae",
+    "validate_attribution_graph",
 ]
 
 __version__ = "0.2.0"

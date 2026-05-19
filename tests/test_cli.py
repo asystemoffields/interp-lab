@@ -290,6 +290,66 @@ def test_export_attribution_graph_command_accepts_path_records(tmp_path: Path):
     assert any(edge["type"] == "path_patch" for edge in data["edges"])
 
 
+def test_validate_attribution_graph_command(tmp_path: Path):
+    graph = tmp_path / "graph.json"
+    graph.write_text(
+        json.dumps(
+            {
+                "schema_version": "interp-lab.attribution_graph.v1",
+                "model": "m",
+                "criterion": {"text": "criterion"},
+                "mechanism_summary": {
+                    "candidate_paths": [
+                        {
+                            "source_feature_id": "SAE:L1:F1",
+                            "target_feature_id": "SAE:L2:F8",
+                            "evidence": "path_patch",
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    path_records = tmp_path / "paths.jsonl"
+    rows = [
+        {
+            "source_feature_id": "SAE:L1:F1",
+            "target_feature_id": "SAE:L2:F8",
+            "target_activation_delta": 0.2,
+            "prompt_id": "p1",
+        },
+        {
+            "source_feature_id": "SAE:L1:F1",
+            "target_feature_id": "SAE:L2:F8",
+            "target_activation_delta": 0.02,
+            "prompt_id": "p1",
+            "metadata": {"control_type": "random_source"},
+        },
+    ]
+    path_records.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    out = tmp_path / "validation.json"
+
+    exit_code = main(
+        [
+            "validate-attribution-graph",
+            "--graph",
+            str(graph),
+            "--path-records",
+            str(path_records),
+            "--min-prompt-count",
+            "1",
+            "--out",
+            str(out),
+        ]
+    )
+
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert data["path_validations"][0]["status"] == "robust"
+    assert out.with_suffix(".md").exists()
+
+
 def test_run_config_writes_manifest_and_report(tmp_path: Path):
     records = tmp_path / "records.jsonl"
     rows = [

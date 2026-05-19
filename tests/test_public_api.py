@@ -11,6 +11,7 @@ from interp_lab import (
     run,
     scale_plan,
     train_sae,
+    validate_attribution_graph,
 )
 from interp_lab.artifacts import InspectionReport, load_inspection_report
 
@@ -131,6 +132,52 @@ def test_graph_publish_and_scale_public_apis(tmp_path: Path):
     assert dry_run.uploaded == ["report.json"]
     assert plan["schema_version"] == "interp-lab.scale_plan.v2"
     assert any("1T+" in item for item in plan["recommendations"])
+
+
+def test_validate_attribution_graph_public_api(tmp_path: Path):
+    graph = {
+        "schema_version": "interp-lab.attribution_graph.v1",
+        "model": "m",
+        "criterion": {"text": "criterion"},
+        "mechanism_summary": {
+            "candidate_paths": [
+                {
+                    "source_feature_id": "SAE:L1:F1",
+                    "target_feature_id": "SAE:L2:F8",
+                    "evidence": "path_patch",
+                }
+            ]
+        },
+    }
+    paths = tmp_path / "paths.jsonl"
+    rows = [
+        {
+            "source_feature_id": "SAE:L1:F1",
+            "target_feature_id": "SAE:L2:F8",
+            "target_activation_delta": 0.2,
+            "prompt_id": "p1",
+        },
+        {
+            "source_feature_id": "SAE:L1:F1",
+            "target_feature_id": "SAE:L2:F8",
+            "target_activation_delta": 0.02,
+            "prompt_id": "p1",
+            "metadata": {"control_type": "random_source"},
+        },
+    ]
+    paths.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+
+    report = validate_attribution_graph(graph, path_records=paths, min_prompt_count=1)
+    written = validate_attribution_graph(
+        graph,
+        path_records=paths,
+        min_prompt_count=1,
+        out=tmp_path / "validation.json",
+    )
+
+    assert report["path_validations"][0]["status"] == "robust"
+    assert written.json_path.exists()
+    assert written.markdown_path.exists()
 
 
 def _row(model: str, prompt_id: str, score: float, features: dict[str, float]):

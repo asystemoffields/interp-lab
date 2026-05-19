@@ -235,6 +235,17 @@ interp-lab export-attribution-graph \
   --out reports/sae-paths/graph.json
 ```
 
+Validate candidate graph paths with repeated or held-out path records:
+
+```bash
+interp-lab validate-attribution-graph \
+  --graph reports/sae-paths/graph.json \
+  --path-records reports/sae-paths/heldout-layer6-to-layer10.jsonl \
+  --out reports/sae-paths/validation.json
+```
+
+This writes JSON and Markdown summaries with effect sizes, control comparisons, sign consistency, confidence intervals, and a path status such as `robust`, `suggestive`, `weak`, or `failed_control`.
+
 `train-sae` can also train from an existing activation-record JSONL:
 
 ```bash
