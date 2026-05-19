@@ -1,4 +1,4 @@
-from oracle_sae.graphs import build_attribution_graph, render_attribution_graph_markdown
+from oracle_sae.graphs import build_attribution_graph, render_attribution_graph_markdown, summarize_attribution_graph
 from oracle_sae.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
 
 
@@ -98,7 +98,33 @@ def test_attribution_graph_accepts_measured_path_patch_edges():
 
 
 def test_attribution_graph_markdown_summarizes_validated_paths():
-    graph = {
+    graph = _validated_graph()
+
+    markdown = render_attribution_graph_markdown(graph)
+
+    assert "# Attribution Graph" in markdown
+    assert "Path validation: `robust=1`" in markdown
+    assert "Overall validation: `validated_paths_present`" in markdown
+    assert "`SAE:L12:F1 -> SAE:L24:F8`" in markdown
+    assert "robust" in markdown
+    assert "validated" in markdown
+    assert "Replicate on broader held-out prompts" in markdown
+    assert "### Path Notes" in markdown
+    assert "passed_effect_control_and_sign_thresholds" in markdown
+
+
+def test_attribution_graph_summary_is_agent_friendly():
+    summary = summarize_attribution_graph(_validated_graph())
+
+    assert summary["schema_version"] == "interp-lab.attribution_graph_summary.v1"
+    assert summary["counts"]["candidate_paths"] == 1
+    assert summary["validation"]["overall_claim_grade"] == "validated_paths_present"
+    assert summary["candidate_paths"][0]["claim_grade"] == "validated"
+    assert summary["agent_next_actions"][0]["id"] == "replicate_validated_paths"
+
+
+def _validated_graph():
+    return {
         "model": "m",
         "criterion": {"text": "code-oriented completions"},
         "nodes": [{"id": "criterion"}],
@@ -141,22 +167,17 @@ def test_attribution_graph_markdown_summarizes_validated_paths():
                 "run_assessment": {
                     "overall_claim_grade": "validated_paths_present",
                     "recommended_next_action": "Replicate validated paths on a broader held-out prompt set.",
-                }
+                },
+                "agent_next_actions": [
+                    {
+                        "id": "replicate_validated_paths",
+                        "title": "Replicate validated paths",
+                        "command": "interp-lab validate-hf-sae-paths ...",
+                    }
+                ],
             }
         },
     }
-
-    markdown = render_attribution_graph_markdown(graph)
-
-    assert "# Attribution Graph" in markdown
-    assert "Path validation: `robust=1`" in markdown
-    assert "Overall validation: `validated_paths_present`" in markdown
-    assert "`SAE:L12:F1 -> SAE:L24:F8`" in markdown
-    assert "robust" in markdown
-    assert "validated" in markdown
-    assert "Replicate on broader held-out prompts" in markdown
-    assert "### Path Notes" in markdown
-    assert "passed_effect_control_and_sign_thresholds" in markdown
 
 
 def _card(

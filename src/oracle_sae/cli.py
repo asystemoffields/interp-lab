@@ -21,7 +21,12 @@ from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
 from oracle_sae.env_profile import build_environment_profile_parser, run_environment_profile_from_args
-from oracle_sae.graphs import build_graph_export_parser, run_graph_export_from_args
+from oracle_sae.graphs import (
+    build_graph_export_parser,
+    build_graph_summary_parser,
+    run_graph_export_from_args,
+    run_graph_summary_from_args,
+)
 from oracle_sae.graph_validation import build_graph_validation_parser, run_graph_validation_from_args
 from oracle_sae.hf_contrast import build_contrast_parser, run_contrast_from_args
 from oracle_sae.hf_interventions import build_intervention_parser, run_interventions_from_args
@@ -284,6 +289,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_graph.set_defaults(func=run_export_attribution_graph)
 
+    summarize_graph = subparsers.add_parser(
+        "summarize-attribution-graph",
+        help="Write a compact attribution graph summary JSON for agents.",
+        parents=[build_graph_summary_parser()],
+        add_help=False,
+    )
+    summarize_graph.set_defaults(func=run_summarize_attribution_graph)
+
     validate_graph = subparsers.add_parser(
         "validate-attribution-graph",
         help="Validate measured attribution graph paths with path records.",
@@ -471,6 +484,12 @@ def run_export_attribution_graph(args: argparse.Namespace) -> int:
     print(f"Wrote {path}")
     if args.markdown_out:
         print(f"Wrote {args.markdown_out}")
+    return 0
+
+
+def run_summarize_attribution_graph(args: argparse.Namespace) -> int:
+    path = run_graph_summary_from_args(args)
+    print(f"Wrote {path}")
     return 0
 
 

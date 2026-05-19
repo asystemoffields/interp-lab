@@ -238,6 +238,14 @@ interp-lab export-attribution-graph \
 
 The Markdown graph digest summarizes strong causal features, measured candidate paths, validation status counts when present, feature groups, and the next validation checks.
 
+For automation, write a compact graph summary JSON:
+
+```bash
+interp-lab summarize-attribution-graph \
+  --graph reports/sae-paths/graph.json \
+  --out reports/sae-paths/graph-summary.json
+```
+
 Validate candidate graph paths with repeated or held-out path records:
 
 ```bash
@@ -381,7 +389,7 @@ interp-lab export-attribution-graph \
   --include-similarity-edges
 ```
 
-Repeat `--report` to fuse reports from multiple layers. Graph exports include feature nodes, criterion edges, candidate feature-group supernodes, coactivation edges from aligned activation signatures, a readable Markdown digest, and a `mechanism_summary` with candidate paths plus validation next steps.
+Repeat `--report` to fuse reports from multiple layers. Graph exports include feature nodes, criterion edges, candidate feature-group supernodes, coactivation edges from aligned activation signatures, a readable Markdown digest, and a `mechanism_summary` with candidate paths plus validation next steps. `summarize-attribution-graph` writes a compact JSON view with counts, top path claims, validation assessment, and agent actions.
 
 Plan a large run before harvesting activations:
 

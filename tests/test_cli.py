@@ -294,6 +294,50 @@ def test_export_attribution_graph_command_accepts_path_records(tmp_path: Path):
     assert any(edge["type"] == "path_patch" for edge in data["edges"])
 
 
+def test_summarize_attribution_graph_command(tmp_path: Path):
+    graph = tmp_path / "graph.json"
+    graph.write_text(
+        json.dumps(
+            {
+                "schema_version": "interp-lab.attribution_graph.v1",
+                "model": "m",
+                "criterion": {"text": "criterion"},
+                "nodes": [{"id": "SAE:L1:F1", "type": "feature"}],
+                "edges": [{"source": "SAE:L1:F1", "target": "SAE:L2:F8", "type": "path_patch"}],
+                "mechanism_summary": {
+                    "candidate_paths": [
+                        {
+                            "source_feature_id": "SAE:L1:F1",
+                            "target_feature_id": "SAE:L2:F8",
+                            "evidence": "path_patch",
+                            "validation": {"status": "robust", "claim_grade": "validated"},
+                        }
+                    ],
+                    "path_validation_status_counts": {"robust": 1},
+                },
+                "metadata": {
+                    "graph_validation": {
+                        "run_assessment": {
+                            "overall_claim_grade": "validated_paths_present",
+                            "recommended_next_action": "Replicate validated paths.",
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "summary.json"
+
+    exit_code = main(["summarize-attribution-graph", "--graph", str(graph), "--out", str(out)])
+
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert data["schema_version"] == "interp-lab.attribution_graph_summary.v1"
+    assert data["counts"]["path_patch_edges"] == 1
+    assert data["validation"]["overall_claim_grade"] == "validated_paths_present"
+
+
 def test_validate_attribution_graph_command(tmp_path: Path):
     graph = tmp_path / "graph.json"
     graph.write_text(

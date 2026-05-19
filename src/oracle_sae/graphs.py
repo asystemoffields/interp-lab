@@ -56,6 +56,47 @@ def write_attribution_graph_markdown(graph: dict[str, Any], out_path: str | Path
     return path
 
 
+def export_attribution_graph_summary(*, graph_path: str | Path, out_path: str | Path) -> Path:
+    graph = json.loads(Path(graph_path).read_text(encoding="utf-8"))
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(summarize_attribution_graph(graph), indent=2, sort_keys=True), encoding="utf-8")
+    return path
+
+
+def summarize_attribution_graph(graph: dict[str, Any]) -> dict[str, Any]:
+    summary = graph.get("mechanism_summary", {}) if isinstance(graph.get("mechanism_summary"), dict) else {}
+    validation = _graph_validation_metadata(graph)
+    run_assessment = validation.get("run_assessment", {}) if isinstance(validation.get("run_assessment"), dict) else {}
+    validation_summary = validation.get("summary", {}) if isinstance(validation.get("summary"), dict) else {}
+    candidate_paths = summary.get("candidate_paths", []) if isinstance(summary.get("candidate_paths"), list) else []
+    nodes = graph.get("nodes", []) if isinstance(graph.get("nodes"), list) else []
+    edges = graph.get("edges", []) if isinstance(graph.get("edges"), list) else []
+    return {
+        "schema_version": "interp-lab.attribution_graph_summary.v1",
+        "model": graph.get("model"),
+        "criterion": _raw_criterion_text(graph),
+        "counts": {
+            "nodes": len(nodes),
+            "edges": len(edges),
+            "features": sum(1 for node in nodes if isinstance(node, dict) and node.get("type") == "feature"),
+            "path_patch_edges": sum(
+                1 for edge in edges if isinstance(edge, dict) and edge.get("type") == "path_patch"
+            ),
+            "candidate_paths": len(candidate_paths),
+        },
+        "validation": {
+            "status_counts": summary.get("path_validation_status_counts", {}),
+            "claim_grade_counts": validation_summary.get("claim_grade_counts", {}),
+            "overall_claim_grade": run_assessment.get("overall_claim_grade"),
+            "recommended_next_action": run_assessment.get("recommended_next_action"),
+        },
+        "strongest_features": _summary_strong_features(summary.get("strong_causal_features", [])),
+        "candidate_paths": _summary_candidate_paths(candidate_paths),
+        "agent_next_actions": validation.get("agent_next_actions", []) or _graph_summary_agent_next_actions(candidate_paths),
+    }
+
+
 def render_attribution_graph_markdown(graph: dict[str, Any]) -> str:
     summary = graph.get("mechanism_summary", {})
     lines = [
@@ -192,6 +233,13 @@ def build_graph_export_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_graph_summary_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Write a compact attribution graph summary JSON for agents.")
+    parser.add_argument("--graph", required=True, help="Attribution graph JSON.")
+    parser.add_argument("--out", required=True, help="Output graph summary JSON path.")
+    return parser
+
+
 def run_graph_export_from_args(args: argparse.Namespace) -> Path:
     return export_attribution_graph(
         report_path=args.report,
@@ -205,6 +253,10 @@ def run_graph_export_from_args(args: argparse.Namespace) -> Path:
         strong_causal_threshold=args.strong_causal_threshold,
         path_records_path=args.path_records,
     )
+
+
+def run_graph_summary_from_args(args: argparse.Namespace) -> Path:
+    return export_attribution_graph_summary(graph_path=args.graph, out_path=args.out)
 
 
 def _feature_node(card: FeatureCard) -> dict[str, Any]:
@@ -800,15 +852,86 @@ def _criterion_text(graph: dict[str, Any]) -> str:
     return _cell(criterion)
 
 
+def _raw_criterion_text(graph: dict[str, Any]) -> str:
+    criterion = graph.get("criterion")
+    if isinstance(criterion, dict):
+        return str(criterion.get("text", ""))
+    if criterion is None:
+        return ""
+    return str(criterion)
+
+
 def _graph_validation_run_assessment(graph: dict[str, Any]) -> dict[str, Any]:
+    graph_validation = _graph_validation_metadata(graph)
+    run_assessment = graph_validation.get("run_assessment")
+    return run_assessment if isinstance(run_assessment, dict) else {}
+
+
+def _graph_validation_metadata(graph: dict[str, Any]) -> dict[str, Any]:
     metadata = graph.get("metadata")
     if not isinstance(metadata, dict):
         return {}
     graph_validation = metadata.get("graph_validation")
-    if not isinstance(graph_validation, dict):
-        return {}
-    run_assessment = graph_validation.get("run_assessment")
-    return run_assessment if isinstance(run_assessment, dict) else {}
+    return graph_validation if isinstance(graph_validation, dict) else {}
+
+
+def _summary_strong_features(features: Any) -> list[dict[str, Any]]:
+    if not isinstance(features, list):
+        return []
+    fields = ["feature_id", "label", "layer", "role", "signed_effect", "strong_causal_score"]
+    return [
+        {field: feature.get(field) for field in fields if field in feature}
+        for feature in features[:8]
+        if isinstance(feature, dict)
+    ]
+
+
+def _summary_candidate_paths(paths: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for path in paths[:12]:
+        if not isinstance(path, dict):
+            continue
+        validation = path.get("validation") if isinstance(path.get("validation"), dict) else {}
+        rows.append(
+            {
+                "source_feature_id": path.get("source_feature_id"),
+                "target_feature_id": path.get("target_feature_id"),
+                "evidence": path.get("evidence"),
+                "status": validation.get("status"),
+                "claim_grade": validation.get("claim_grade"),
+                "mean_abs_target_activation_delta": path.get(
+                    "mean_abs_target_activation_delta",
+                    validation.get("mean_abs_target_activation_delta"),
+                ),
+                "control_mean_abs_target_activation_delta": path.get(
+                    "control_mean_abs_target_activation_delta",
+                    validation.get("control_mean_abs_target_activation_delta"),
+                ),
+                "path_specificity_score": path.get("path_specificity_score", validation.get("path_specificity_score")),
+                "record_count": path.get("record_count", validation.get("record_count")),
+                "reason_codes": validation.get("reason_codes", []),
+                "next_action": validation.get("next_action"),
+            }
+        )
+    return rows
+
+
+def _graph_summary_agent_next_actions(candidate_paths: list[dict[str, Any]]) -> list[dict[str, str]]:
+    if candidate_paths:
+        return [
+            {
+                "id": "validate_candidate_paths",
+                "title": "Validate candidate paths with held-out path-patching records",
+                "command": "interp-lab validate-attribution-graph --graph <graph.json> --path-records <paths.jsonl> --out <validation.json> --graph-out <validated-graph.json>",
+            }
+        ]
+    return [
+        {
+            "id": "measure_path_records",
+            "title": "Measure path-patching records before validating this graph",
+            "command": "interp-lab export-hf-sae-paths --model <model> --dataset <heldout.jsonl> --source-sae <source-sae.json> --target-sae <target-sae.json> --out <paths.jsonl>",
+        }
+    ]
 
 
 def _cell(value: Any) -> str:

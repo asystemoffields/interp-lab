@@ -27,8 +27,10 @@ from oracle_sae.env_profile import collect_environment_profile, load_environment
 from oracle_sae.graphs import (
     build_attribution_graph,
     export_attribution_graph,
+    export_attribution_graph_summary,
     load_graph_report,
     load_path_patch_records,
+    summarize_attribution_graph,
     write_attribution_graph_markdown,
 )
 from oracle_sae.graph_validation import (
@@ -83,6 +85,12 @@ class WrittenGraph:
     graph: dict[str, Any]
     json_path: Path | None = None
     markdown_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class WrittenGraphSummary:
+    summary: dict[str, Any]
+    json_path: Path
 
 
 @dataclass(frozen=True)
@@ -509,6 +517,28 @@ def attribution_graph(
     )
     markdown_path = Path(markdown_out) if markdown_out is not None else None
     return WrittenGraph(graph=graph, json_path=path, markdown_path=markdown_path)
+
+
+def attribution_graph_summary(
+    graph: dict[str, Any] | str | Path,
+    *,
+    out: str | Path | None = None,
+) -> dict[str, Any] | WrittenGraphSummary:
+    """Build or write a compact attribution graph summary for agents and scripts."""
+    if isinstance(graph, dict):
+        summary = summarize_attribution_graph(graph)
+        if out is None:
+            return summary
+        path = Path(out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+        return WrittenGraphSummary(summary=summary, json_path=path)
+    if out is None:
+        loaded = json.loads(Path(graph).read_text(encoding="utf-8"))
+        return summarize_attribution_graph(loaded)
+    path = export_attribution_graph_summary(graph_path=graph, out_path=out)
+    summary = json.loads(path.read_text(encoding="utf-8"))
+    return WrittenGraphSummary(summary=summary, json_path=path)
 
 
 def validate_attribution_graph(

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from interp_lab import (
     attribution_graph,
+    attribution_graph_summary,
     compare,
     doctor,
     inspect,
@@ -126,6 +127,7 @@ def test_graph_publish_and_scale_public_apis(tmp_path: Path):
         out=tmp_path / "graph.json",
         markdown_out=tmp_path / "graph.md",
     )
+    graph_summary = attribution_graph_summary(written_graph.graph, out=tmp_path / "graph-summary.json")
     dry_run = publish_hf_artifact(
         repo_id="user/interp-lab-demo",
         paths=[result.json_path],
@@ -138,6 +140,8 @@ def test_graph_publish_and_scale_public_apis(tmp_path: Path):
     assert written_graph.json_path == tmp_path / "graph.json"
     assert written_graph.markdown_path == tmp_path / "graph.md"
     assert written_graph.markdown_path.exists()
+    assert graph_summary.json_path == tmp_path / "graph-summary.json"
+    assert graph_summary.summary["schema_version"] == "interp-lab.attribution_graph_summary.v1"
     assert dry_run.uploaded == ["report.json"]
     assert plan["schema_version"] == "interp-lab.scale_plan.v2"
     assert any("1T+" in item for item in plan["recommendations"])
