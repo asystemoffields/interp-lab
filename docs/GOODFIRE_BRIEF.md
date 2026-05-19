@@ -26,6 +26,9 @@ The target workflow:
 - Confidence intervals, control rows, and a `strong_causal_score` for causal evidence.
 - Cross-model feature matching through text, activation, decoder, and causal fingerprints.
 - Attribution graph export from inspection reports.
+- SAE-latent path patching between source and target layer SAEs.
+- Graph validation with held-out path records, matched controls, and annotated graph exports.
+- Compact graph summaries for agents and scripts.
 - Hugging Face artifact publishing for reports and records.
 - Scale planning for very large model runs.
 - Config-driven runs with manifests for reproducibility.

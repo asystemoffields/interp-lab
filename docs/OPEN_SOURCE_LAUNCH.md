@@ -36,11 +36,13 @@ For outreach, send:
 - one-page technical summary;
 - command transcript or manifest from a real small-model run;
 - generated causal report;
+- generated attribution graph, validation report, and compact graph summary;
 - short description of the feedback or collaboration wanted.
 
 ## First Issues To File
 
 - Add HTML feature-card report.
+- Add HTML attribution graph viewer.
 - Add criterion dataset generator.
 - Add cross-model transfer validation.
 - Add distributed SAE training manifests.
