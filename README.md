@@ -66,6 +66,18 @@ Run a criterion inspection:
 interp-lab inspect --model toy/a --criterion "Python security bug" --backend toy
 ```
 
+Build a prompt dataset from prompts you wrote:
+
+```bash
+interp-lab build-prompts \
+  --positive prompts/code-positive.txt \
+  --negative prompts/code-controls.txt \
+  --split paragraphs \
+  --out prompts/code-criterion.jsonl
+```
+
+Prompt files can use one prompt per paragraph or one prompt per line with `--split lines`. Use `--positive-prompt` and `--negative-prompt` for inline prompts, and `--delimiter` for multi-line chat-style prompts separated by a literal marker. The output JSONL works anywhere interp-lab accepts `--dataset`.
+
 Compare two reports:
 
 ```bash

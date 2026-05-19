@@ -25,7 +25,12 @@ from oracle_sae.graphs import build_graph_export_parser, run_graph_export_from_a
 from oracle_sae.hf_contrast import build_contrast_parser, run_contrast_from_args
 from oracle_sae.hf_interventions import build_intervention_parser, run_interventions_from_args
 from oracle_sae.hf_publish import build_hf_publish_parser, run_hf_publish_from_args
-from oracle_sae.hf_records import build_export_parser, run_export_from_args
+from oracle_sae.hf_records import (
+    build_export_parser,
+    build_prompt_dataset_parser,
+    run_build_prompt_dataset_from_args,
+    run_export_from_args,
+)
 from oracle_sae.hf_sae_paths import build_hf_sae_paths_parser, run_hf_sae_paths_from_args
 from oracle_sae.nnsight_records import build_nnsight_export_parser, run_nnsight_export_from_args
 from oracle_sae.pipeline import inspect_model, match_reports
@@ -197,6 +202,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_hf.set_defaults(func=run_export_hf_records)
 
+    build_prompts = subparsers.add_parser(
+        "build-prompts",
+        help="Build a prompt JSONL from user-written prompts.",
+        parents=[build_prompt_dataset_parser()],
+        add_help=False,
+    )
+    build_prompts.set_defaults(func=run_build_prompts)
+
     export_tl = subparsers.add_parser(
         "export-transformerlens-records",
         help="Export TransformerLens hook activations as activation records.",
@@ -359,6 +372,16 @@ def run_config(args: argparse.Namespace) -> int:
 def run_export_hf_records(args: argparse.Namespace) -> int:
     path = run_export_from_args(args)
     print(f"Wrote {path}")
+    return 0
+
+
+def run_build_prompts(args: argparse.Namespace) -> int:
+    summary = run_build_prompt_dataset_from_args(args)
+    print(f"Wrote {summary.path}")
+    print(
+        f"Prompts: {summary.record_count} total, "
+        f"{summary.positive_count} positive, {summary.negative_count} negative"
+    )
     return 0
 
 

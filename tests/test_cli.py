@@ -130,6 +130,35 @@ def test_doctor_command_reports_environment(capsys):
     assert output["tool"] == "interp-lab"
 
 
+def test_build_prompts_command_writes_prompt_jsonl(tmp_path: Path, capsys):
+    positive = tmp_path / "positive.txt"
+    positive.write_text("Prompt one\nPrompt two\n", encoding="utf-8")
+    out = tmp_path / "prompts.jsonl"
+
+    exit_code = main(
+        [
+            "build-prompts",
+            "--positive",
+            str(positive),
+            "--negative-prompt",
+            "Ordinary control prompt",
+            "--split",
+            "lines",
+            "--id-prefix",
+            "custom",
+            "--out",
+            str(out),
+        ]
+    )
+
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Prompts: 3 total" in output
+    assert rows[0]["prompt_id"] == "custom-positive-001"
+    assert rows[-1]["criterion_score"] == 0.0
+
+
 def test_publish_hf_artifact_dry_run_command(tmp_path: Path, capsys):
     artifact = tmp_path / "report.json"
     artifact.write_text("{}", encoding="utf-8")

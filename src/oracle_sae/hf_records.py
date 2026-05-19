@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,14 @@ class PromptRecord:
             text=str(data["text"]),
             criterion_score=float(data["criterion_score"]),
         )
+
+
+@dataclass(frozen=True)
+class PromptDatasetSummary:
+    path: Path
+    record_count: int
+    positive_count: int
+    negative_count: int
 
 
 def export_hf_activation_records(
@@ -149,6 +158,114 @@ def load_prompt_records(path: str | Path) -> list[PromptRecord]:
     return records
 
 
+def build_prompt_dataset(
+    *,
+    out_path: str | Path,
+    positive_paths: list[str | Path] | None = None,
+    negative_paths: list[str | Path] | None = None,
+    positive_prompts: list[str] | None = None,
+    negative_prompts: list[str] | None = None,
+    split: str = "paragraphs",
+    delimiter: str | None = None,
+    positive_score: float = 1.0,
+    negative_score: float = 0.0,
+    id_prefix: str = "prompt",
+) -> PromptDatasetSummary:
+    records = build_prompt_records(
+        positive_paths=positive_paths,
+        negative_paths=negative_paths,
+        positive_prompts=positive_prompts,
+        negative_prompts=negative_prompts,
+        split=split,
+        delimiter=delimiter,
+        positive_score=positive_score,
+        negative_score=negative_score,
+        id_prefix=id_prefix,
+    )
+    if not records:
+        raise ValueError("Add at least one positive or negative prompt")
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(
+                json.dumps(
+                    {
+                        "prompt_id": record.prompt_id,
+                        "text": record.text,
+                        "criterion_score": record.criterion_score,
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+    positive_count = sum(
+        1 for record in records if record.prompt_id.startswith(f"{id_prefix}-positive-")
+    )
+    negative_count = sum(
+        1 for record in records if record.prompt_id.startswith(f"{id_prefix}-negative-")
+    )
+    return PromptDatasetSummary(
+        path=path,
+        record_count=len(records),
+        positive_count=positive_count,
+        negative_count=negative_count,
+    )
+
+
+def build_prompt_records(
+    *,
+    positive_paths: list[str | Path] | None = None,
+    negative_paths: list[str | Path] | None = None,
+    positive_prompts: list[str] | None = None,
+    negative_prompts: list[str] | None = None,
+    split: str = "paragraphs",
+    delimiter: str | None = None,
+    positive_score: float = 1.0,
+    negative_score: float = 0.0,
+    id_prefix: str = "prompt",
+) -> list[PromptRecord]:
+    if split not in {"lines", "paragraphs"}:
+        raise ValueError("--split must be 'lines' or 'paragraphs'")
+    records: list[PromptRecord] = []
+    next_index = 1
+    next_index = _extend_prompt_records(
+        records,
+        texts=list(positive_prompts or []),
+        score=positive_score,
+        label="positive",
+        id_prefix=id_prefix,
+        start_index=next_index,
+    )
+    for path in positive_paths or []:
+        next_index = _extend_prompt_records(
+            records,
+            texts=_read_prompt_texts(path, split=split, delimiter=delimiter),
+            score=positive_score,
+            label="positive",
+            id_prefix=id_prefix,
+            start_index=next_index,
+        )
+    next_index = _extend_prompt_records(
+        records,
+        texts=list(negative_prompts or []),
+        score=negative_score,
+        label="negative",
+        id_prefix=id_prefix,
+        start_index=next_index,
+    )
+    for path in negative_paths or []:
+        next_index = _extend_prompt_records(
+            records,
+            texts=_read_prompt_texts(path, split=split, delimiter=delimiter),
+            score=negative_score,
+            label="negative",
+            id_prefix=id_prefix,
+            start_index=next_index,
+        )
+    return records
+
+
 def split_prompt_record_indexes(prompts: list[PromptRecord]) -> tuple[set[int], set[int]]:
     if not prompts:
         return set(), set()
@@ -199,6 +316,46 @@ def build_export_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_prompt_dataset_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Build a prompt JSONL from user-written prompts.")
+    parser.add_argument(
+        "--positive",
+        action="append",
+        default=[],
+        help="Text file of positive prompts. Repeatable.",
+    )
+    parser.add_argument(
+        "--negative",
+        action="append",
+        default=[],
+        help="Text file of negative prompts. Repeatable.",
+    )
+    parser.add_argument(
+        "--positive-prompt",
+        action="append",
+        default=[],
+        help="Inline positive prompt. Repeatable.",
+    )
+    parser.add_argument(
+        "--negative-prompt",
+        action="append",
+        default=[],
+        help="Inline negative prompt. Repeatable.",
+    )
+    parser.add_argument("--out", required=True, help="Output prompt JSONL path.")
+    parser.add_argument(
+        "--split",
+        choices=["lines", "paragraphs"],
+        default="paragraphs",
+        help="How to split prompt files when --delimiter is omitted.",
+    )
+    parser.add_argument("--delimiter", help="Literal delimiter between prompts in prompt files.")
+    parser.add_argument("--positive-score", type=float, default=1.0)
+    parser.add_argument("--negative-score", type=float, default=0.0)
+    parser.add_argument("--id-prefix", default="prompt")
+    return parser
+
+
 def run_export_from_args(args: argparse.Namespace) -> Path:
     try:
         layers = parse_layers(args.layers)
@@ -219,6 +376,24 @@ def run_export_from_args(args: argparse.Namespace) -> Path:
         max_length=args.max_length,
         **loading_options,
     )
+
+
+def run_build_prompt_dataset_from_args(args: argparse.Namespace) -> PromptDatasetSummary:
+    try:
+        return build_prompt_dataset(
+            out_path=args.out,
+            positive_paths=args.positive,
+            negative_paths=args.negative,
+            positive_prompts=args.positive_prompt,
+            negative_prompts=args.negative_prompt,
+            split=args.split,
+            delimiter=args.delimiter,
+            positive_score=args.positive_score,
+            negative_score=args.negative_score,
+            id_prefix=args.id_prefix,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _optional_import(name: str, message: str):
@@ -272,3 +447,43 @@ def _select_features(
         associations.sort(key=lambda item: abs(item[1]), reverse=True)
         selected[layer] = associations[:features_per_layer]
     return selected
+
+
+def _read_prompt_texts(path: str | Path, *, split: str, delimiter: str | None) -> list[str]:
+    raw = Path(path).read_text(encoding="utf-8")
+    if delimiter:
+        chunks = raw.split(delimiter)
+    elif split == "lines":
+        chunks = raw.splitlines()
+    else:
+        chunks = re.split(r"\n[ \t]*\n+", raw.replace("\r\n", "\n").replace("\r", "\n"))
+    return [_clean_prompt_text(chunk) for chunk in chunks if _clean_prompt_text(chunk)]
+
+
+def _extend_prompt_records(
+    records: list[PromptRecord],
+    *,
+    texts: list[str],
+    score: float,
+    label: str,
+    id_prefix: str,
+    start_index: int,
+) -> int:
+    next_index = start_index
+    for text in texts:
+        cleaned = _clean_prompt_text(text)
+        if not cleaned:
+            continue
+        records.append(
+            PromptRecord(
+                prompt_id=f"{id_prefix}-{label}-{next_index:03d}",
+                text=cleaned,
+                criterion_score=score,
+            )
+        )
+        next_index += 1
+    return next_index
+
+
+def _clean_prompt_text(value: str) -> str:
+    return value.strip("\ufeff \t\r\n")

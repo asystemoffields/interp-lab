@@ -3,7 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from oracle_sae.hf_records import PromptRecord, load_prompt_records, parse_layers, split_prompt_record_indexes
+from oracle_sae.hf_records import (
+    PromptRecord,
+    build_prompt_dataset,
+    build_prompt_records,
+    load_prompt_records,
+    parse_layers,
+    split_prompt_record_indexes,
+)
 from oracle_sae.hf_contrast import (
     _contrast_direction,
     _register_gpt2_steering,
@@ -36,6 +43,55 @@ def test_load_prompt_records(tmp_path: Path):
 
     assert records[0].prompt_id == "p1"
     assert records[0].criterion_score == 1.0
+
+
+def test_build_prompt_dataset_from_user_written_files(tmp_path: Path):
+    positive = tmp_path / "positive.txt"
+    positive.write_text(
+        "Write a Python function that\n\nReturn JSON with status\n",
+        encoding="utf-8",
+    )
+    negative = tmp_path / "negative.txt"
+    negative.write_text("The museum opened on Tuesday\n\nA good dinner menu includes", encoding="utf-8")
+    out = tmp_path / "prompts.jsonl"
+
+    summary = build_prompt_dataset(
+        positive_paths=[positive],
+        negative_paths=[negative],
+        positive_prompts=["Inline positive"],
+        negative_prompts=["Inline negative"],
+        out_path=out,
+        id_prefix="criterion",
+    )
+    records = load_prompt_records(out)
+
+    assert summary.record_count == 6
+    assert summary.positive_count == 3
+    assert summary.negative_count == 3
+    assert [record.prompt_id for record in records] == [
+        "criterion-positive-001",
+        "criterion-positive-002",
+        "criterion-positive-003",
+        "criterion-negative-004",
+        "criterion-negative-005",
+        "criterion-negative-006",
+    ]
+    assert records[0].text == "Inline positive"
+    assert records[-1].criterion_score == 0.0
+
+
+def test_build_prompt_records_supports_delimited_multiline_prompts(tmp_path: Path):
+    positive = tmp_path / "positive.txt"
+    positive.write_text("User: A\nAssistant:\n---\nUser: B\nAssistant:", encoding="utf-8")
+
+    records = build_prompt_records(
+        positive_paths=[positive],
+        split="lines",
+        delimiter="\n---\n",
+        id_prefix="chat",
+    )
+
+    assert [record.text for record in records] == ["User: A\nAssistant:", "User: B\nAssistant:"]
 
 
 def test_parse_target_tokens_adds_leading_spaces():
