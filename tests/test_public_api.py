@@ -101,6 +101,39 @@ def test_scaffold_run_public_api_writes_records_workflow(tmp_path: Path):
     assert json.loads(result.path.read_text(encoding="utf-8"))["steps"][1]["command"] == "export-attribution-graph"
 
 
+def test_scaffold_run_public_api_writes_sae_path_workflow(tmp_path: Path):
+    result = scaffold_run(
+        out=tmp_path / "run.json",
+        workflow="sae-paths",
+        model="distilgpt2",
+        criterion="unit prediction",
+        run_dir=tmp_path / "run",
+        dataset=tmp_path / "prompts.jsonl",
+        source_layer=2,
+        target_layer=4,
+        include_causal=True,
+        target_token="auto",
+        validate_paths=True,
+    )
+
+    commands = [step["command"] for step in result.config["steps"]]
+    assert commands == [
+        "train-sae",
+        "train-sae",
+        "inspect",
+        "inspect",
+        "export-hf-sae-paths",
+        "export-attribution-graph",
+        "validate-hf-sae-paths",
+    ]
+    assert result.config["steps"][0]["args"]["layer"] == 2
+    assert result.config["steps"][1]["args"]["layer"] == 4
+    assert result.config["steps"][2]["args"]["require_interventions"] is True
+    assert result.config["steps"][5]["args"]["path_records"] == "{run_dir}/paths.jsonl"
+    saved = json.loads(result.path.read_text(encoding="utf-8"))
+    assert saved["steps"][-1]["args"]["graph_out"] == "{run_dir}/validated-graph.json"
+
+
 def test_train_sae_api_from_records(tmp_path: Path):
     records = tmp_path / "records.jsonl"
     rows = [

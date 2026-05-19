@@ -561,3 +561,83 @@ def test_init_run_scaffolds_editable_sae_workflow(tmp_path: Path, capsys):
 
     assert main(["run", str(config), "--dry-run"]) == 0
     assert "interp-lab train-sae" in capsys.readouterr().out
+
+
+def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
+    config = tmp_path / "sae-paths-run.json"
+    run_dir = tmp_path / "sae-paths-run"
+
+    exit_code = main(
+        [
+            "init-run",
+            "--workflow",
+            "sae-paths",
+            "--model",
+            "distilgpt2",
+            "--criterion",
+            "unit prediction",
+            "--positive-prompt",
+            "The answer is measured in meters.",
+            "--negative-prompt",
+            "The answer is a person's name.",
+            "--source-layer",
+            "2",
+            "--target-layer",
+            "4",
+            "--include-causal",
+            "--target-token",
+            "auto",
+            "--path-top-k",
+            "3",
+            "--source-top-k",
+            "2",
+            "--target-top-k",
+            "5",
+            "--random-source-controls",
+            "1",
+            "--validate-paths",
+            "--max-length",
+            "64",
+            "--run-dir",
+            str(run_dir),
+            "--out",
+            str(config),
+        ]
+    )
+
+    data = json.loads(config.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert [step["command"] for step in data["steps"]] == [
+        "build-prompts",
+        "train-sae",
+        "train-sae",
+        "inspect",
+        "inspect",
+        "export-hf-sae-paths",
+        "export-attribution-graph",
+        "validate-hf-sae-paths",
+    ]
+    source_train = data["steps"][1]["args"]
+    target_train = data["steps"][2]["args"]
+    assert source_train["layer"] == 2
+    assert target_train["layer"] == 4
+    assert source_train["causal_out"] == "{run_dir}/source-sae/interventions.jsonl"
+    assert target_train["target_token"] == ["auto"]
+    assert data["steps"][3]["name"] == "inspect-source"
+    assert data["steps"][3]["args"]["require_interventions"] is True
+    assert data["steps"][5]["args"]["source_top_k"] == 2
+    assert data["steps"][5]["args"]["target_top_k"] == 5
+    graph_args = data["steps"][6]["args"]
+    assert graph_args["report"] == [
+        "{run_dir}/source-report/report.json",
+        "{run_dir}/target-report/report.json",
+    ]
+    assert graph_args["path_records"] == "{run_dir}/paths.jsonl"
+    validation_args = data["steps"][7]["args"]
+    assert validation_args["top_k"] == 3
+    assert validation_args["graph_out"] == "{run_dir}/validated-graph.json"
+
+    assert main(["run", str(config), "--dry-run"]) == 0
+    dry_run = capsys.readouterr().out
+    assert "interp-lab export-hf-sae-paths" in dry_run
+    assert "interp-lab validate-hf-sae-paths" in dry_run

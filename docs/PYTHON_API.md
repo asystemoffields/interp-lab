@@ -108,6 +108,24 @@ scaffold = scaffold_run(
 run(scaffold.path)
 ```
 
+For SAE-latent path experiments, scaffold a two-layer workflow:
+
+```python
+scaffold = scaffold_run(
+    out="runs/distilgpt2-sae-paths.json",
+    workflow="sae-paths",
+    model="distilgpt2",
+    criterion="the next token should be a physical measurement unit",
+    dataset="examples/hf_prompts_unit_prediction.jsonl",
+    source_layer=2,
+    target_layer=4,
+    include_causal=True,
+    target_token="auto",
+    validate_paths=True,
+    run_dir="reports/distilgpt2-sae-paths",
+)
+```
+
 ## Diagnostics
 
 ```python

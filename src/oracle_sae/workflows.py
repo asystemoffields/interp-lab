@@ -33,6 +33,14 @@ def build_run_template(
     layers: str | None = None,
     preset: str = "minimal",
     layer: int | None = None,
+    source_layer: int | None = None,
+    target_layer: int | None = None,
+    path_top_k: int = 8,
+    source_top_k: int = 4,
+    target_top_k: int = 8,
+    random_source_controls: int = 2,
+    validate_paths: bool = False,
+    pool: str = "last",
     device: str = "cpu",
     max_length: int | None = None,
     include_causal: bool = False,
@@ -148,7 +156,161 @@ def build_run_template(
             top_k=top_k,
         )
         return config
-    raise ValueError("workflow must be one of: records, hf-records, sae")
+    if workflow == "sae-paths":
+        if path_top_k <= 0:
+            raise ValueError("path_top_k must be positive")
+        if source_top_k <= 0:
+            raise ValueError("source_top_k must be positive")
+        if target_top_k <= 0:
+            raise ValueError("target_top_k must be positive")
+        if random_source_controls < 0:
+            raise ValueError("random_source_controls must be non-negative")
+        if dataset_ref is None:
+            raise ValueError("dataset or prompt inputs are required for the sae-paths workflow")
+        if source_layer is None:
+            raise ValueError("source_layer is required for the sae-paths workflow")
+        if target_layer is None:
+            raise ValueError("target_layer is required for the sae-paths workflow")
+        if source_layer >= target_layer:
+            raise ValueError("source_layer must be lower than target_layer for the sae-paths workflow")
+        source_sae_path = "{run_dir}/source-sae/sae.json"
+        target_sae_path = "{run_dir}/target-sae/sae.json"
+        source_records_path = "{run_dir}/source-sae/records.jsonl"
+        target_records_path = "{run_dir}/target-sae/records.jsonl"
+        source_interventions_path = "{run_dir}/source-sae/interventions.jsonl" if include_causal else None
+        target_interventions_path = "{run_dir}/target-sae/interventions.jsonl" if include_causal else None
+        source_report_path = "{run_dir}/source-report/report.json"
+        target_report_path = "{run_dir}/target-report/report.json"
+        path_records_path = "{run_dir}/paths.jsonl"
+        graph_path = "{run_dir}/graph.json"
+        config["steps"].append(
+            {
+                "name": "train-source-sae",
+                "command": "train-sae",
+                "args": _hf_sae_train_args(
+                    model=model,
+                    dataset=dataset_ref,
+                    criterion=criterion,
+                    preset=preset,
+                    layer=source_layer,
+                    out=source_sae_path,
+                    records_out=source_records_path,
+                    causal_out=source_interventions_path,
+                    pool=pool,
+                    device=device,
+                    max_length=max_length,
+                    target_token=target_token,
+                ),
+            }
+        )
+        config["steps"].append(
+            {
+                "name": "train-target-sae",
+                "command": "train-sae",
+                "args": _hf_sae_train_args(
+                    model=model,
+                    dataset=dataset_ref,
+                    criterion=criterion,
+                    preset=preset,
+                    layer=target_layer,
+                    out=target_sae_path,
+                    records_out=target_records_path,
+                    causal_out=target_interventions_path,
+                    pool=pool,
+                    device=device,
+                    max_length=max_length,
+                    target_token=target_token,
+                ),
+            }
+        )
+        _add_inspect_step(
+            config,
+            name="inspect-source",
+            model=model,
+            criterion=criterion,
+            records=source_records_path,
+            interventions=source_interventions_path,
+            require_interventions=source_interventions_path is not None,
+            top_k=top_k,
+            out="{run_dir}/source-report",
+        )
+        _add_inspect_step(
+            config,
+            name="inspect-target",
+            model=model,
+            criterion=criterion,
+            records=target_records_path,
+            interventions=target_interventions_path,
+            require_interventions=target_interventions_path is not None,
+            top_k=top_k,
+            out="{run_dir}/target-report",
+        )
+        path_args: dict[str, Any] = {
+            "model": model,
+            "dataset": dataset_ref,
+            "criterion": criterion,
+            "source_sae": source_sae_path,
+            "target_sae": target_sae_path,
+            "source_report": source_report_path,
+            "target_report": target_report_path,
+            "source_top_k": source_top_k,
+            "target_top_k": target_top_k,
+            "random_source_controls": random_source_controls,
+            "pool": pool,
+            "out": path_records_path,
+            "device": device,
+        }
+        if max_length is not None:
+            path_args["max_length"] = max_length
+        if target_token:
+            path_args["target_token"] = target_token
+        config["steps"].append(
+            {
+                "name": "export-paths",
+                "command": "export-hf-sae-paths",
+                "args": path_args,
+            }
+        )
+        _add_graph_step(
+            config,
+            report=[source_report_path, target_report_path],
+            path_records=path_records_path,
+            out=graph_path,
+            markdown_out="{run_dir}/graph.md",
+        )
+        if validate_paths:
+            validation_args: dict[str, Any] = {
+                "graph": graph_path,
+                "model": model,
+                "dataset": dataset_ref,
+                "criterion": criterion,
+                "source_sae": source_sae_path,
+                "target_sae": target_sae_path,
+                "source_report": source_report_path,
+                "target_report": target_report_path,
+                "path_records_out": "{run_dir}/validated-paths.jsonl",
+                "out": "{run_dir}/validation.json",
+                "markdown_out": "{run_dir}/validation.md",
+                "graph_out": "{run_dir}/validated-graph.json",
+                "graph_markdown_out": "{run_dir}/validated-graph.md",
+                "top_k": path_top_k,
+                "random_source_controls": random_source_controls,
+                "pool": pool,
+                "device": device,
+            }
+            if max_length is not None:
+                validation_args["max_length"] = max_length
+            if target_token:
+                validation_args["target_token"] = target_token
+            config["steps"].append(
+                {
+                    "name": "validate-paths",
+                    "command": "validate-hf-sae-paths",
+                    "args": validation_args,
+                }
+            )
+        return config
+    raise ValueError("workflow must be one of: records, hf-records, sae, sae-paths")
 
 
 def write_run_template(
@@ -169,7 +331,7 @@ def write_run_template(
 def build_init_run_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Write an editable interp-lab run config.")
     parser.add_argument("--out", required=True, help="Output run config JSON path.")
-    parser.add_argument("--workflow", choices=["records", "hf-records", "sae"], default="records")
+    parser.add_argument("--workflow", choices=["records", "hf-records", "sae", "sae-paths"], default="records")
     parser.add_argument("--run-dir", default="reports/interp-run", help="Directory the generated run will write to.")
     parser.add_argument("--model", required=True)
     parser.add_argument("--criterion", required=True)
@@ -187,6 +349,19 @@ def build_init_run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--layers", help="Hidden-state layers for --workflow hf-records, e.g. 6 or 2-6.")
     parser.add_argument("--preset", choices=["minimal", "production", "custom"], default="minimal")
     parser.add_argument("--layer", type=int, help="HF hidden-state layer for --workflow sae.")
+    parser.add_argument("--source-layer", type=int, help="Upstream HF hidden-state layer for --workflow sae-paths.")
+    parser.add_argument("--target-layer", type=int, help="Downstream HF hidden-state layer for --workflow sae-paths.")
+    parser.add_argument("--path-top-k", type=int, default=8, help="Candidate graph paths to validate.")
+    parser.add_argument("--source-top-k", type=int, default=4, help="Source SAE features to path-patch.")
+    parser.add_argument("--target-top-k", type=int, default=8, help="Target SAE features to measure per source feature.")
+    parser.add_argument(
+        "--random-source-controls",
+        type=int,
+        default=2,
+        help="Random source SAE latents to patch as controls in path workflows.",
+    )
+    parser.add_argument("--validate-paths", action="store_true", help="Add held-out SAE path validation to path runs.")
+    parser.add_argument("--pool", choices=["last", "mean"], default="last")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--max-length", type=int)
     parser.add_argument("--include-causal", action="store_true", help="Add SAE causal validation output to SAE runs.")
@@ -218,6 +393,14 @@ def run_init_run_from_args(args: argparse.Namespace) -> RunTemplateWriteResult:
             layers=args.layers,
             preset=args.preset,
             layer=args.layer,
+            source_layer=args.source_layer,
+            target_layer=args.target_layer,
+            path_top_k=args.path_top_k,
+            source_top_k=args.source_top_k,
+            target_top_k=args.target_top_k,
+            random_source_controls=args.random_source_controls,
+            validate_paths=args.validate_paths,
+            pool=args.pool,
             device=args.device,
             max_length=args.max_length,
             include_causal=args.include_causal,
@@ -253,6 +436,41 @@ def _prompt_step_args(
     return args
 
 
+def _hf_sae_train_args(
+    *,
+    model: str,
+    dataset: str,
+    criterion: str,
+    preset: str,
+    layer: int,
+    out: str,
+    records_out: str,
+    causal_out: str | None,
+    pool: str,
+    device: str,
+    max_length: int | None,
+    target_token: list[str] | None,
+) -> dict[str, Any]:
+    args: dict[str, Any] = {
+        "hf_model": model,
+        "dataset": dataset,
+        "criterion": criterion,
+        "preset": preset,
+        "layer": layer,
+        "pool": pool,
+        "out": out,
+        "records_out": records_out,
+        "device": device,
+    }
+    if max_length is not None:
+        args["max_length"] = max_length
+    if causal_out is not None:
+        args["causal_out"] = causal_out
+        if target_token:
+            args["target_token"] = target_token
+    return args
+
+
 def _add_inspect_and_graph_steps(
     config: dict[str, Any],
     *,
@@ -263,13 +481,45 @@ def _add_inspect_and_graph_steps(
     require_interventions: bool = False,
     top_k: int,
 ) -> None:
+    inspect_out = "{run_dir}/inspect"
+    _add_inspect_step(
+        config,
+        name="inspect",
+        model=model,
+        criterion=criterion,
+        records=records,
+        interventions=interventions,
+        require_interventions=require_interventions,
+        top_k=top_k,
+        out=inspect_out,
+    )
+    _add_graph_step(
+        config,
+        report=f"{inspect_out}/report.json",
+        out="{run_dir}/graph.json",
+        markdown_out="{run_dir}/graph.md",
+    )
+
+
+def _add_inspect_step(
+    config: dict[str, Any],
+    *,
+    name: str,
+    model: str,
+    criterion: str,
+    records: str,
+    interventions: str | None,
+    require_interventions: bool = False,
+    top_k: int,
+    out: str,
+) -> None:
     inspect_args: dict[str, Any] = {
         "model": model,
         "criterion": criterion,
         "backend": "records",
         "records": records,
         "top_k": top_k,
-        "out": "{run_dir}/inspect",
+        "out": out,
     }
     if interventions is not None:
         inspect_args["interventions"] = interventions
@@ -277,19 +527,32 @@ def _add_inspect_and_graph_steps(
         inspect_args["require_interventions"] = True
     config["steps"].append(
         {
-            "name": "inspect",
+            "name": name,
             "command": "inspect",
             "args": inspect_args,
         }
     )
+
+
+def _add_graph_step(
+    config: dict[str, Any],
+    *,
+    report: str | list[str],
+    out: str,
+    markdown_out: str,
+    path_records: str | None = None,
+) -> None:
+    args: dict[str, Any] = {
+        "report": report,
+        "out": out,
+        "markdown_out": markdown_out,
+    }
+    if path_records is not None:
+        args["path_records"] = path_records
     config["steps"].append(
         {
             "name": "graph",
             "command": "export-attribution-graph",
-            "args": {
-                "report": "{run_dir}/inspect/report.json",
-                "out": "{run_dir}/graph.json",
-                "markdown_out": "{run_dir}/graph.md",
-            },
+            "args": args,
         }
     )

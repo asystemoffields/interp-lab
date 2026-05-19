@@ -32,11 +32,13 @@ The package avoids shell-specific workflows in the core CLI. Commands in docs us
 
 Use `interp-lab run` when you want a saved, replayable workflow.
 
-Use `interp-lab init-run` when you want a starting config for `records`, `hf-records`, or `sae` workflows:
+Use `interp-lab init-run` when you want a starting config for `records`, `hf-records`, `sae`, or `sae-paths` workflows:
 
 ```bash
 interp-lab init-run --workflow records --model toy-records/model --criterion "benchmark awareness" --records examples/activation_records.jsonl --out runs/records.json
 ```
+
+`sae-paths` is the paper-inspired path workflow: it trains source and target layer SAEs, writes causal feature reports, measures SAE-latent path patches, exports a graph, and can add held-out validation with `--validate-paths`.
 
 Minimal config:
 
