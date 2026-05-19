@@ -40,6 +40,7 @@ from oracle_sae.graph_validation import (
     render_graph_validation_markdown,
 )
 from oracle_sae.hf_publish import PublishResult, publish_hf_artifact as _publish_hf_artifact
+from oracle_sae.hf_records import PromptDatasetSummary, build_prompt_dataset
 from oracle_sae.hf_sae_paths import export_hf_sae_path_records
 from oracle_sae.hf_sae_validation import export_hf_sae_path_validation
 from oracle_sae.pipeline import inspect_model, match_reports
@@ -116,6 +117,34 @@ class HfSaePathValidation:
 @dataclass(frozen=True)
 class PathPatchResult:
     path_records: Path
+
+
+def build_prompts(
+    *,
+    out: str | Path,
+    positive: str | Path | list[str | Path] | None = None,
+    negative: str | Path | list[str | Path] | None = None,
+    positive_prompt: str | list[str] | None = None,
+    negative_prompt: str | list[str] | None = None,
+    split: str = "paragraphs",
+    delimiter: str | None = None,
+    positive_score: float = 1.0,
+    negative_score: float = 0.0,
+    id_prefix: str = "prompt",
+) -> PromptDatasetSummary:
+    """Write a scored prompt JSONL dataset from user-authored prompts."""
+    return build_prompt_dataset(
+        out_path=out,
+        positive_paths=_as_optional_list(positive),
+        negative_paths=_as_optional_list(negative),
+        positive_prompts=_as_optional_list(positive_prompt),
+        negative_prompts=_as_optional_list(negative_prompt),
+        split=split,
+        delimiter=delimiter,
+        positive_score=positive_score,
+        negative_score=negative_score,
+        id_prefix=id_prefix,
+    )
 
 
 def inspect(
@@ -910,6 +939,14 @@ def _load_report(value: InspectionReport | str | Path) -> InspectionReport:
     if isinstance(value, InspectionReport):
         return value
     return load_inspection_report(value)
+
+
+def _as_optional_list(value):
+    if value is None:
+        return None
+    if isinstance(value, (str, Path)):
+        return [value]
+    return list(value)
 
 
 def _match_markdown_path(out_path: str | Path) -> Path:

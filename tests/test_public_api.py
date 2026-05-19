@@ -4,6 +4,7 @@ from pathlib import Path
 from interp_lab import (
     attribution_graph,
     attribution_graph_summary,
+    build_prompts,
     compare,
     doctor,
     inspect,
@@ -57,6 +58,29 @@ def test_compare_api_accepts_reports_and_paths(tmp_path: Path):
     assert result.json_path == tmp_path / "matches.json"
     assert result.markdown_path == tmp_path / "matches.md"
     assert result.report.matches
+
+
+def test_build_prompts_public_api_accepts_files_and_inline_prompts(tmp_path: Path):
+    positive = tmp_path / "positive.txt"
+    positive.write_text("The answer is measured in meters.\n\nA speed is given in miles per hour.", encoding="utf-8")
+
+    result = build_prompts(
+        positive=positive,
+        negative_prompt="The answer is a proper name.",
+        split="paragraphs",
+        id_prefix="unit",
+        out=tmp_path / "prompts.jsonl",
+    )
+
+    rows = [
+        json.loads(line)
+        for line in result.path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert result.record_count == 3
+    assert result.positive_count == 2
+    assert result.negative_count == 1
+    assert rows[0]["prompt_id"] == "unit-positive-001"
+    assert rows[-1]["criterion_score"] == 0.0
 
 
 def test_train_sae_api_from_records(tmp_path: Path):

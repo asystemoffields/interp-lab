@@ -78,6 +78,8 @@ interp-lab build-prompts \
 
 Prompt files can use one prompt per paragraph or one prompt per line with `--split lines`. Use `--positive-prompt` and `--negative-prompt` for inline prompts, and `--delimiter` for multi-line chat-style prompts separated by a literal marker. The output JSONL works anywhere interp-lab accepts `--dataset`.
 
+The same custom-prompt path is available from Python with `interp_lab.build_prompts(...)`.
+
 Compare two reports:
 
 ```bash

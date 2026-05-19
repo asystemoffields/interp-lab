@@ -41,6 +41,22 @@ matches = compare(left, right, out="reports/matches.json")
 
 `compare` accepts in-memory reports or `report.json` paths.
 
+## Build Prompts
+
+```python
+from interp_lab import build_prompts
+
+dataset = build_prompts(
+    positive="prompts/code-positive.txt",
+    negative_prompt="A neutral control prompt.",
+    split="paragraphs",
+    id_prefix="code",
+    out="prompts/code-criterion.jsonl",
+)
+
+print(dataset.record_count)
+```
+
 ## Train An SAE
 
 ```python

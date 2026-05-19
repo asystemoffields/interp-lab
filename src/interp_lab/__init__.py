@@ -9,6 +9,7 @@ from oracle_sae.schema import (
     InspectionReport,
     MatchReport,
 )
+from oracle_sae.hf_records import PromptDatasetSummary
 
 from interp_lab.api import (
     PathPatchResult,
@@ -21,6 +22,7 @@ from interp_lab.api import (
     WrittenMatch,
     attribution_graph,
     attribution_graph_summary,
+    build_prompts,
     compare,
     doctor,
     inspect,
@@ -44,6 +46,7 @@ __all__ = [
     "MatchReport",
     "PathPatchResult",
     "HfSaePathValidation",
+    "PromptDatasetSummary",
     "SaeTrainingResult",
     "WrittenGraph",
     "WrittenGraphSummary",
@@ -52,6 +55,7 @@ __all__ = [
     "WrittenMatch",
     "attribution_graph",
     "attribution_graph_summary",
+    "build_prompts",
     "compare",
     "doctor",
     "inspect",
