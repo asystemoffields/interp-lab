@@ -52,6 +52,7 @@ from oracle_sae.match_validation import (
     DEFAULT_MIN_SCORE,
     build_match_validation_report,
     render_match_validation_markdown,
+    write_match_validation_html,
 )
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
@@ -91,6 +92,7 @@ class WrittenMatchValidation:
     report: dict[str, Any]
     json_path: Path
     markdown_path: Path
+    html_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -363,6 +365,7 @@ def validate_matches(
     *,
     out: str | Path | None = None,
     markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
     top_k: int | None = None,
     min_score: float = DEFAULT_MIN_SCORE,
     min_component: float = DEFAULT_MIN_COMPONENT,
@@ -395,7 +398,13 @@ def validate_matches(
     markdown_path = Path(markdown_out) if markdown_out is not None else path.with_suffix(".md")
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path.write_text(render_match_validation_markdown(report), encoding="utf-8")
-    return WrittenMatchValidation(report=report, json_path=path, markdown_path=markdown_path)
+    html_path = write_match_validation_html(report, html_out) if html_out is not None else None
+    return WrittenMatchValidation(
+        report=report,
+        json_path=path,
+        markdown_path=markdown_path,
+        html_path=html_path,
+    )
 
 
 def train_sae(

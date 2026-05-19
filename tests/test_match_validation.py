@@ -5,6 +5,7 @@ from oracle_sae.cli import main
 from oracle_sae.match_validation import (
     build_match_validation_report,
     export_match_validation_report,
+    render_match_validation_html,
     render_match_validation_markdown,
 )
 from oracle_sae.schema import CandidateMatch, MatchReport
@@ -53,11 +54,13 @@ def test_match_validation_markdown_and_export(tmp_path: Path):
     result = export_match_validation_report(
         matches_path=matches_path,
         out_path=tmp_path / "validation.json",
+        html_out_path=tmp_path / "validation.html",
         top_k=2,
     )
 
     assert result.json_path == tmp_path / "validation.json"
     assert result.markdown_path == tmp_path / "validation.md"
+    assert result.html_path == tmp_path / "validation.html"
     loaded = json.loads(result.json_path.read_text(encoding="utf-8"))
     assert loaded["summary"]["match_count"] == 2
     markdown = result.markdown_path.read_text(encoding="utf-8")
@@ -68,6 +71,14 @@ def test_match_validation_markdown_and_export(tmp_path: Path):
 
     rendered = render_match_validation_markdown(loaded)
     assert "needs_more_evidence" in rendered
+    html = result.html_path.read_text(encoding="utf-8")
+    assert "Cross-Model Match Validation" in html
+    assert "match-search" in html
+    assert "status-filter" in html
+    assert "validated_equivalent" in html
+    assert "L1:F1" in html
+    assert "visibleCount" in html
+    assert "signed_effect_direction_conflict" not in render_match_validation_html(loaded)
 
 
 def test_validate_matches_cli_writes_json_and_markdown(tmp_path: Path):
@@ -81,6 +92,8 @@ def test_validate_matches_cli_writes_json_and_markdown(tmp_path: Path):
             str(matches_path),
             "--out",
             str(tmp_path / "validation.json"),
+            "--html-out",
+            str(tmp_path / "validation.html"),
             "--top-k",
             "1",
         ]
@@ -91,6 +104,7 @@ def test_validate_matches_cli_writes_json_and_markdown(tmp_path: Path):
     assert validation["summary"]["match_count"] == 1
     assert validation["validations"][0]["status"] == "validated"
     assert (tmp_path / "validation.md").exists()
+    assert (tmp_path / "validation.html").exists()
 
 
 def _match_report() -> MatchReport:

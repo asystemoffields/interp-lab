@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ class MatchValidationWriteResult:
     report: dict[str, Any]
     json_path: Path
     markdown_path: Path
+    html_path: Path | None = None
 
 
 def export_match_validation_report(
@@ -30,6 +32,7 @@ def export_match_validation_report(
     matches_path: str | Path,
     out_path: str | Path,
     markdown_out_path: str | Path | None = None,
+    html_out_path: str | Path | None = None,
     top_k: int | None = None,
     min_score: float = DEFAULT_MIN_SCORE,
     min_component: float = DEFAULT_MIN_COMPONENT,
@@ -54,7 +57,15 @@ def export_match_validation_report(
     markdown_path = Path(markdown_out_path) if markdown_out_path is not None else json_path.with_suffix(".md")
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path.write_text(render_match_validation_markdown(report), encoding="utf-8")
-    return MatchValidationWriteResult(report=report, json_path=json_path, markdown_path=markdown_path)
+    html_path = None
+    if html_out_path is not None:
+        html_path = write_match_validation_html(report, html_out_path)
+    return MatchValidationWriteResult(
+        report=report,
+        json_path=json_path,
+        markdown_path=markdown_path,
+        html_path=html_path,
+    )
 
 
 def build_match_validation_report(
@@ -145,11 +156,330 @@ def render_match_validation_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def write_match_validation_html(report: dict[str, Any], out_path: str | Path) -> Path:
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_match_validation_html(report), encoding="utf-8")
+    return path
+
+
+def render_match_validation_html(report: dict[str, Any]) -> str:
+    summary = report.get("summary", {})
+    assessment = report.get("run_assessment", {})
+    validations = list(report.get("validations", []))
+    status_options = "\n".join(
+        f'<option value="{_attr(status)}">{_h(status)} ({count})</option>'
+        for status, count in sorted(summary.get("status_counts", {}).items())
+    )
+    metric_cards = "\n".join(
+        _summary_card(label, summary.get(key))
+        for label, key in [
+            ("Matches", "match_count"),
+            ("Validated", "validated_count"),
+            ("Need Causal Evidence", "needs_causal_evidence_count"),
+            ("Contradicted", "contradicted_count"),
+            ("Weak", "weak_count"),
+        ]
+    )
+    table_rows = "\n".join(_validation_table_row(item) for item in validations)
+    detail_cards = "\n".join(_validation_detail_card(item) for item in validations)
+    actions = "\n".join(_agent_action_card(action) for action in report.get("agent_next_actions", []))
+    action_section = (
+        f"""
+      <section class="panel">
+        <h2>Agent Next Actions</h2>
+        <div class="actions">{actions}</div>
+      </section>
+        """
+        if actions
+        else ""
+    )
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>interp-lab Match Validation</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f7f7f4;
+      --ink: #1d2528;
+      --muted: #5c686d;
+      --line: #d9dedb;
+      --panel: #ffffff;
+      --accent: #0f766e;
+      --validated: #147a3f;
+      --needs: #946200;
+      --plausible: #285e9e;
+      --contradicted: #b42318;
+      --weak: #5f6670;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }}
+    main {{
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }}
+    header {{
+      display: grid;
+      gap: 18px;
+      margin-bottom: 20px;
+    }}
+    h1, h2, h3, p {{ margin: 0; }}
+    h1 {{ font-size: 30px; letter-spacing: 0; }}
+    h2 {{ font-size: 18px; margin-bottom: 14px; }}
+    h3 {{ font-size: 16px; }}
+    code {{
+      padding: 1px 5px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #f2f4f3;
+      font-size: 0.92em;
+    }}
+    .subhead {{ color: var(--muted); max-width: 920px; }}
+    .model-line {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 14px;
+    }}
+    .pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: #fff;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 650;
+      color: var(--muted);
+    }}
+    .pill.status-validated {{ color: var(--validated); border-color: #9fd3b5; background: #eef9f2; }}
+    .pill.status-needs-causal-evidence {{ color: var(--needs); border-color: #e5c06f; background: #fff7df; }}
+    .pill.status-plausible {{ color: var(--plausible); border-color: #a9c7ed; background: #eef6ff; }}
+    .pill.status-contradicted {{ color: var(--contradicted); border-color: #efa7a1; background: #fff1ef; }}
+    .pill.status-weak {{ color: var(--weak); border-color: #cbd1d7; background: #f4f5f6; }}
+    .summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 10px;
+    }}
+    .metric {{
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 12px;
+    }}
+    .metric .label {{ color: var(--muted); font-size: 12px; }}
+    .metric .value {{ font-size: 24px; font-weight: 750; }}
+    .panel {{
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 16px;
+      margin-top: 14px;
+    }}
+    .toolbar {{
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(170px, 240px) auto;
+      gap: 10px;
+      align-items: center;
+    }}
+    input, select {{
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }}
+    .visible-count {{ color: var(--muted); font-size: 13px; text-align: right; }}
+    .table-wrap {{ overflow-x: auto; }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 860px;
+      font-size: 14px;
+    }}
+    th {{
+      text-align: left;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+    }}
+    td {{
+      padding: 11px 8px;
+      border-bottom: 1px solid #ecefed;
+      vertical-align: top;
+    }}
+    .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+    .match-ref {{ display: grid; gap: 4px; }}
+    .label-pair {{ color: var(--muted); font-size: 12px; }}
+    .details {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 12px;
+    }}
+    .match-card {{
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }}
+    .match-card h3 {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }}
+    .reason-list {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }}
+    .reason {{
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #eef0ef;
+      color: #3f494d;
+      font-size: 12px;
+    }}
+    .meters {{ display: grid; gap: 7px; }}
+    .meter {{
+      display: grid;
+      grid-template-columns: 90px 1fr 48px;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }}
+    .bar {{
+      height: 7px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #e8ecea;
+    }}
+    .fill {{ height: 100%; background: var(--accent); }}
+    .action-card {{
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 6px;
+    }}
+    .command {{
+      overflow-wrap: anywhere;
+      color: #273033;
+    }}
+    [hidden] {{ display: none !important; }}
+    @media (max-width: 760px) {{
+      main {{ width: min(100vw - 20px, 1180px); padding-top: 20px; }}
+      h1 {{ font-size: 24px; }}
+      .summary-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .toolbar {{ grid-template-columns: 1fr; }}
+      .visible-count {{ text-align: left; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Cross-Model Match Validation</h1>
+        <p class="subhead">{_h(assessment.get("summary", ""))}</p>
+      </div>
+      <div class="model-line">
+        <span>Left <code>{_h(report.get("left_model", ""))}</code></span>
+        <span>Right <code>{_h(report.get("right_model", ""))}</code></span>
+        <span class="pill">{_h(summary.get("overall_claim_grade", ""))}</span>
+      </div>
+      <div class="summary-grid">{metric_cards}</div>
+    </header>
+    <section class="panel">
+      <h2>Review</h2>
+      <p class="subhead">{_h(summary.get("recommended_next_action", ""))}</p>
+    </section>
+    <section class="panel">
+      <div class="toolbar">
+        <input id="match-search" type="search" placeholder="Filter by feature, label, claim, or reason">
+        <select id="status-filter" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          {status_options}
+        </select>
+        <div id="visible-count" class="visible-count">{len(validations)} visible</div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Candidate Matches</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Claim</th>
+              <th>Match</th>
+              <th class="num">Score</th>
+              <th class="num">Causal</th>
+              <th class="num">Signed Delta</th>
+            </tr>
+          </thead>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Evidence Details</h2>
+      <div class="details">{detail_cards}</div>
+    </section>
+    {action_section}
+  </main>
+  <script>
+    const search = document.getElementById("match-search");
+    const statusFilter = document.getElementById("status-filter");
+    const visibleCount = document.getElementById("visible-count");
+    function applyFilters() {{
+      const query = search.value.trim().toLowerCase();
+      const status = statusFilter.value;
+      let visibleRows = 0;
+      document.querySelectorAll("[data-match]").forEach((node) => {{
+        const statusMatch = !status || node.dataset.status === status;
+        const searchMatch = !query || (node.dataset.search || "").includes(query);
+        const show = statusMatch && searchMatch;
+        node.hidden = !show;
+        if (show && node.dataset.match === "row") visibleRows += 1;
+      }});
+      visibleCount.textContent = `${{visibleRows}} visible`;
+    }}
+    search.addEventListener("input", applyFilters);
+    statusFilter.addEventListener("change", applyFilters);
+  </script>
+</body>
+</html>
+"""
+
+
 def build_match_validation_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate cross-model candidate feature matches.")
     parser.add_argument("--matches", required=True, help="Match report JSON from `interp-lab match`.")
     parser.add_argument("--out", required=True, help="Output validation JSON path.")
     parser.add_argument("--markdown-out", help="Output validation Markdown path. Defaults to --out with .md.")
+    parser.add_argument("--html-out", help="Optional output self-contained HTML report path.")
     parser.add_argument("--top-k", type=int, help="Validate only the top K matches from the report.")
     parser.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE)
     parser.add_argument("--min-component", type=float, default=DEFAULT_MIN_COMPONENT)
@@ -164,6 +494,7 @@ def run_match_validation_from_args(args: argparse.Namespace) -> MatchValidationW
         matches_path=args.matches,
         out_path=args.out,
         markdown_out_path=args.markdown_out,
+        html_out_path=args.html_out,
         top_k=args.top_k,
         min_score=args.min_score,
         min_component=args.min_component,
@@ -461,6 +792,115 @@ def _counts(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     return counts
 
 
+def _validation_table_row(item: dict[str, Any]) -> str:
+    status = str(item.get("status", "unknown"))
+    search = _search_text(item)
+    return f"""
+            <tr data-match="row" data-status="{_attr(status)}" data-search="{_attr(search)}">
+              <td>{_status_pill(status)}</td>
+              <td>{_h(item.get("claim_grade", ""))}</td>
+              <td>
+                <div class="match-ref">
+                  <code>{_h(item.get("left_feature_id", ""))}</code>
+                  <code>{_h(item.get("right_feature_id", ""))}</code>
+                  <span class="label-pair">{_h(item.get("left_label", ""))} -> {_h(item.get("right_label", ""))}</span>
+                </div>
+              </td>
+              <td class="num">{_markdown_number(item.get("score"))}</td>
+              <td class="num">{_markdown_number(item.get("causal_component"))}</td>
+              <td class="num">{_markdown_number(item.get("signed_effect_delta"))}</td>
+            </tr>
+"""
+
+
+def _validation_detail_card(item: dict[str, Any]) -> str:
+    status = str(item.get("status", "unknown"))
+    reasons = "".join(
+        f'<span class="reason">{_h(reason)}</span>'
+        for reason in item.get("reason_codes", [])
+    )
+    meters = "\n".join(
+        _component_meter(label, item.get(key))
+        for label, key in [
+            ("score", "score"),
+            ("text", "text_component"),
+            ("activation", "activation_component"),
+            ("decoder", "decoder_component"),
+            ("causal", "causal_component"),
+            ("signed", "signed_effect_component"),
+        ]
+    )
+    return f"""
+        <article class="match-card" data-match="card" data-status="{_attr(status)}" data-search="{_attr(_search_text(item))}">
+          <h3>
+            <span><code>{_h(item.get("left_feature_id", ""))}</code> -> <code>{_h(item.get("right_feature_id", ""))}</code></span>
+            {_status_pill(status)}
+          </h3>
+          <p class="subhead">{_h(item.get("left_label", ""))} -> {_h(item.get("right_label", ""))}</p>
+          <div class="meters">{meters}</div>
+          <div class="reason-list">{reasons}</div>
+          <p>{_h(item.get("interpretation", ""))}</p>
+          <p class="subhead">Next: {_h(item.get("next_action", ""))}</p>
+        </article>
+"""
+
+
+def _agent_action_card(action: dict[str, Any]) -> str:
+    return f"""
+          <article class="action-card">
+            <h3>{_h(action.get("title", ""))}</h3>
+            <p class="subhead">{_h(action.get("id", ""))}</p>
+            <code class="command">{_h(action.get("command", ""))}</code>
+          </article>
+"""
+
+
+def _summary_card(label: str, value: Any) -> str:
+    return f"""
+        <div class="metric">
+          <div class="label">{_h(label)}</div>
+          <div class="value">{_h(0 if value is None else value)}</div>
+        </div>
+"""
+
+
+def _component_meter(label: str, value: Any) -> str:
+    if value is None:
+        display = ""
+        width = 0.0
+    else:
+        numeric = max(0.0, min(1.0, float(value)))
+        width = numeric * 100.0
+        display = _markdown_number(value)
+    return f"""
+            <div class="meter">
+              <span>{_h(label)}</span>
+              <span class="bar"><span class="fill" style="width: {width:.1f}%"></span></span>
+              <span>{_h(display)}</span>
+            </div>
+"""
+
+
+def _status_pill(status: str) -> str:
+    class_name = "status-" + status.replace("_", "-")
+    return f'<span class="pill {_attr(class_name)}">{_h(status)}</span>'
+
+
+def _search_text(item: dict[str, Any]) -> str:
+    parts = [
+        item.get("status"),
+        item.get("claim_grade"),
+        item.get("left_feature_id"),
+        item.get("right_feature_id"),
+        item.get("left_label"),
+        item.get("right_label"),
+        item.get("interpretation"),
+        item.get("next_action"),
+        " ".join(str(reason) for reason in item.get("reason_codes", [])),
+    ]
+    return " ".join(str(part) for part in parts if part is not None).lower()
+
+
 def _has_strong_signed_effects(match: CandidateMatch, threshold: float) -> bool:
     if match.left_signed_effect is None or match.right_signed_effect is None:
         return False
@@ -489,6 +929,14 @@ def _optional_round(value: Any) -> float | None:
     if value is None:
         return None
     return round(float(value), 6)
+
+
+def _h(value: Any) -> str:
+    return html.escape(str(value), quote=False)
+
+
+def _attr(value: Any) -> str:
+    return html.escape(str(value), quote=True)
 
 
 def _markdown_number(value: Any) -> str:

@@ -46,11 +46,15 @@ Validate candidate equivalents:
 ```python
 from interp_lab import validate_matches
 
-validation = validate_matches(matches.report, out="reports/match-validation.json")
+validation = validate_matches(
+    matches.report,
+    out="reports/match-validation.json",
+    html_out="reports/match-validation.html",
+)
 print(validation.report["summary"]["overall_claim_grade"])
 ```
 
-`validate_matches` accepts an in-memory `MatchReport` or a `matches.json` path and writes JSON plus Markdown when `out` is supplied.
+`validate_matches` accepts an in-memory `MatchReport` or a `matches.json` path and writes JSON plus Markdown when `out` is supplied. Pass `html_out` for a self-contained searchable report.
 
 ## Build Prompts
 

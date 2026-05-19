@@ -97,10 +97,11 @@ Validate the match claims:
 ```bash
 interp-lab validate-matches \
   --matches reports/matches.json \
-  --out reports/match-validation.json
+  --out reports/match-validation.json \
+  --html-out reports/match-validation.html
 ```
 
-This grades each pair as `validated`, `needs_causal_evidence`, `plausible`, `contradicted`, or `weak`, with reason codes and next actions for agents or researchers.
+This grades each pair as `validated`, `needs_causal_evidence`, `plausible`, `contradicted`, or `weak`, with reason codes and next actions for agents or researchers. The HTML output is self-contained and includes search, status filters, score components, and evidence details.
 
 Create a demo run:
 

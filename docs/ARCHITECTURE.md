@@ -141,6 +141,8 @@ Match reports preserve labels and signed effects. `validate-matches` adds a clai
 
 The validation report is intentionally machine-readable. It includes per-match next actions and run-level `agent_next_actions`, so an AI agent can decide whether to replicate a validated pair, collect intervention records, or treat a pair as a contrast feature.
 
+For human review, `--html-out` writes a self-contained match-validation viewer with search, status filters, component scores, reason codes, and next actions.
+
 ## Attribution Graphs
 
 `export-attribution-graph` converts one or more reports into a graph JSON with:

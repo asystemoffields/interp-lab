@@ -366,6 +366,8 @@ def run_validate_matches(args: argparse.Namespace) -> int:
     result = run_match_validation_from_args(args)
     print(f"Wrote {result.json_path}")
     print(f"Wrote {result.markdown_path}")
+    if result.html_path is not None:
+        print(f"Wrote {result.html_path}")
     return 0
 
 

@@ -11,7 +11,9 @@ from oracle_sae.reporting import (
 )
 from oracle_sae.match_validation import (
     build_match_validation_report,
+    render_match_validation_html,
     render_match_validation_markdown,
+    write_match_validation_html,
 )
 from oracle_sae.schema import (
     CandidateMatch,
@@ -36,7 +38,9 @@ __all__ = [
     "render_inspection_markdown",
     "render_match_markdown",
     "build_match_validation_report",
+    "render_match_validation_html",
     "render_match_validation_markdown",
+    "write_match_validation_html",
     "write_inspection_report",
     "write_match_markdown",
     "write_match_report",

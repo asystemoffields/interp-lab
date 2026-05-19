@@ -74,9 +74,15 @@ def test_validate_matches_public_api_accepts_report_and_path(tmp_path: Path):
     assert in_memory["summary"]["match_count"] == 1
     assert in_memory["validations"][0]["claim_grade"]
 
-    written = validate_matches(matches.report, out=tmp_path / "match-validation.json")
+    written = validate_matches(
+        matches.report,
+        out=tmp_path / "match-validation.json",
+        html_out=tmp_path / "match-validation.html",
+    )
     assert written.json_path == tmp_path / "match-validation.json"
     assert written.markdown_path == tmp_path / "match-validation.md"
+    assert written.html_path == tmp_path / "match-validation.html"
+    assert written.html_path.exists()
     assert written.report["summary"]["match_count"] == len(matches.report.matches)
 
     loaded = validate_matches(matches.json_path, out=tmp_path / "match-validation-2.json")
