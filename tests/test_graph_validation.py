@@ -29,6 +29,9 @@ def test_graph_validation_classifies_robust_path_against_controls():
     assert validation["reason_codes"] == ["passed_effect_control_and_sign_thresholds"]
     assert "broader held-out prompts" in validation["next_action"]
     assert report["summary"]["claim_grade_counts"] == {"validated": 1}
+    assert report["summary"]["overall_claim_grade"] == "validated_paths_present"
+    assert report["run_assessment"]["recommended_next_action"].startswith("Replicate validated paths")
+    assert any(action["id"] == "replicate_validated_paths" for action in report["agent_next_actions"])
     assert validation["record_count"] == 3
     assert validation["control_record_count"] == 3
     assert validation["path_specificity_score"] == 0.19
@@ -95,8 +98,12 @@ def test_export_graph_validation_report_writes_json_and_markdown(tmp_path: Path)
     assert annotated["edges"][0]["validation"]["reason_codes"] == ["passed_effect_control_and_sign_thresholds"]
     assert annotated["mechanism_summary"]["candidate_paths"][0]["validation"]["status"] == "robust"
     assert "Attribution Graph Validation" in result.markdown_path.read_text(encoding="utf-8")
+    validation_markdown = result.markdown_path.read_text(encoding="utf-8")
+    assert "## Agent Next Actions" in validation_markdown
+    assert "replicate_validated_paths" in validation_markdown
     annotated_markdown = result.annotated_graph_markdown_path.read_text(encoding="utf-8")
     assert "Path validation: `robust=1`" in annotated_markdown
+    assert "Overall validation: `validated_paths_present`" in annotated_markdown
     assert "validated" in annotated_markdown
     assert "`SAE:L1:F1 -> SAE:L2:F8`" in annotated_markdown
 
@@ -115,6 +122,8 @@ def test_annotate_graph_with_validation_preserves_input_graph():
     assert "validation" not in graph["edges"][0]
     assert annotated["edges"][0]["validation"]["status"] == "robust"
     assert annotated["edges"][0]["validation"]["next_action"]
+    assert annotated["metadata"]["graph_validation"]["run_assessment"]["overall_claim_grade"] == "validated_paths_present"
+    assert annotated["metadata"]["graph_validation"]["agent_next_actions"]
     assert annotated["metadata"]["graph_validation"]["summary"]["validated_path_count"] == 1
 
 

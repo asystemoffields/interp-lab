@@ -128,6 +128,7 @@ def build_graph_validation_report(
     for validation in validations:
         grade = str(validation["claim_grade"])
         claim_grade_counts[grade] = claim_grade_counts.get(grade, 0) + 1
+    run_assessment = _validation_run_assessment(validations)
     return {
         "schema_version": "interp-lab.graph_validation.v1",
         "created_at": datetime.now(UTC).isoformat(),
@@ -140,8 +141,12 @@ def build_graph_validation_report(
             "path_record_count": len(path_records),
             "validated_path_count": len(validations),
             "claim_grade_counts": dict(sorted(claim_grade_counts.items())),
+            "overall_claim_grade": run_assessment["overall_claim_grade"],
+            "recommended_next_action": run_assessment["recommended_next_action"],
             "status_counts": dict(sorted(status_counts.items())),
         },
+        "run_assessment": run_assessment,
+        "agent_next_actions": _validation_agent_next_actions(run_assessment),
         "path_validations": validations,
     }
 
@@ -183,16 +188,21 @@ def annotate_graph_with_validation(graph: dict[str, Any], report: dict[str, Any]
         "schema_version": report.get("schema_version"),
         "created_at": report.get("created_at"),
         "summary": report.get("summary", {}),
+        "run_assessment": report.get("run_assessment", {}),
+        "agent_next_actions": report.get("agent_next_actions", []),
     }
     return annotated
 
 
 def render_graph_validation_markdown(report: dict[str, Any]) -> str:
+    assessment = report.get("run_assessment", {})
     lines = [
         "# Attribution Graph Validation",
         "",
         f"Model: `{report.get('model', '')}`",
         f"Path records: `{report['summary']['path_record_count']}`",
+        f"Overall: `{assessment.get('overall_claim_grade', report['summary'].get('overall_claim_grade', ''))}`",
+        f"Recommended next action: {assessment.get('recommended_next_action', report['summary'].get('recommended_next_action', ''))}",
         "",
         "| Status | Claim | Path | Effect | Control | Specificity | Sign | Prompts |",
         "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
@@ -216,6 +226,12 @@ def render_graph_validation_markdown(report: dict[str, Any]) -> str:
             f"{item['interpretation']} Next: {item['next_action']}"
         )
     lines.append("")
+    actions = report.get("agent_next_actions", [])
+    if actions:
+        lines.extend(["## Agent Next Actions", ""])
+        for action in actions:
+            lines.append(f"- `{action['id']}`: {action['title']}: `{action['command']}`")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -530,6 +546,124 @@ def _next_action(claim_grade: str, reason_codes: list[str]) -> str:
     if claim_grade == "low_effect":
         return "Lower priority or rerun with a stronger intervention sweep."
     return "Collect more path records or deprioritize this candidate."
+
+
+def _validation_run_assessment(validations: list[dict[str, Any]]) -> dict[str, str]:
+    if not validations:
+        return {
+            "overall_claim_grade": "no_path_candidates",
+            "summary": "No path-patch candidates were selected from the attribution graph.",
+            "recommended_next_action": "Export or add measured path-patch records, then rerun graph validation.",
+        }
+    counts = _claim_grade_counts(validations)
+    if counts.get("validated"):
+        return {
+            "overall_claim_grade": "validated_paths_present",
+            "summary": f"{counts['validated']} path claim(s) passed the validation thresholds.",
+            "recommended_next_action": "Replicate validated paths on a broader held-out prompt set and inspect the annotated graph.",
+        }
+    if counts.get("needs_replication"):
+        return {
+            "overall_claim_grade": "replication_needed",
+            "summary": f"{counts['needs_replication']} path claim(s) have suggestive evidence.",
+            "recommended_next_action": "Increase prompt coverage, rerun controls, and validate the same source-target pairs again.",
+        }
+    if counts.get("needs_controls"):
+        return {
+            "overall_claim_grade": "controls_needed",
+            "summary": f"{counts['needs_controls']} path claim(s) need control records before interpretation.",
+            "recommended_next_action": "Rerun path patching with random-source or matched-source controls.",
+        }
+    if counts.get("control_failed"):
+        return {
+            "overall_claim_grade": "control_failed",
+            "summary": f"{counts['control_failed']} path claim(s) failed control separation.",
+            "recommended_next_action": "Prioritize better controls, narrower path pairs, or more prompts before using these paths.",
+        }
+    if counts.get("underpowered"):
+        return {
+            "overall_claim_grade": "underpowered",
+            "summary": f"{counts['underpowered']} path claim(s) had too few distinct prompts.",
+            "recommended_next_action": "Collect more held-out prompts and rerun validation.",
+        }
+    if counts.get("low_effect"):
+        return {
+            "overall_claim_grade": "low_effect",
+            "summary": f"{counts['low_effect']} path claim(s) had low target-latent effect size.",
+            "recommended_next_action": "Lower priority or rerun with a richer source-steering strength sweep.",
+        }
+    return {
+        "overall_claim_grade": "insufficient_evidence",
+        "summary": "The selected path claims do not yet have enough validation evidence.",
+        "recommended_next_action": "Collect more path records, add controls, or deprioritize these candidates.",
+    }
+
+
+def _validation_agent_next_actions(run_assessment: dict[str, str]) -> list[dict[str, str]]:
+    grade = run_assessment["overall_claim_grade"]
+    common_review = {
+        "id": "inspect_validation_report",
+        "title": "Review path-level claim grades and reason codes",
+        "command": "python -c \"from pathlib import Path; print(Path('<validation.md>').read_text(encoding='utf-8'))\"",
+    }
+    if grade == "validated_paths_present":
+        return [
+            common_review,
+            {
+                "id": "replicate_validated_paths",
+                "title": "Replicate validated paths on a broader held-out prompt set",
+                "command": "interp-lab validate-hf-sae-paths --graph <graph.json> --model <model> --dataset <broader-heldout.jsonl> --source-sae <source-sae.json> --target-sae <target-sae.json> --path-records-out <paths.jsonl> --out <validation.json> --graph-out <validated-graph.json>",
+            },
+            {
+                "id": "publish_validated_graph",
+                "title": "Package the annotated graph and validation reports for review",
+                "command": "interp-lab publish-hf-artifact --repo-id <user/repo> --path <run-directory> --dry-run",
+            },
+        ]
+    if grade in {"control_failed", "controls_needed"}:
+        return [
+            common_review,
+            {
+                "id": "rerun_with_stronger_controls",
+                "title": "Rerun path patching with stronger control coverage",
+                "command": "interp-lab validate-hf-sae-paths --graph <graph.json> --model <model> --dataset <heldout.jsonl> --source-sae <source-sae.json> --target-sae <target-sae.json> --random-source-controls 4 --path-records-out <paths.jsonl> --out <validation.json> --graph-out <validated-graph.json>",
+            },
+            {
+                "id": "narrow_path_pairs",
+                "title": "Rerun exact source-target pairs that remain scientifically interesting",
+                "command": "interp-lab export-hf-sae-paths --model <model> --dataset <heldout.jsonl> --source-sae <source-sae.json> --target-sae <target-sae.json> --path-pair SOURCE=TARGET --random-source-controls 4 --out <paths.jsonl>",
+            },
+        ]
+    if grade in {"replication_needed", "underpowered"}:
+        return [
+            common_review,
+            {
+                "id": "increase_prompt_coverage",
+                "title": "Collect a larger held-out prompt set and rerun validation",
+                "command": "interp-lab build-prompts --positive <positive.txt> --negative <negative.txt> --out <heldout.jsonl>",
+            },
+            {
+                "id": "rerun_validation",
+                "title": "Validate the same graph paths with the expanded records",
+                "command": "interp-lab validate-attribution-graph --graph <graph.json> --path-records <paths.jsonl> --out <validation.json> --graph-out <validated-graph.json>",
+            },
+        ]
+    return [
+        common_review,
+        {
+            "id": "collect_more_path_records",
+            "title": "Collect more measured path-patching records before interpreting this graph",
+            "command": "interp-lab export-hf-sae-paths --model <model> --dataset <heldout.jsonl> --source-sae <source-sae.json> --target-sae <target-sae.json> --out <paths.jsonl>",
+        },
+    ]
+
+
+def _claim_grade_counts(validations: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for validation in validations:
+        grade = str(validation.get("claim_grade", "insufficient_evidence"))
+        counts[grade] = counts.get(grade, 0) + 1
+    return counts
 
 
 def _is_control(record: dict[str, Any]) -> bool:

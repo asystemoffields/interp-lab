@@ -136,12 +136,21 @@ def test_attribution_graph_markdown_summarizes_validated_paths():
             "path_validation_status_counts": {"robust": 1},
             "validation_plan": ["Repeat on held-out prompts."],
         },
+        "metadata": {
+            "graph_validation": {
+                "run_assessment": {
+                    "overall_claim_grade": "validated_paths_present",
+                    "recommended_next_action": "Replicate validated paths on a broader held-out prompt set.",
+                }
+            }
+        },
     }
 
     markdown = render_attribution_graph_markdown(graph)
 
     assert "# Attribution Graph" in markdown
     assert "Path validation: `robust=1`" in markdown
+    assert "Overall validation: `validated_paths_present`" in markdown
     assert "`SAE:L12:F1 -> SAE:L24:F8`" in markdown
     assert "robust" in markdown
     assert "validated" in markdown

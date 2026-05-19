@@ -71,6 +71,15 @@ def render_attribution_graph_markdown(graph: dict[str, Any]) -> str:
     if isinstance(status_counts, dict) and status_counts:
         rendered_counts = ", ".join(f"{status}={count}" for status, count in sorted(status_counts.items()))
         lines.extend([f"Path validation: `{rendered_counts}`", ""])
+    run_assessment = _graph_validation_run_assessment(graph)
+    if run_assessment:
+        lines.extend(
+            [
+                f"Overall validation: `{_cell(run_assessment.get('overall_claim_grade'))}`",
+                f"Recommended next action: {_cell(run_assessment.get('recommended_next_action'))}",
+                "",
+            ]
+        )
     lines.extend(_strong_feature_markdown(summary.get("strong_causal_features", [])))
     lines.extend(_candidate_path_markdown(summary.get("candidate_paths", [])))
     lines.extend(_feature_group_markdown(summary.get("candidate_feature_groups", [])))
@@ -789,6 +798,17 @@ def _criterion_text(graph: dict[str, Any]) -> str:
     if isinstance(criterion, dict):
         return _cell(criterion.get("text", ""))
     return _cell(criterion)
+
+
+def _graph_validation_run_assessment(graph: dict[str, Any]) -> dict[str, Any]:
+    metadata = graph.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    graph_validation = metadata.get("graph_validation")
+    if not isinstance(graph_validation, dict):
+        return {}
+    run_assessment = graph_validation.get("run_assessment")
+    return run_assessment if isinstance(run_assessment, dict) else {}
 
 
 def _cell(value: Any) -> str:
