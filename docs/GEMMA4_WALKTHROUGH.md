@@ -87,7 +87,7 @@ modal run examples/modal_gemma4.py \
 
 Set `INTERP_LAB_MODAL_GPU=L40S` or another Modal GPU name before `modal run` when you want a larger accelerator. The default is `A10G`.
 
-The Modal workflows default to `--target-token auto`. Read the causal report's behavior-score line after the run: if the baseline score is saturated, rerun with a narrower explicit target-token set for the behavior you care about.
+The Modal workflows default to `--target-token auto`. Read the causal report's behavior-score line after the run: if the baseline score is saturated, rerun with a narrower explicit target-token set for the behavior you care about. If the score is near zero even with auto targets, inspect the target-token sample in the report and pass explicit `raw:` or `space:` tokens for the behavior.
 
 ## Choose The Model
 

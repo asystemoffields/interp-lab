@@ -482,9 +482,22 @@ def _behavior_score_line(raw_value: dict) -> str:
         line += f", target tokens={target_count}"
         if strategy:
             line += f" ({strategy})"
+        sample = _target_token_sample(raw_value)
+        if sample:
+            line += f", sample={sample}"
     elif strategy:
         line += f", target token strategy={strategy}"
     return line
+
+
+def _target_token_sample(raw_value: dict) -> str:
+    sample = raw_value.get("target_token_sample")
+    if not isinstance(sample, list):
+        return ""
+    tokens = [str(token).replace("\n", "\\n") for token in sample[:4]]
+    if not tokens:
+        return ""
+    return ", ".join(f"`{token}`" for token in tokens)
 
 
 def _format_optional_effect(value: float | None) -> str:

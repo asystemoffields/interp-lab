@@ -317,10 +317,16 @@ def _summarize_behavior_scores(records: list[InterventionRecord]) -> dict[str, A
         )
     elif baseline_mean <= FLOOR_BASELINE_MEAN and baseline_max <= FLOOR_BASELINE_MAX:
         summary["diagnostic"] = "near_zero_baseline"
-        summary["advisory"] = (
-            "Baseline score is near zero; use auto targets, raw tokenizer forms, "
-            "or target tokens that appear in positive completions."
-        )
+        if str(strategy).lower() == "auto":
+            summary["advisory"] = (
+                "Baseline score is near zero even with auto-derived targets; inspect the target-token sample, "
+                "pass explicit raw:/space: target tokens, or use positive prompts whose expected completions contain the behavior."
+            )
+        else:
+            summary["advisory"] = (
+                "Baseline score is near zero; use auto targets, raw tokenizer forms, "
+                "or target tokens that appear in positive completions."
+            )
     return summary
 
 

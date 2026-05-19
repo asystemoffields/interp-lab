@@ -499,7 +499,7 @@ For `ablate`, `zero`, `remove`, `knockout`, `suppress`, and `clamp_down`, a scor
 
 Hugging Face exporters use positive-scored prompts for criterion effects and negative-scored prompts for side-effect estimates. That makes a report prefer features that move the requested behavior while leaving nearby unrelated prompts stable.
 
-When an intervention row includes `metadata.behavior_score`, reports summarize the baseline behavior score, target-token strategy, and target-token count. If the score is saturated or near zero, the report adds a note suggesting narrower tokens, harder prompts, `auto` targets, or exact `raw:` tokenizer forms.
+When an intervention row includes `metadata.behavior_score`, reports summarize the baseline behavior score, target-token strategy, target-token count, and a small target-token sample. If the score is saturated or near zero, the report adds a note suggesting narrower tokens, harder prompts, `auto` targets when explicit tokens were used, or exact `raw:`/`space:` tokenizer forms when auto targets are already near zero.
 
 Rows with a `criterion` field are matched to the CLI criterion by normalized exact text. Omit `criterion`, or pass `--allow-intervention-criterion-mismatch`, when you want to reuse intervention files across paraphrased criteria.
 

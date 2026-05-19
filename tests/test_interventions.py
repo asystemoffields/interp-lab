@@ -256,6 +256,52 @@ def test_intervention_metadata_flags_near_zero_behavior_scores(tmp_path: Path):
     assert "raw tokenizer forms" in behavior_score["advisory"]
 
 
+def test_intervention_metadata_gives_auto_specific_near_zero_advice(tmp_path: Path):
+    path = tmp_path / "interventions.jsonl"
+    rows = [
+        {
+            "model": "m",
+            "feature_id": "L1:F1",
+            "criterion": "criterion",
+            "intervention": "steer",
+            "baseline_score": 0.002,
+            "intervention_score": 0.003,
+            "metadata": {
+                "behavior_score": "target_token_probability_mass",
+                "target_token_strategy": "auto",
+                "target_tokens": [" meters", " feet"],
+            },
+        },
+        {
+            "model": "m",
+            "feature_id": "L1:F1",
+            "criterion": "criterion",
+            "intervention": "steer",
+            "baseline_score": 0.004,
+            "intervention_score": 0.005,
+            "metadata": {
+                "behavior_score": "target_token_probability_mass",
+                "target_token_strategy": "auto",
+                "target_tokens": [" meters", " feet"],
+            },
+        },
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    evidence = FeatureEvidence(feature_id="L1:F1", model="m", layer=1, label="feature")
+
+    metadata = InterventionRecordRunner(path).metadata_for(
+        evidence,
+        HeuristicCriterionCompiler().compile("criterion"),
+    )
+
+    behavior_score = metadata["interventions"]["behavior_score"]
+    assert behavior_score["diagnostic"] == "near_zero_baseline"
+    assert "even with auto-derived targets" in behavior_score["advisory"]
+    assert "use auto targets" not in behavior_score["advisory"]
+    markdown = "\n".join(_intervention_lines(metadata["interventions"]))
+    assert "sample=` meters`, ` feet`" in markdown
+
+
 def test_sae_training_lines_surface_quality_notes():
     lines = _sae_training_lines(
         {
