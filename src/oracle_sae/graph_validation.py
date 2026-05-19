@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from oracle_sae.graphs import load_path_patch_records
+from oracle_sae.graphs import load_path_patch_records, write_attribution_graph_markdown
 
 
 DEFAULT_MIN_EFFECT = 0.05
@@ -25,6 +25,7 @@ class GraphValidationWriteResult:
     json_path: Path
     markdown_path: Path
     annotated_graph_path: Path | None = None
+    annotated_graph_markdown_path: Path | None = None
 
 
 def export_graph_validation_report(
@@ -34,6 +35,7 @@ def export_graph_validation_report(
     out_path: str | Path,
     markdown_out_path: str | Path | None = None,
     graph_out_path: str | Path | None = None,
+    graph_markdown_out_path: str | Path | None = None,
     top_k: int = 8,
     min_effect: float = DEFAULT_MIN_EFFECT,
     min_specificity: float = DEFAULT_MIN_SPECIFICITY,
@@ -64,16 +66,26 @@ def export_graph_validation_report(
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path.write_text(render_graph_validation_markdown(report), encoding="utf-8")
     annotated_graph_path = None
-    if graph_out_path is not None:
+    annotated_graph_markdown_path = None
+    if graph_out_path is not None or graph_markdown_out_path is not None:
         annotated_graph = annotate_graph_with_validation(graph, report)
+    if graph_out_path is not None:
         annotated_graph_path = Path(graph_out_path)
         annotated_graph_path.parent.mkdir(parents=True, exist_ok=True)
         annotated_graph_path.write_text(json.dumps(annotated_graph, indent=2, sort_keys=True), encoding="utf-8")
+    if graph_markdown_out_path is not None or graph_out_path is not None:
+        graph_markdown_path = (
+            Path(graph_markdown_out_path)
+            if graph_markdown_out_path is not None
+            else Path(graph_out_path).with_suffix(".md")
+        )
+        annotated_graph_markdown_path = write_attribution_graph_markdown(annotated_graph, graph_markdown_path)
     return GraphValidationWriteResult(
         report=report,
         json_path=json_path,
         markdown_path=markdown_path,
         annotated_graph_path=annotated_graph_path,
+        annotated_graph_markdown_path=annotated_graph_markdown_path,
     )
 
 
@@ -212,6 +224,10 @@ def build_graph_validation_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", required=True, help="Output validation JSON path.")
     parser.add_argument("--markdown-out", help="Output validation Markdown path. Defaults to --out with .md.")
     parser.add_argument("--graph-out", help="Optional output graph JSON annotated with validation status.")
+    parser.add_argument(
+        "--graph-markdown-out",
+        help="Output annotated graph Markdown path. Defaults to --graph-out with .md when --graph-out is set.",
+    )
     parser.add_argument("--top-k", type=int, default=8)
     parser.add_argument("--min-effect", type=float, default=DEFAULT_MIN_EFFECT)
     parser.add_argument("--min-specificity", type=float, default=DEFAULT_MIN_SPECIFICITY)
@@ -233,6 +249,7 @@ def run_graph_validation_from_args(args: argparse.Namespace) -> GraphValidationW
         out_path=args.out,
         markdown_out_path=args.markdown_out,
         graph_out_path=args.graph_out,
+        graph_markdown_out_path=args.graph_markdown_out,
         top_k=args.top_k,
         min_effect=args.min_effect,
         min_specificity=args.min_specificity,

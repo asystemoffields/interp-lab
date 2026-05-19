@@ -355,6 +355,9 @@ def test_validate_attribution_graph_command(tmp_path: Path):
     assert data["path_validations"][0]["status"] == "robust"
     assert out.with_suffix(".md").exists()
     assert (tmp_path / "validated-graph.json").exists()
+    assert (tmp_path / "validated-graph.md").exists()
+    graph_markdown = (tmp_path / "validated-graph.md").read_text(encoding="utf-8")
+    assert "Path validation: `robust=1`" in graph_markdown
 
 
 def test_run_config_writes_manifest_and_report(tmp_path: Path):

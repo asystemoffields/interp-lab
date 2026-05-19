@@ -78,10 +78,15 @@ def test_export_graph_validation_report_writes_json_and_markdown(tmp_path: Path)
     assert result.markdown_path.exists()
     assert result.annotated_graph_path is not None
     assert result.annotated_graph_path.exists()
+    assert result.annotated_graph_markdown_path is not None
+    assert result.annotated_graph_markdown_path.exists()
     annotated = json.loads(result.annotated_graph_path.read_text(encoding="utf-8"))
     assert annotated["edges"][0]["validation"]["status"] == "robust"
     assert annotated["mechanism_summary"]["candidate_paths"][0]["validation"]["status"] == "robust"
     assert "Attribution Graph Validation" in result.markdown_path.read_text(encoding="utf-8")
+    annotated_markdown = result.annotated_graph_markdown_path.read_text(encoding="utf-8")
+    assert "Path validation: `robust=1`" in annotated_markdown
+    assert "`SAE:L1:F1 -> SAE:L2:F8`" in annotated_markdown
 
 
 def test_annotate_graph_with_validation_preserves_input_graph():

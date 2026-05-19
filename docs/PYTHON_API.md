@@ -111,7 +111,7 @@ Use `env_profile="reports/env-profile.json"` to plan against a saved profile fro
 ## Graphs, Publishing, And Scale Plans
 
 ```python
-from interp_lab import attribution_graph, publish_hf_artifact, scale_plan
+from interp_lab import attribution_graph, publish_hf_artifact, scale_plan, validate_attribution_graph
 
 graph = attribution_graph("reports/model-a/report.json")
 
@@ -119,6 +119,13 @@ written_graph = attribution_graph(
     "reports/model-a/report.json",
     out="reports/model-a/graph.json",
     markdown_out="reports/model-a/graph.md",
+)
+
+validation = validate_attribution_graph(
+    "reports/model-a/graph.json",
+    path_records="reports/model-a/heldout-paths.jsonl",
+    out="reports/model-a/validation.json",
+    graph_out="reports/model-a/validated-graph.json",
 )
 
 publish_hf_artifact(

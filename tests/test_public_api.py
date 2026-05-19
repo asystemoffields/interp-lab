@@ -190,6 +190,8 @@ def test_validate_attribution_graph_public_api(tmp_path: Path):
     assert written.markdown_path.exists()
     assert written.annotated_graph_path is not None
     assert written.annotated_graph_path.exists()
+    assert written.annotated_graph_markdown_path == tmp_path / "validated-graph.md"
+    assert written.annotated_graph_markdown_path.exists()
 
 
 def test_validate_hf_sae_paths_public_api(tmp_path: Path, monkeypatch):
