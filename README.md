@@ -64,8 +64,14 @@ interp-lab profile-env --out reports/env-profile.json --json
 Run a criterion inspection:
 
 ```bash
-interp-lab inspect --model toy/a --criterion "Python security bug" --backend toy
+interp-lab inspect \
+  --model toy/a \
+  --criterion "Python security bug" \
+  --backend toy \
+  --html-out reports/inspection/report.html
 ```
+
+This writes JSON and Markdown by default. `--html-out` adds a self-contained searchable feature-card report.
 
 Build a prompt dataset from prompts you wrote:
 

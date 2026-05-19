@@ -58,6 +58,7 @@ from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
     load_inspection_report,
     load_match_report,
+    write_inspection_html,
     write_inspection_report,
     write_match_markdown,
     write_match_report,
@@ -78,6 +79,7 @@ class WrittenInspection:
     report: InspectionReport
     json_path: Path
     markdown_path: Path
+    html_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -268,6 +270,7 @@ def inspect(
     records: str | Path | None = None,
     interventions: str | Path | None = None,
     out: str | Path | None = None,
+    html_out: str | Path | None = None,
     top_k: int = 8,
     require_interventions: bool = False,
     allow_intervention_criterion_mismatch: bool = False,
@@ -295,7 +298,8 @@ def inspect(
     """Rank and explain features for a natural-language criterion.
 
     When `out` is supplied, the report is written as JSON and Markdown and a
-    `WrittenInspection` is returned. Otherwise this returns the in-memory
+    `WrittenInspection` is returned. Pass `html_out` to also write a
+    self-contained HTML report. Otherwise this returns the in-memory
     `InspectionReport`.
     """
     provider = _feature_provider(
@@ -336,10 +340,18 @@ def inspect(
         intervention_runner=intervention_runner,
         top_k=top_k,
     )
-    if out is None:
+    if out is None and html_out is None:
         return report
+    if out is None:
+        out = Path(html_out).parent
     json_path, markdown_path = write_inspection_report(report, out)
-    return WrittenInspection(report=report, json_path=json_path, markdown_path=markdown_path)
+    html_path = write_inspection_html(report, html_out) if html_out is not None else None
+    return WrittenInspection(
+        report=report,
+        json_path=json_path,
+        markdown_path=markdown_path,
+        html_path=html_path,
+    )
 
 
 def compare(

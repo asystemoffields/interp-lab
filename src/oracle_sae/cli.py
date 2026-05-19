@@ -44,6 +44,7 @@ from oracle_sae.nnsight_records import build_nnsight_export_parser, run_nnsight_
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
     load_inspection_report,
+    write_inspection_html,
     write_inspection_report,
     write_match_markdown,
     write_match_report,
@@ -167,6 +168,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     inspect.add_argument("--top-k", type=int, default=8, help="Number of feature cards to keep.")
     inspect.add_argument("--out", default="reports/inspection", help="Output directory.")
+    inspect.add_argument("--html-out", help="Optional output self-contained HTML feature report path.")
     inspect.set_defaults(func=run_inspect)
 
     match = subparsers.add_parser("match", help="Match feature cards across two inspection reports.")
@@ -348,6 +350,9 @@ def run_inspect(args: argparse.Namespace) -> int:
     json_path, markdown_path = write_inspection_report(report, args.out)
     print(f"Wrote {json_path}")
     print(f"Wrote {markdown_path}")
+    if args.html_out:
+        html_path = write_inspection_html(report, args.html_out)
+        print(f"Wrote {html_path}")
     return 0
 
 

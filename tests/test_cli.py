@@ -50,11 +50,14 @@ def test_records_backend_writes_report(tmp_path: Path):
             str(records),
             "--out",
             str(out),
+            "--html-out",
+            str(out / "report.html"),
         ]
     )
 
     assert exit_code == 0
     assert (out / "report.json").exists()
+    assert (out / "report.html").exists()
 
 
 def test_records_backend_accepts_intervention_records(tmp_path: Path):

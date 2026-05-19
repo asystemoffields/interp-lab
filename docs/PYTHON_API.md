@@ -14,7 +14,7 @@ report = inspect(
 )
 ```
 
-Write JSON and Markdown reports by passing `out`:
+Write JSON and Markdown reports by passing `out`. Pass `html_out` for a self-contained searchable feature-card report:
 
 ```python
 result = inspect(
@@ -22,10 +22,12 @@ result = inspect(
     "the model is aware it is being evaluated",
     backend="toy",
     out="reports/model-a",
+    html_out="reports/model-a/report.html",
 )
 
 print(result.json_path)
 print(result.markdown_path)
+print(result.html_path)
 ```
 
 ## Compare

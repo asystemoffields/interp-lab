@@ -16,6 +16,8 @@ criterion text
 
 The same feature card can come from a sparse autoencoder, crosscoder, natural-language autoencoder, manual feature dump, or a future activation oracle.
 
+Inspection reports are written as JSON and Markdown. `inspect --html-out` adds a self-contained feature-card viewer with search, layer/source filters, metric bars, causal notes, training summaries, intervention snippets, and activation examples.
+
 ## Feature Providers
 
 A feature provider returns `FeatureEvidence`.

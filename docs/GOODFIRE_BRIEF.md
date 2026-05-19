@@ -30,6 +30,7 @@ The target workflow:
 - SAE-latent path patching between source and target layer SAEs.
 - Graph validation with held-out path records, matched controls, and annotated graph exports.
 - Compact graph summaries for agents and scripts.
+- Self-contained HTML feature-card reports.
 - Self-contained HTML attribution graph viewer.
 - Self-contained HTML cross-model match validation viewer.
 - Hugging Face artifact publishing for reports and records.
@@ -64,7 +65,6 @@ The tool aims to be an orchestration layer for interpretability workflows:
 ## Near-Term Gaps
 
 - criterion dataset generation from natural language;
-- HTML reports for feature cards;
 - held-out transfer tests for cross-model feature equivalence.
 - distributed SAE training manifests;
 - remote causal validation workers.

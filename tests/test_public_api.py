@@ -42,11 +42,14 @@ def test_inspect_api_can_write_report(tmp_path: Path):
         "the model is aware it is being evaluated",
         backend="toy",
         out=tmp_path,
+        html_out=tmp_path / "report.html",
         top_k=1,
     )
 
     assert result.json_path == tmp_path / "report.json"
     assert result.markdown_path == tmp_path / "report.md"
+    assert result.html_path == tmp_path / "report.html"
+    assert result.html_path.exists()
     assert result.report.cards
     assert load_inspection_report(result.json_path).model == "toy/a"
 

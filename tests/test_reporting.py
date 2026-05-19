@@ -1,4 +1,4 @@
-from oracle_sae.reporting import render_inspection_markdown
+from oracle_sae.reporting import render_inspection_html, render_inspection_markdown, write_inspection_html
 from oracle_sae.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
 
 
@@ -117,6 +117,51 @@ def test_inspection_markdown_distinguishes_attached_unmatched_interventions():
     assert "Criterion score: 0.620" in markdown
     assert "Intervention records were attached, but none matched the kept features." in markdown
     assert "No intervention records were attached" not in markdown
+
+
+def test_inspection_html_renders_searchable_feature_cards(tmp_path):
+    report = InspectionReport(
+        model="m",
+        criterion=Criterion(text="code-oriented completions"),
+        cards=[
+            FeatureCard(
+                feature_id="SAE:L24:F8",
+                model="m",
+                layer=24,
+                label="code planning latent",
+                explanation="plans code",
+                importance=0.5,
+                association=0.42,
+                specificity=0.07,
+                causal_effect=0.07,
+                stability=0.95,
+                examples=[
+                    "p1: activation=3.0 | Write a Python function | token[2]='Python'",
+                    "p2: activation=2.8 | Return JSON | token[1]='JSON'",
+                ],
+                source="trained-sae",
+                fingerprint=_fingerprint(),
+                causal_effects={"signed_causal_effect": 0.073, "strong_causal_score": 0.072},
+                metadata={"interventions": {"count": 2, "mean_directed_effect": 0.073}},
+            )
+        ],
+        metadata={"evidence": {"record_count": 12, "feature_count": 1}, "feature_count": 1, "kept_feature_count": 1},
+    )
+
+    html = render_inspection_html(report)
+
+    assert "Feature Report" in html
+    assert "feature-search" in html
+    assert "layer-filter" in html
+    assert "source-filter" in html
+    assert "SAE:L24:F8" in html
+    assert "code planning latent" in html
+    assert "strong causal 0.072" in html
+    assert "visibleRows" in html
+
+    path = write_inspection_html(report, tmp_path / "report.html")
+    assert path == tmp_path / "report.html"
+    assert path.read_text(encoding="utf-8").startswith("<!doctype html>")
 
 
 def _fingerprint():

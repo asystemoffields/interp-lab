@@ -13,6 +13,7 @@ The north star:
 - Deterministic toy backend.
 - Fingerprint similarity across models.
 - Match validation with claim grades and agent next actions.
+- Self-contained HTML feature-card reports.
 - Self-contained HTML match-validation viewer.
 - Markdown and JSON reports.
 

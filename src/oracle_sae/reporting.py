@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import re
 from pathlib import Path
@@ -36,6 +37,13 @@ def write_match_markdown(report: MatchReport, out_path: str | Path) -> Path:
     path = Path(out_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_match_markdown(report), encoding="utf-8")
+    return path
+
+
+def write_inspection_html(report: InspectionReport, out_path: str | Path) -> Path:
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_inspection_html(report), encoding="utf-8")
     return path
 
 
@@ -149,6 +157,322 @@ def render_match_markdown(report: MatchReport) -> str:
             )
             lines.extend([f"Components: {component_text}", ""])
     return "\n".join(lines).strip() + "\n"
+
+
+def render_inspection_html(report: InspectionReport) -> str:
+    cards = list(report.cards)
+    evidence_summary = _html_evidence_summary(report.metadata.get("evidence"))
+    scope = _report_scope_line(report.metadata)
+    mechanism = _html_mechanism_summary(report)
+    layer_options = "\n".join(
+        f'<option value="{_attr(layer)}">{_h(layer)}</option>'
+        for layer in _layer_filter_values(cards)
+    )
+    source_options = "\n".join(
+        f'<option value="{_attr(source)}">{_h(source)}</option>'
+        for source in sorted({str(card.source) for card in cards if card.source})
+    )
+    metric_cards = "\n".join(
+        _summary_card(label, value)
+        for label, value in [
+            ("Features", len(cards)),
+            ("Strong Causal", len(_top_causal_cards(report))),
+            ("With Interventions", sum(1 for card in cards if _has_measured_intervention(card))),
+            ("Layers", len({card.layer for card in cards if card.layer is not None})),
+        ]
+    )
+    table_rows = "\n".join(_feature_table_row(card, index) for index, card in enumerate(cards, start=1))
+    detail_cards = "\n".join(_feature_detail_card(card, index) for index, card in enumerate(cards, start=1))
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>interp-lab Feature Report</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f7f7f4;
+      --ink: #1d2528;
+      --muted: #5d686e;
+      --line: #d9dedb;
+      --panel: #ffffff;
+      --accent: #0f766e;
+      --good: #147a3f;
+      --warn: #946200;
+      --quiet: #5f6670;
+      --blue: #285e9e;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }}
+    main {{
+      width: min(1200px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }}
+    header {{
+      display: grid;
+      gap: 18px;
+      margin-bottom: 20px;
+    }}
+    h1, h2, h3, p {{ margin: 0; }}
+    h1 {{ font-size: 30px; letter-spacing: 0; }}
+    h2 {{ font-size: 18px; margin-bottom: 14px; }}
+    h3 {{ font-size: 16px; }}
+    code {{
+      padding: 1px 5px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #f2f4f3;
+      font-size: 0.92em;
+    }}
+    .subhead {{ color: var(--muted); max-width: 960px; }}
+    .model-line {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 14px;
+    }}
+    .pill {{
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: #fff;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 650;
+      color: var(--muted);
+    }}
+    .pill.good {{ color: var(--good); border-color: #9fd3b5; background: #eef9f2; }}
+    .pill.warn {{ color: var(--warn); border-color: #e5c06f; background: #fff7df; }}
+    .pill.blue {{ color: var(--blue); border-color: #a9c7ed; background: #eef6ff; }}
+    .summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      gap: 10px;
+    }}
+    .metric, .panel {{
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }}
+    .metric {{ padding: 12px; }}
+    .metric .label {{ color: var(--muted); font-size: 12px; }}
+    .metric .value {{ font-size: 24px; font-weight: 750; }}
+    .panel {{
+      padding: 16px;
+      margin-top: 14px;
+    }}
+    .toolbar {{
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(140px, 210px) minmax(140px, 210px) auto;
+      gap: 10px;
+      align-items: center;
+    }}
+    input, select {{
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }}
+    .visible-count {{ color: var(--muted); font-size: 13px; text-align: right; }}
+    .notes {{
+      display: grid;
+      gap: 10px;
+    }}
+    .note {{
+      border-left: 3px solid var(--accent);
+      padding-left: 10px;
+      color: var(--muted);
+    }}
+    .table-wrap {{ overflow-x: auto; }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 920px;
+      font-size: 14px;
+    }}
+    th {{
+      text-align: left;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+    }}
+    td {{
+      padding: 11px 8px;
+      border-bottom: 1px solid #ecefed;
+      vertical-align: top;
+    }}
+    .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+    .feature-ref {{ display: grid; gap: 4px; }}
+    .label-line {{ color: var(--muted); font-size: 12px; }}
+    .details {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+      gap: 12px;
+    }}
+    .feature-card {{
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }}
+    .feature-card h3 {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }}
+    .meters {{ display: grid; gap: 7px; }}
+    .meter {{
+      display: grid;
+      grid-template-columns: 92px 1fr 54px;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }}
+    .bar {{
+      height: 7px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #e8ecea;
+    }}
+    .fill {{ height: 100%; background: var(--accent); }}
+    .examples {{
+      display: grid;
+      gap: 6px;
+    }}
+    .example {{
+      padding: 8px;
+      border-radius: 7px;
+      background: #f6f8f7;
+      color: #334044;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+    }}
+    .chip-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }}
+    [hidden] {{ display: none !important; }}
+    @media (max-width: 760px) {{
+      main {{ width: min(100vw - 20px, 1200px); padding-top: 20px; }}
+      h1 {{ font-size: 24px; }}
+      .summary-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .toolbar {{ grid-template-columns: 1fr; }}
+      .visible-count {{ text-align: left; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Feature Report</h1>
+        <p class="subhead">Criterion: {_h(report.criterion.text)}</p>
+      </div>
+      <div class="model-line">
+        <span>Model <code>{_h(report.model)}</code></span>
+        <span class="pill">{_h(report.created_at)}</span>
+      </div>
+      <div class="summary-grid">{metric_cards}</div>
+    </header>
+    <section class="panel">
+      <h2>Run Context</h2>
+      <div class="notes">
+        {_html_note(scope)}
+        {evidence_summary}
+        {_html_note("Metric notes: Association is activation/criterion correlation. Effect is mean causal change from interventions. Specificity subtracts measured side effects. Strong causal score is the specificity-adjusted causal signal.")}
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Mechanism Sketch</h2>
+      <div class="notes">{mechanism}</div>
+    </section>
+    <section class="panel">
+      <div class="toolbar">
+        <input id="feature-search" type="search" placeholder="Filter by feature, label, examples, or evidence">
+        <select id="layer-filter" aria-label="Filter by layer">
+          <option value="">All layers</option>
+          {layer_options}
+        </select>
+        <select id="source-filter" aria-label="Filter by source">
+          <option value="">All sources</option>
+          {source_options}
+        </select>
+        <div id="visible-count" class="visible-count">{len(cards)} visible</div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Ranked Features</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Feature</th>
+              <th>Evidence</th>
+              <th class="num">Importance</th>
+              <th class="num">Association</th>
+              <th class="num">Effect</th>
+              <th class="num">Specificity</th>
+              <th class="num">Strong Causal</th>
+            </tr>
+          </thead>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Feature Details</h2>
+      <div class="details">{detail_cards}</div>
+    </section>
+  </main>
+  <script>
+    const search = document.getElementById("feature-search");
+    const layerFilter = document.getElementById("layer-filter");
+    const sourceFilter = document.getElementById("source-filter");
+    const visibleCount = document.getElementById("visible-count");
+    function applyFilters() {{
+      const query = search.value.trim().toLowerCase();
+      const layer = layerFilter.value;
+      const source = sourceFilter.value;
+      let visibleRows = 0;
+      document.querySelectorAll("[data-feature]").forEach((node) => {{
+        const layerMatch = !layer || node.dataset.layer === layer;
+        const sourceMatch = !source || node.dataset.source === source;
+        const searchMatch = !query || (node.dataset.search || "").includes(query);
+        const show = layerMatch && sourceMatch && searchMatch;
+        node.hidden = !show;
+        if (show && node.dataset.feature === "row") visibleRows += 1;
+      }});
+      visibleCount.textContent = `${{visibleRows}} visible`;
+    }}
+    search.addEventListener("input", applyFilters);
+    layerFilter.addEventListener("change", applyFilters);
+    sourceFilter.addEventListener("change", applyFilters);
+  </script>
+</body>
+</html>
+"""
 
 
 def _mechanism_sketch_lines(report: InspectionReport) -> list[str]:
@@ -503,6 +827,210 @@ def _target_token_sample(raw_value: dict) -> str:
     if not tokens:
         return ""
     return ", ".join(f"`{token}`" for token in tokens)
+
+
+def _html_evidence_summary(raw_value: object) -> str:
+    lines = _evidence_summary_lines(raw_value)
+    if not lines:
+        return ""
+    return _html_note(" ".join(line for line in lines if line))
+
+
+def _html_mechanism_summary(report: InspectionReport) -> str:
+    notes: list[str] = []
+    top_causal = _top_causal_cards(report)
+    if top_causal:
+        features = ", ".join(
+            f"{card.feature_id} ({_display_label(card)}, strong causal {float(card.causal_effects.get('strong_causal_score', 0.0)):.3f})"
+            for card in top_causal[:4]
+        )
+        notes.append(f"Causal candidates: {features}.")
+    else:
+        notes.append("Causal candidates: no tested feature crossed the current strong-effect threshold.")
+    themes = _activation_themes(report.cards)
+    if themes:
+        notes.append(
+            "Activation themes: "
+            + ", ".join(f"{theme} ({count})" for theme, count in themes[:8])
+            + "."
+        )
+    notes.extend(_evidence_gap_lines(report))
+    return "\n".join(_html_note(note) for note in notes if note)
+
+
+def _feature_table_row(card, index: int) -> str:
+    layer = _layer_value(card)
+    source = str(card.source or "unknown")
+    strong = float(card.causal_effects.get("strong_causal_score", 0.0))
+    return f"""
+            <tr data-feature="row" data-layer="{_attr(layer)}" data-source="{_attr(source)}" data-search="{_attr(_feature_search_text(card))}">
+              <td>{index}</td>
+              <td>
+                <div class="feature-ref">
+                  <code>{_h(card.feature_id)}</code>
+                  <span class="label-line">{_h(_display_label(card))}</span>
+                </div>
+              </td>
+              <td>{_feature_evidence_pill(card)}</td>
+              <td class="num">{card.importance:.3f}</td>
+              <td class="num">{card.association:.3f}</td>
+              <td class="num">{card.causal_effect:.3f}</td>
+              <td class="num">{card.specificity:.3f}</td>
+              <td class="num">{strong:.3f}</td>
+            </tr>
+"""
+
+
+def _feature_detail_card(card, index: int) -> str:
+    layer = _layer_value(card)
+    source = str(card.source or "unknown")
+    strong = float(card.causal_effects.get("strong_causal_score", 0.0))
+    direction = _direction_line(card)
+    evidence = _evidence_line(card)
+    interpretation = _html_card_interpretation(card)
+    examples = "\n".join(
+        f'<div class="example">{_h(example)}</div>' for example in card.examples[:4]
+    )
+    if not examples:
+        examples = '<div class="example">No activation examples were attached.</div>'
+    training = _html_sae_training(card.metadata.get("sae_training"))
+    interventions = _html_interventions(card.metadata.get("interventions"))
+    chips = "\n".join(
+        item
+        for item in [
+            _feature_evidence_pill(card),
+            f'<span class="pill">layer {_h(layer)}</span>',
+            f'<span class="pill">{_h(source)}</span>',
+            _causal_strength_pill(strong),
+        ]
+        if item
+    )
+    return f"""
+        <article class="feature-card" data-feature="card" data-layer="{_attr(layer)}" data-source="{_attr(source)}" data-search="{_attr(_feature_search_text(card))}">
+          <h3>
+            <span>{index}. <code>{_h(card.feature_id)}</code></span>
+            <span class="pill blue">{_h(_display_label(card))}</span>
+          </h3>
+          <div class="chip-row">{chips}</div>
+          <div class="meters">
+            {_component_meter("importance", card.importance)}
+            {_component_meter("association", card.association)}
+            {_component_meter("effect", card.causal_effect)}
+            {_component_meter("specificity", card.specificity)}
+            {_component_meter("stability", card.stability)}
+            {_component_meter("strong", strong)}
+          </div>
+          {_html_note(direction)}
+          {_html_note(evidence)}
+          {interpretation}
+          {training}
+          {interventions}
+          <div class="examples">{examples}</div>
+        </article>
+"""
+
+
+def _html_card_interpretation(card) -> str:
+    lines = _card_interpretation_lines(card)
+    notes = [line for line in lines if line.strip()]
+    return "\n".join(_html_note(line) for line in notes)
+
+
+def _html_sae_training(raw_value: object) -> str:
+    lines = [line for line in _sae_training_lines(raw_value) if line.strip()]
+    return "\n".join(_html_note(line) for line in lines)
+
+
+def _html_interventions(raw_value: object) -> str:
+    lines = [line for line in _intervention_lines(raw_value) if line.strip()]
+    if not lines:
+        return ""
+    compact = []
+    for line in lines:
+        if line == "Intervention examples:":
+            continue
+        compact.append(line.removeprefix("- "))
+    return "\n".join(_html_note(line) for line in compact[:6])
+
+
+def _feature_evidence_pill(card) -> str:
+    if _has_measured_intervention(card):
+        return '<span class="pill good">causal records</span>'
+    if card.source in {"activation-records", "hf-hidden-state"}:
+        return '<span class="pill blue">activation records</span>'
+    if card.source in {"neuronpedia", "saelens", "goodfire", "gemma-scope", "qwen-scope"}:
+        return f'<span class="pill">{_h(card.source)}</span>'
+    return '<span class="pill">feature evidence</span>'
+
+
+def _causal_strength_pill(strong: float) -> str:
+    if strong >= PROMOTING_THRESHOLD:
+        return f'<span class="pill good">strong causal {strong:.3f}</span>'
+    if strong >= SMALL_EFFECT_THRESHOLD:
+        return f'<span class="pill warn">small causal {strong:.3f}</span>'
+    return f'<span class="pill">causal {strong:.3f}</span>'
+
+
+def _component_meter(label: str, value: float) -> str:
+    display = f"{float(value):.3f}"
+    width = min(1.0, abs(float(value))) * 100.0
+    return f"""
+            <div class="meter">
+              <span>{_h(label)}</span>
+              <span class="bar"><span class="fill" style="width: {width:.1f}%"></span></span>
+              <span>{_h(display)}</span>
+            </div>
+"""
+
+
+def _summary_card(label: str, value: object) -> str:
+    return f"""
+        <div class="metric">
+          <div class="label">{_h(label)}</div>
+          <div class="value">{_h(value)}</div>
+        </div>
+"""
+
+
+def _html_note(value: object) -> str:
+    if value is None or str(value).strip() == "":
+        return ""
+    return f'<p class="note">{_h(value)}</p>'
+
+
+def _layer_filter_values(cards) -> list[str]:
+    values = {_layer_value(card) for card in cards}
+    numeric = sorted((value for value in values if value != "unknown"), key=lambda item: int(item))
+    if "unknown" in values:
+        numeric.append("unknown")
+    return numeric
+
+
+def _layer_value(card) -> str:
+    return "unknown" if card.layer is None else str(card.layer)
+
+
+def _feature_search_text(card) -> str:
+    parts = [
+        card.feature_id,
+        card.label,
+        card.explanation,
+        card.source,
+        _display_label(card),
+        _direction_line(card),
+        _evidence_line(card),
+        " ".join(card.examples[:6]),
+        " ".join(_card_interpretation_lines(card)),
+    ]
+    return " ".join(str(part) for part in parts if part).lower()
+
+
+def _h(value: object) -> str:
+    return html.escape(str(value), quote=False)
+
+
+def _attr(value: object) -> str:
+    return html.escape(str(value), quote=True)
 
 
 def _format_optional_effect(value: float | None) -> str:
