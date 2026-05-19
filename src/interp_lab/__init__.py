@@ -10,6 +10,7 @@ from oracle_sae.schema import (
     MatchReport,
 )
 from oracle_sae.hf_records import PromptDatasetSummary
+from oracle_sae.workflows import RunTemplateWriteResult
 
 from interp_lab.api import (
     PathPatchResult,
@@ -31,6 +32,7 @@ from interp_lab.api import (
     profile_environment,
     run,
     scale_plan,
+    scaffold_run,
     train_sae,
     validate_attribution_graph,
     validate_hf_sae_paths,
@@ -47,6 +49,7 @@ __all__ = [
     "PathPatchResult",
     "HfSaePathValidation",
     "PromptDatasetSummary",
+    "RunTemplateWriteResult",
     "SaeTrainingResult",
     "WrittenGraph",
     "WrittenGraphSummary",
@@ -64,6 +67,7 @@ __all__ = [
     "profile_environment",
     "run",
     "scale_plan",
+    "scaffold_run",
     "train_sae",
     "validate_attribution_graph",
     "validate_hf_sae_paths",

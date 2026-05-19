@@ -512,3 +512,50 @@ def test_run_config_list_args_record_outputs(tmp_path: Path):
     assert exit_code == 0
     assert manifest["steps"][0]["outputs"][0]["path"] == str((run_dir / "demo").resolve())
     assert manifest["outputs"][0]["kind"] == "directory"
+
+
+def test_init_run_scaffolds_editable_sae_workflow(tmp_path: Path, capsys):
+    config = tmp_path / "sae-run.json"
+    run_dir = tmp_path / "sae-run"
+
+    exit_code = main(
+        [
+            "init-run",
+            "--workflow",
+            "sae",
+            "--model",
+            "distilgpt2",
+            "--criterion",
+            "unit prediction",
+            "--positive-prompt",
+            "The answer is measured in meters.",
+            "--negative-prompt",
+            "The answer is a person's name.",
+            "--preset",
+            "production",
+            "--include-causal",
+            "--target-token",
+            "auto",
+            "--run-dir",
+            str(run_dir),
+            "--out",
+            str(config),
+        ]
+    )
+
+    data = json.loads(config.read_text(encoding="utf-8"))
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "interp-lab run" in output
+    assert [step["command"] for step in data["steps"]] == [
+        "build-prompts",
+        "train-sae",
+        "inspect",
+        "export-attribution-graph",
+    ]
+    assert data["steps"][1]["args"]["preset"] == "production"
+    assert data["steps"][1]["args"]["causal_out"] == "{run_dir}/sae/interventions.jsonl"
+    assert data["steps"][1]["args"]["target_token"] == ["auto"]
+
+    assert main(["run", str(config), "--dry-run"]) == 0
+    assert "interp-lab train-sae" in capsys.readouterr().out

@@ -91,9 +91,21 @@ result = train_sae(
 ## Run Configs
 
 ```python
-from interp_lab import run
+from interp_lab import run, scaffold_run
 
-run("examples/run_records.json")
+scaffold = scaffold_run(
+    out="runs/distilgpt2-sae.json",
+    workflow="sae",
+    model="distilgpt2",
+    criterion="the next token should be a physical measurement unit",
+    positive_prompt="The answer is measured in meters.",
+    negative_prompt="The answer is a person's name.",
+    include_causal=True,
+    target_token="auto",
+    run_dir="reports/distilgpt2-sae-run",
+)
+
+run(scaffold.path)
 ```
 
 ## Diagnostics

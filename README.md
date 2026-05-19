@@ -105,6 +105,23 @@ interp-lab run examples/run_records.json
 
 This writes a run manifest with the tool version, platform, input hashes, executed steps, per-step output artifacts, and an aggregate output inventory. Run configs can be JSON, TOML, or YAML.
 
+Generate an editable run config for a common workflow:
+
+```bash
+interp-lab init-run \
+  --workflow sae \
+  --model distilgpt2 \
+  --criterion "the next token should be a physical measurement unit" \
+  --positive-prompt "The answer is measured in meters." \
+  --negative-prompt "The answer is a person's name." \
+  --include-causal \
+  --target-token auto \
+  --run-dir reports/distilgpt2-sae-run \
+  --out runs/distilgpt2-sae.json
+```
+
+Then run it with `interp-lab run runs/distilgpt2-sae.json`. The generated JSON is meant to be edited before larger runs.
+
 Export activation records from a real Hugging Face model:
 
 ```bash

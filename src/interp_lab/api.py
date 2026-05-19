@@ -58,6 +58,7 @@ from oracle_sae.sae_training import (
 )
 from oracle_sae.schema import InspectionReport, MatchReport
 from oracle_sae.scaling import ScalePlan
+from oracle_sae.workflows import RunTemplateWriteResult, write_run_template
 
 
 @dataclass(frozen=True)
@@ -144,6 +145,62 @@ def build_prompts(
         positive_score=positive_score,
         negative_score=negative_score,
         id_prefix=id_prefix,
+    )
+
+
+def scaffold_run(
+    *,
+    out: str | Path,
+    workflow: str,
+    model: str,
+    criterion: str,
+    run_dir: str | Path = "reports/interp-run",
+    records: str | Path | None = None,
+    interventions: str | Path | None = None,
+    dataset: str | Path | None = None,
+    positive: str | Path | list[str | Path] | None = None,
+    negative: str | Path | list[str | Path] | None = None,
+    positive_prompt: str | list[str] | None = None,
+    negative_prompt: str | list[str] | None = None,
+    split: str = "paragraphs",
+    delimiter: str | None = None,
+    top_k: int = 8,
+    features_per_layer: int = 16,
+    layers: str | None = None,
+    preset: str = "minimal",
+    layer: int | None = None,
+    device: str = "cpu",
+    max_length: int | None = None,
+    include_causal: bool = False,
+    target_token: str | list[str] | None = None,
+    force: bool = False,
+) -> RunTemplateWriteResult:
+    """Write an editable `interp-lab run` config for a common workflow."""
+    return write_run_template(
+        out=out,
+        force=force,
+        workflow=workflow,
+        model=model,
+        criterion=criterion,
+        run_dir=run_dir,
+        records=records,
+        interventions=interventions,
+        dataset=dataset,
+        positive=_as_optional_list(positive),
+        negative=_as_optional_list(negative),
+        positive_prompt=_as_optional_list(positive_prompt),
+        negative_prompt=_as_optional_list(negative_prompt),
+        split=split,
+        delimiter=delimiter,
+        top_k=top_k,
+        features_per_layer=features_per_layer,
+        layers=layers,
+        preset=preset,
+        layer=layer,
+        device=device,
+        max_length=max_length,
+        include_causal=include_causal,
+        target_token=_as_optional_list(target_token),
     )
 
 

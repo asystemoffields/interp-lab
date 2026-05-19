@@ -12,6 +12,7 @@ from interp_lab import (
     publish_hf_artifact,
     run,
     scale_plan,
+    scaffold_run,
     train_sae,
     validate_attribution_graph,
     validate_hf_sae_paths,
@@ -81,6 +82,23 @@ def test_build_prompts_public_api_accepts_files_and_inline_prompts(tmp_path: Pat
     assert result.negative_count == 1
     assert rows[0]["prompt_id"] == "unit-positive-001"
     assert rows[-1]["criterion_score"] == 0.0
+
+
+def test_scaffold_run_public_api_writes_records_workflow(tmp_path: Path):
+    result = scaffold_run(
+        out=tmp_path / "run.json",
+        workflow="records",
+        model="m",
+        criterion="benchmark awareness",
+        run_dir=tmp_path / "run",
+        records=tmp_path / "records.jsonl",
+        top_k=3,
+    )
+
+    assert result.path == tmp_path / "run.json"
+    assert result.config["steps"][0]["command"] == "inspect"
+    assert result.config["steps"][0]["args"]["records"] == str(tmp_path / "records.jsonl")
+    assert json.loads(result.path.read_text(encoding="utf-8"))["steps"][1]["command"] == "export-attribution-graph"
 
 
 def test_train_sae_api_from_records(tmp_path: Path):

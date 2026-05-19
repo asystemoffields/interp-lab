@@ -54,6 +54,7 @@ from oracle_sae.transformerlens_records import (
     build_transformerlens_export_parser,
     run_transformerlens_export_from_args,
 )
+from oracle_sae.workflows import build_init_run_parser, run_init_run_from_args
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -200,6 +201,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Template variable as KEY=VALUE. Usable in config strings as {KEY} or ${KEY}.",
     )
     run.set_defaults(func=run_config)
+
+    init_run = subparsers.add_parser(
+        "init-run",
+        help="Write an editable run config for common workflows.",
+        parents=[build_init_run_parser()],
+        add_help=False,
+    )
+    init_run.set_defaults(func=run_init_run)
 
     export_hf = subparsers.add_parser(
         "export-hf-records",
@@ -398,6 +407,13 @@ def run_config(args: argparse.Namespace) -> int:
         ),
         command_runner=main,
     )
+
+
+def run_init_run(args: argparse.Namespace) -> int:
+    result = run_init_run_from_args(args)
+    print(f"Wrote {result.path}")
+    print(f"Run with: interp-lab run {result.path}")
+    return 0
 
 
 def run_export_hf_records(args: argparse.Namespace) -> int:
