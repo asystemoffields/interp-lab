@@ -72,7 +72,10 @@ def test_attribution_graph_accepts_measured_path_patch_edges():
     path_edges = [edge for edge in graph["edges"] if edge["type"] == "path_patch"]
     assert path_edges
     assert path_edges[0]["mean_target_activation_delta"] == 0.2
+    assert path_edges[0]["best_strength"]["strength"] == 2.0
+    assert path_edges[0]["by_strength"][0]["mean_score_delta"] == 0.02
     assert graph["mechanism_summary"]["candidate_paths"][0]["evidence"] == "path_patch"
+    assert graph["mechanism_summary"]["candidate_paths"][0]["best_strength"]["strength"] == 2.0
     assert "held-out prompts" in graph["mechanism_summary"]["validation_plan"][0]
 
 

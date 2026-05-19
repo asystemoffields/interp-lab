@@ -297,7 +297,12 @@ def _path_patch_edges(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for row in rows
             if row.get("score_delta") is not None
         ]
-        strengths = sorted({_float(row.get("strength")) for row in rows})
+        by_strength = _path_strength_summary(rows)
+        best_strength = max(
+            by_strength,
+            key=lambda item: abs(float(item["mean_target_activation_delta"])),
+            default=None,
+        )
         prompts = {str(row.get("prompt_id", "")) for row in rows}
         edges.append(
             {
@@ -308,9 +313,11 @@ def _path_patch_edges(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "mean_target_activation_delta": round(_mean(deltas), 6),
                 "mean_abs_target_activation_delta": round(_mean([abs(value) for value in deltas]), 6),
                 "mean_score_delta": round(_mean(score_deltas), 6) if score_deltas else None,
+                "best_strength": best_strength,
+                "by_strength": by_strength,
                 "record_count": len(rows),
                 "prompt_count": len(prompts),
-                "strengths": strengths,
+                "strengths": [item["strength"] for item in by_strength],
             }
         )
     edges.sort(key=lambda edge: edge["mean_abs_target_activation_delta"], reverse=True)
@@ -547,6 +554,7 @@ def _candidate_path_summaries(
                 "mean_target_activation_delta": edge["mean_target_activation_delta"],
                 "mean_abs_target_activation_delta": edge["mean_abs_target_activation_delta"],
                 "mean_score_delta": edge.get("mean_score_delta"),
+                "best_strength": edge.get("best_strength"),
                 "record_count": edge["record_count"],
             }
         )
@@ -611,6 +619,30 @@ def _strong_causal_score(card: FeatureCard) -> float:
 
 def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _path_strength_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[float, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(_float(row.get("strength")), []).append(row)
+    summary = []
+    for strength, strength_rows in sorted(grouped.items()):
+        deltas = [_float(row.get("target_activation_delta")) for row in strength_rows]
+        score_deltas = [
+            _float(row.get("score_delta"))
+            for row in strength_rows
+            if row.get("score_delta") is not None
+        ]
+        summary.append(
+            {
+                "strength": round(strength, 6),
+                "record_count": len(strength_rows),
+                "mean_target_activation_delta": round(_mean(deltas), 6),
+                "mean_abs_target_activation_delta": round(_mean([abs(value) for value in deltas]), 6),
+                "mean_score_delta": round(_mean(score_deltas), 6) if score_deltas else None,
+            }
+        )
+    return summary
 
 
 def _float(value: Any) -> float:

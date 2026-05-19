@@ -135,6 +135,106 @@ interp-lab inspect \
   --out reports/real-small/distilgpt2-unit/trained-sae/inspect
 ```
 
+Run an SAE path-patching smoke test with a tiny local/open model:
+
+```bash
+interp-lab train-sae \
+  --preset minimal \
+  --hf-model sshleifer/tiny-gpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --layer 1 \
+  --latent-dim 4 \
+  --epochs 5 \
+  --batch-size 4 \
+  --method torch \
+  --out reports/real-small/tiny-gpt2-unit/sae-layer1/sae.json \
+  --records-out reports/real-small/tiny-gpt2-unit/sae-layer1/records.jsonl \
+  --max-length 32
+
+interp-lab train-sae \
+  --preset minimal \
+  --hf-model sshleifer/tiny-gpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --layer 2 \
+  --latent-dim 4 \
+  --epochs 5 \
+  --batch-size 4 \
+  --method torch \
+  --out reports/real-small/tiny-gpt2-unit/sae-layer2/sae.json \
+  --records-out reports/real-small/tiny-gpt2-unit/sae-layer2/records.jsonl \
+  --max-length 32
+```
+
+Inspect both SAE layers:
+
+```bash
+interp-lab inspect \
+  --model sshleifer/tiny-gpt2 \
+  --criterion "the next token should be a physical measurement unit" \
+  --backend records \
+  --records reports/real-small/tiny-gpt2-unit/sae-layer1/records.jsonl \
+  --top-k 4 \
+  --out reports/real-small/tiny-gpt2-unit/sae-layer1/report
+
+interp-lab inspect \
+  --model sshleifer/tiny-gpt2 \
+  --criterion "the next token should be a physical measurement unit" \
+  --backend records \
+  --records reports/real-small/tiny-gpt2-unit/sae-layer2/records.jsonl \
+  --top-k 4 \
+  --out reports/real-small/tiny-gpt2-unit/sae-layer2/report
+```
+
+Patch source SAE latents from layer 1 and measure downstream layer-2 SAE latents:
+
+```bash
+interp-lab export-hf-sae-paths \
+  --model sshleifer/tiny-gpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --criterion "the next token should be a physical measurement unit" \
+  --source-sae reports/real-small/tiny-gpt2-unit/sae-layer1/sae.json \
+  --target-sae reports/real-small/tiny-gpt2-unit/sae-layer2/sae.json \
+  --source-report reports/real-small/tiny-gpt2-unit/sae-layer1/report/report.json \
+  --target-report reports/real-small/tiny-gpt2-unit/sae-layer2/report/report.json \
+  --source-top-k 2 \
+  --target-top-k 2 \
+  --skip-behavior-score \
+  --strength-sweep=-2,2 \
+  --max-length 32 \
+  --out reports/real-small/tiny-gpt2-unit/paths/layer1-to-layer2.jsonl
+```
+
+Optionally include output behavior scoring:
+
+```bash
+interp-lab export-hf-sae-paths \
+  --model sshleifer/tiny-gpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --criterion "the next token should be a physical measurement unit" \
+  --source-sae reports/real-small/tiny-gpt2-unit/sae-layer1/sae.json \
+  --target-sae reports/real-small/tiny-gpt2-unit/sae-layer2/sae.json \
+  --source-report reports/real-small/tiny-gpt2-unit/sae-layer1/report/report.json \
+  --target-report reports/real-small/tiny-gpt2-unit/sae-layer2/report/report.json \
+  --source-top-k 1 \
+  --target-top-k 1 \
+  --target-token auto \
+  --strength-sweep=2 \
+  --max-length 32 \
+  --out reports/real-small/tiny-gpt2-unit/paths/layer1-to-layer2-behavior.jsonl
+```
+
+Fuse the layer reports and measured path records into an attribution graph:
+
+```bash
+interp-lab export-attribution-graph \
+  --report reports/real-small/tiny-gpt2-unit/sae-layer1/report/report.json \
+  --report reports/real-small/tiny-gpt2-unit/sae-layer2/report/report.json \
+  --path-records reports/real-small/tiny-gpt2-unit/paths/layer1-to-layer2.jsonl \
+  --path-records reports/real-small/tiny-gpt2-unit/paths/layer1-to-layer2-behavior.jsonl \
+  --include-similarity-edges \
+  --out reports/real-small/tiny-gpt2-unit/paths/graph.json
+```
+
 Compare DistilGPT-2 and GPT-2 reports:
 
 ```bash
@@ -169,6 +269,13 @@ The production-oriented SAE smoke run trained on token-level rows with top-k spa
 - reconstruction MSE `0.9318`, validation MSE `0.8468`, average L0 `27.64`, dead latents `0`;
 - SAE latent `SAE:L6:F58` produced mean directed effect `0.080` and mean side effect `0.001` under decoder steering.
 
+The tiny GPT-2 path-patching smoke run validated the local/open attribution loop:
+
+- layer-1 and layer-2 four-latent SAEs trained successfully on CPU;
+- `export-hf-sae-paths` wrote `96` source-to-target path rows for two source latents, two target latents, two steering strengths, and twelve prompts;
+- the strongest measured internal path in the fused graph had mean absolute target-latent delta about `0.62` at strength `2`;
+- behavior-scored path rows also wrote successfully, with tiny output score movement on `sshleifer/tiny-gpt2`, as expected for a very small sanity model.
+
 The cross-model matcher handled both cases:
 
 - Association reports produced high-scoring candidate equivalents across the two GPT-style models.
@@ -184,8 +291,11 @@ This validates the tool path on real small models:
 3. Export intervention records.
 4. Re-rank with causal evidence.
 5. Match candidate equivalents across models.
+6. Patch source SAE latents and measure downstream SAE latent paths.
+7. Fuse reports and path records into an attribution graph.
 
 It also shows the useful split between two modes:
 
 - Raw hidden dimensions are convenient smoke-test units and often reveal associated structure.
 - Learned directions, SAE features, or crosscoder features are stronger candidates for causal steering and cross-model equivalence.
+- Path-patching records are the bridge from ranked feature cards to circuit-style claims: they measure whether one feature intervention changes another feature downstream.
