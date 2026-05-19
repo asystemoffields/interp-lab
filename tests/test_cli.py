@@ -341,6 +341,8 @@ def test_validate_attribution_graph_command(tmp_path: Path):
             "1",
             "--out",
             str(out),
+            "--graph-out",
+            str(tmp_path / "validated-graph.json"),
         ]
     )
 
@@ -348,6 +350,7 @@ def test_validate_attribution_graph_command(tmp_path: Path):
     assert exit_code == 0
     assert data["path_validations"][0]["status"] == "robust"
     assert out.with_suffix(".md").exists()
+    assert (tmp_path / "validated-graph.json").exists()
 
 
 def test_run_config_writes_manifest_and_report(tmp_path: Path):

@@ -241,10 +241,11 @@ Validate candidate graph paths with repeated or held-out path records:
 interp-lab validate-attribution-graph \
   --graph reports/sae-paths/graph.json \
   --path-records reports/sae-paths/heldout-layer6-to-layer10.jsonl \
-  --out reports/sae-paths/validation.json
+  --out reports/sae-paths/validation.json \
+  --graph-out reports/sae-paths/validated-graph.json
 ```
 
-This writes JSON and Markdown summaries with effect sizes, control comparisons, sign consistency, confidence intervals, and a path status such as `robust`, `suggestive`, `weak`, or `failed_control`.
+This writes JSON and Markdown summaries with effect sizes, control comparisons, sign consistency, confidence intervals, and a path status such as `robust`, `suggestive`, `weak`, or `failed_control`. `--graph-out` writes a copy of the attribution graph with validation attached to matching path edges and candidate paths.
 
 Rerun the graph's top SAE paths on held-out prompts and validate them in one step:
 
@@ -257,6 +258,7 @@ interp-lab validate-hf-sae-paths \
   --target-sae reports/sae-layer10/sae.json \
   --path-records-out reports/sae-paths/heldout-paths.jsonl \
   --out reports/sae-paths/heldout-validation.json \
+  --graph-out reports/sae-paths/heldout-validated-graph.json \
   --random-source-controls 2
 ```
 

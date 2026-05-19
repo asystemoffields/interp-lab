@@ -1,7 +1,12 @@
 import json
 from pathlib import Path
 
-from oracle_sae.graph_validation import build_graph_validation_report, export_graph_validation_report, select_graph_path_pairs
+from oracle_sae.graph_validation import (
+    annotate_graph_with_validation,
+    build_graph_validation_report,
+    export_graph_validation_report,
+    select_graph_path_pairs,
+)
 
 
 def test_graph_validation_classifies_robust_path_against_controls():
@@ -46,7 +51,15 @@ def test_graph_validation_marks_control_matched_path_as_failed_control():
 
 def test_export_graph_validation_report_writes_json_and_markdown(tmp_path: Path):
     graph_path = tmp_path / "graph.json"
-    graph_path.write_text(json.dumps(_graph()), encoding="utf-8")
+    graph = _graph()
+    graph["edges"] = [
+        {
+            "source": "SAE:L1:F1",
+            "target": "SAE:L2:F8",
+            "type": "path_patch",
+        }
+    ]
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
     records_path = tmp_path / "paths.jsonl"
     records_path.write_text(
         "\n".join(json.dumps(row) for row in [_path_row("p1", 0.2), _path_row("p1", 0.02, control=True)]),
@@ -57,12 +70,34 @@ def test_export_graph_validation_report_writes_json_and_markdown(tmp_path: Path)
         graph_path=graph_path,
         path_records_path=records_path,
         out_path=tmp_path / "validation.json",
+        graph_out_path=tmp_path / "validated-graph.json",
         min_prompt_count=1,
     )
 
     assert result.json_path.exists()
     assert result.markdown_path.exists()
+    assert result.annotated_graph_path is not None
+    assert result.annotated_graph_path.exists()
+    annotated = json.loads(result.annotated_graph_path.read_text(encoding="utf-8"))
+    assert annotated["edges"][0]["validation"]["status"] == "robust"
+    assert annotated["mechanism_summary"]["candidate_paths"][0]["validation"]["status"] == "robust"
     assert "Attribution Graph Validation" in result.markdown_path.read_text(encoding="utf-8")
+
+
+def test_annotate_graph_with_validation_preserves_input_graph():
+    graph = _graph()
+    graph["edges"] = [{"source": "SAE:L1:F1", "target": "SAE:L2:F8", "type": "path_patch"}]
+    report = build_graph_validation_report(
+        graph,
+        path_records=[_path_row("p1", 0.2), _path_row("p1", 0.02, control=True)],
+        min_prompt_count=1,
+    )
+
+    annotated = annotate_graph_with_validation(graph, report)
+
+    assert "validation" not in graph["edges"][0]
+    assert annotated["edges"][0]["validation"]["status"] == "robust"
+    assert annotated["metadata"]["graph_validation"]["summary"]["validated_path_count"] == 1
 
 
 def test_select_graph_path_pairs_deduplicates_candidate_paths():

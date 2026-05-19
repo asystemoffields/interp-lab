@@ -450,6 +450,8 @@ def run_validate_hf_sae_paths(args: argparse.Namespace) -> int:
     print(f"Wrote {result.path_records_path}")
     print(f"Wrote {result.validation.json_path}")
     print(f"Wrote {result.validation.markdown_path}")
+    if result.validation.annotated_graph_path is not None:
+        print(f"Wrote {result.validation.annotated_graph_path}")
     return 0
 
 
@@ -472,6 +474,8 @@ def run_validate_attribution_graph(args: argparse.Namespace) -> int:
     result = run_graph_validation_from_args(args)
     print(f"Wrote {result.json_path}")
     print(f"Wrote {result.markdown_path}")
+    if result.annotated_graph_path is not None:
+        print(f"Wrote {result.annotated_graph_path}")
     return 0
 
 

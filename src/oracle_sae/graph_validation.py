@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ class GraphValidationWriteResult:
     report: dict[str, Any]
     json_path: Path
     markdown_path: Path
+    annotated_graph_path: Path | None = None
 
 
 def export_graph_validation_report(
@@ -31,6 +33,7 @@ def export_graph_validation_report(
     path_records_path: str | Path | list[str | Path],
     out_path: str | Path,
     markdown_out_path: str | Path | None = None,
+    graph_out_path: str | Path | None = None,
     top_k: int = 8,
     min_effect: float = DEFAULT_MIN_EFFECT,
     min_specificity: float = DEFAULT_MIN_SPECIFICITY,
@@ -60,7 +63,18 @@ def export_graph_validation_report(
     markdown_path = Path(markdown_out_path) if markdown_out_path is not None else json_path.with_suffix(".md")
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path.write_text(render_graph_validation_markdown(report), encoding="utf-8")
-    return GraphValidationWriteResult(report=report, json_path=json_path, markdown_path=markdown_path)
+    annotated_graph_path = None
+    if graph_out_path is not None:
+        annotated_graph = annotate_graph_with_validation(graph, report)
+        annotated_graph_path = Path(graph_out_path)
+        annotated_graph_path.parent.mkdir(parents=True, exist_ok=True)
+        annotated_graph_path.write_text(json.dumps(annotated_graph, indent=2, sort_keys=True), encoding="utf-8")
+    return GraphValidationWriteResult(
+        report=report,
+        json_path=json_path,
+        markdown_path=markdown_path,
+        annotated_graph_path=annotated_graph_path,
+    )
 
 
 def build_graph_validation_report(
@@ -129,6 +143,33 @@ def select_graph_path_pairs(graph: dict[str, Any], *, top_k: int = 8) -> list[tu
     return pairs
 
 
+def annotate_graph_with_validation(graph: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
+    annotated = copy.deepcopy(graph)
+    validations = {
+        (item["source_feature_id"], item["target_feature_id"]): _validation_annotation(item)
+        for item in report.get("path_validations", [])
+    }
+    for edge in annotated.get("edges", []):
+        if edge.get("type") != "path_patch":
+            continue
+        validation = validations.get((str(edge.get("source")), str(edge.get("target"))))
+        if validation is not None:
+            edge["validation"] = validation
+    mechanism_summary = annotated.setdefault("mechanism_summary", {})
+    for path in mechanism_summary.get("candidate_paths", []):
+        validation = validations.get((str(path.get("source_feature_id")), str(path.get("target_feature_id"))))
+        if validation is not None:
+            path["validation"] = validation
+    mechanism_summary["path_validation_status_counts"] = report.get("summary", {}).get("status_counts", {})
+    metadata = annotated.setdefault("metadata", {})
+    metadata["graph_validation"] = {
+        "schema_version": report.get("schema_version"),
+        "created_at": report.get("created_at"),
+        "summary": report.get("summary", {}),
+    }
+    return annotated
+
+
 def render_graph_validation_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Attribution Graph Validation",
@@ -170,6 +211,7 @@ def build_graph_validation_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--out", required=True, help="Output validation JSON path.")
     parser.add_argument("--markdown-out", help="Output validation Markdown path. Defaults to --out with .md.")
+    parser.add_argument("--graph-out", help="Optional output graph JSON annotated with validation status.")
     parser.add_argument("--top-k", type=int, default=8)
     parser.add_argument("--min-effect", type=float, default=DEFAULT_MIN_EFFECT)
     parser.add_argument("--min-specificity", type=float, default=DEFAULT_MIN_SPECIFICITY)
@@ -190,6 +232,7 @@ def run_graph_validation_from_args(args: argparse.Namespace) -> GraphValidationW
         path_records_path=args.path_records,
         out_path=args.out,
         markdown_out_path=args.markdown_out,
+        graph_out_path=args.graph_out,
         top_k=args.top_k,
         min_effect=args.min_effect,
         min_specificity=args.min_specificity,
@@ -226,6 +269,25 @@ def _path_patch_candidates(graph: dict[str, Any]) -> list[dict[str, Any]]:
         for edge in graph.get("edges", [])
         if edge.get("type") == "path_patch" and edge.get("source") and edge.get("target")
     ]
+
+
+def _validation_annotation(item: dict[str, Any]) -> dict[str, Any]:
+    keys = [
+        "status",
+        "interpretation",
+        "record_count",
+        "control_record_count",
+        "prompt_count",
+        "mean_abs_target_activation_delta",
+        "control_mean_abs_target_activation_delta",
+        "path_specificity_score",
+        "effect_control_ratio",
+        "sign_consistency",
+        "target_activation_delta_ci",
+        "mean_score_delta",
+        "control_mean_abs_score_delta",
+    ]
+    return {key: item.get(key) for key in keys if key in item}
 
 
 def _group_path_records(records: list[dict[str, Any]]) -> dict[tuple[str, str], list[dict[str, Any]]]:

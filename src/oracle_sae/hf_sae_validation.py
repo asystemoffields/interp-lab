@@ -31,6 +31,7 @@ def export_hf_sae_path_validation(
     validation_out_path: str | Path,
     criterion: str | None = None,
     markdown_out_path: str | Path | None = None,
+    graph_out_path: str | Path | None = None,
     source_report_path: str | Path | None = None,
     target_report_path: str | Path | None = None,
     top_k: int = 8,
@@ -95,6 +96,7 @@ def export_hf_sae_path_validation(
         path_records_path=path_records_path,
         out_path=validation_out_path,
         markdown_out_path=markdown_out_path,
+        graph_out_path=graph_out_path,
         top_k=top_k,
         min_effect=min_effect,
         min_specificity=min_specificity,
@@ -123,6 +125,7 @@ def build_hf_sae_validation_parser() -> argparse.ArgumentParser:
     parser.add_argument("--path-records-out", required=True, help="Output path-patch JSONL path.")
     parser.add_argument("--out", required=True, help="Output validation JSON path.")
     parser.add_argument("--markdown-out", help="Output validation Markdown path. Defaults to --out with .md.")
+    parser.add_argument("--graph-out", help="Optional output graph JSON annotated with validation status.")
     parser.add_argument("--source-report", help="Optional source-layer report JSON for labels.")
     parser.add_argument("--target-report", help="Optional target-layer report JSON for labels.")
     parser.add_argument("--top-k", type=int, default=8, help="Candidate graph paths to validate.")
@@ -160,6 +163,7 @@ def run_hf_sae_validation_from_args(args: argparse.Namespace) -> HfSaePathValida
             validation_out_path=args.out,
             criterion=args.criterion,
             markdown_out_path=args.markdown_out,
+            graph_out_path=args.graph_out,
             source_report_path=args.source_report,
             target_report_path=args.target_report,
             top_k=args.top_k,

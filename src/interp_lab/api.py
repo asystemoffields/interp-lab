@@ -26,6 +26,7 @@ from oracle_sae.doctor import collect_diagnostics
 from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
 from oracle_sae.graphs import build_attribution_graph, export_attribution_graph, load_graph_report, load_path_patch_records
 from oracle_sae.graph_validation import (
+    annotate_graph_with_validation,
     build_graph_validation_report,
     export_graph_validation_report,
     render_graph_validation_markdown,
@@ -82,6 +83,7 @@ class WrittenGraphValidation:
     report: dict[str, Any]
     json_path: Path
     markdown_path: Path
+    annotated_graph_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,7 @@ class HfSaePathValidation:
     validation_json_path: Path
     validation_markdown_path: Path
     validation_report: dict[str, Any]
+    annotated_graph_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -501,6 +504,7 @@ def validate_attribution_graph(
     path_records: str | Path | list[str | Path],
     out: str | Path | None = None,
     markdown_out: str | Path | None = None,
+    graph_out: str | Path | None = None,
     top_k: int = 8,
     min_effect: float = 0.05,
     min_specificity: float = 0.02,
@@ -532,7 +536,18 @@ def validate_attribution_graph(
         markdown_path = Path(markdown_out) if markdown_out is not None else path.with_suffix(".md")
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(render_graph_validation_markdown(report), encoding="utf-8")
-        return WrittenGraphValidation(report=report, json_path=path, markdown_path=markdown_path)
+        annotated_graph_path = None
+        if graph_out is not None:
+            annotated_graph = annotate_graph_with_validation(graph, report)
+            annotated_graph_path = Path(graph_out)
+            annotated_graph_path.parent.mkdir(parents=True, exist_ok=True)
+            annotated_graph_path.write_text(json.dumps(annotated_graph, indent=2, sort_keys=True), encoding="utf-8")
+        return WrittenGraphValidation(
+            report=report,
+            json_path=path,
+            markdown_path=markdown_path,
+            annotated_graph_path=annotated_graph_path,
+        )
     if out is None:
         loaded_graph = json.loads(Path(graph).read_text(encoding="utf-8"))
         records = load_path_patch_records(path_records)
@@ -553,6 +568,7 @@ def validate_attribution_graph(
         path_records_path=path_records,
         out_path=out,
         markdown_out_path=markdown_out,
+        graph_out_path=graph_out,
         top_k=top_k,
         min_effect=min_effect,
         min_specificity=min_specificity,
@@ -565,6 +581,7 @@ def validate_attribution_graph(
         report=result.report,
         json_path=result.json_path,
         markdown_path=result.markdown_path,
+        annotated_graph_path=result.annotated_graph_path,
     )
 
 
@@ -579,6 +596,7 @@ def validate_hf_sae_paths(
     out: str | Path,
     criterion: str | None = None,
     markdown_out: str | Path | None = None,
+    graph_out: str | Path | None = None,
     source_report: str | Path | None = None,
     target_report: str | Path | None = None,
     top_k: int = 8,
@@ -615,6 +633,7 @@ def validate_hf_sae_paths(
         validation_out_path=out,
         criterion=criterion,
         markdown_out_path=markdown_out,
+        graph_out_path=graph_out,
         source_report_path=source_report,
         target_report_path=target_report,
         top_k=top_k,
@@ -646,6 +665,7 @@ def validate_hf_sae_paths(
         validation_json_path=result.validation.json_path,
         validation_markdown_path=result.validation.markdown_path,
         validation_report=result.validation.report,
+        annotated_graph_path=result.validation.annotated_graph_path,
     )
 
 

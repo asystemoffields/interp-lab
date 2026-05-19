@@ -176,11 +176,14 @@ def test_validate_attribution_graph_public_api(tmp_path: Path):
         path_records=paths,
         min_prompt_count=1,
         out=tmp_path / "validation.json",
+        graph_out=tmp_path / "validated-graph.json",
     )
 
     assert report["path_validations"][0]["status"] == "robust"
     assert written.json_path.exists()
     assert written.markdown_path.exists()
+    assert written.annotated_graph_path is not None
+    assert written.annotated_graph_path.exists()
 
 
 def test_validate_hf_sae_paths_public_api(tmp_path: Path, monkeypatch):
@@ -192,6 +195,7 @@ def test_validate_hf_sae_paths_public_api(tmp_path: Path, monkeypatch):
                 report={"ok": True},
                 json_path=tmp_path / "validation.json",
                 markdown_path=tmp_path / "validation.md",
+                annotated_graph_path=tmp_path / "validated-graph.json",
             ),
         )
 
@@ -208,10 +212,12 @@ def test_validate_hf_sae_paths_public_api(tmp_path: Path, monkeypatch):
         target_sae=tmp_path / "target.json",
         path_records_out=tmp_path / "paths.jsonl",
         out=tmp_path / "validation.json",
+        graph_out=tmp_path / "validated-graph.json",
     )
 
     assert result.selected_path_pairs == [("SAE:L1:F1", "SAE:L2:F8")]
     assert result.validation_report == {"ok": True}
+    assert result.annotated_graph_path == tmp_path / "validated-graph.json"
 
 
 def _row(model: str, prompt_id: str, score: float, features: dict[str, float]):
