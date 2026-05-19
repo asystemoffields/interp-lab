@@ -1,4 +1,5 @@
 import json
+from inspect import signature
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -7,9 +8,11 @@ from oracle_sae.adapters.records import ActivationRecordFeatureProvider
 from oracle_sae.criteria import HeuristicCriterionCompiler
 from oracle_sae.sae_training import (
     _split_prompt_indexes,
+    _select_latents,
     _training_settings,
     build_train_sae_parser,
     encode_with_artifact,
+    load_activation_matrix_from_hf,
     load_activation_matrix_from_records,
     run_train_sae_from_args,
     train_sae,
@@ -52,12 +55,15 @@ def test_train_sae_from_records_writes_artifact_and_activation_records(tmp_path:
     assert generated_rows[0]["model"] == "m"
     assert len(generated_rows[0]["features"]) == 2
     assert generated_rows[0]["features"][0]["feature_id"].startswith("SAE:")
+    first_feature_id = generated_rows[0]["features"][0]["feature_id"]
+    assert generated_rows[0]["feature_metadata"][first_feature_id]["sae_training"]["sample_count"] == 4
 
     evidence = ActivationRecordFeatureProvider(records_out).features_for(
         "m",
         HeuristicCriterionCompiler().compile("positive raw-a pattern"),
     )
     assert evidence
+    assert "sae_training" in evidence[0].metadata
     assert evidence[0].source == "trained-sae"
 
 
@@ -192,6 +198,55 @@ def test_training_records_mode_rejects_causal_out(tmp_path: Path):
 
     with pytest.raises(SystemExit, match="--causal-out"):
         run_train_sae_from_args(args)
+
+
+def test_hf_activation_loader_accepts_hf_loading_options():
+    parameters = signature(load_activation_matrix_from_hf).parameters
+
+    for name in [
+        "model_class",
+        "trust_remote_code",
+        "local_files_only",
+        "torch_dtype",
+        "device_map",
+        "model_kwargs",
+        "tokenizer_kwargs",
+    ]:
+        assert name in parameters
+
+
+def test_training_parser_accepts_separate_causal_dataset():
+    parser = build_train_sae_parser()
+
+    args = parser.parse_args(
+        [
+            "--hf-model",
+            "m",
+            "--dataset",
+            "train.jsonl",
+            "--causal-dataset",
+            "eval.jsonl",
+            "--out",
+            "sae.json",
+            "--causal-out",
+            "interventions.jsonl",
+            "--criterion",
+            "criterion",
+        ]
+    )
+
+    assert args.dataset == "train.jsonl"
+    assert args.causal_dataset == "eval.jsonl"
+
+
+def test_select_latents_keeps_forced_causal_latents():
+    selected = _select_latents(
+        [0.9, 0.8, 0.1, 0.0],
+        2,
+        force_latent_indexes={3},
+    )
+
+    assert selected == [(0, 0.9), (1, 0.8), (3, 0.0)]
 
 
 def _row(model: str, prompt_id: str, score: float, features: dict[str, float]):

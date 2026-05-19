@@ -1,0 +1,65 @@
+{"prompt_id":"code-train-001","text":"Write a Python function that parses a CSV file and returns","criterion_score":1.0}
+{"prompt_id":"code-train-002","text":"Implement a JavaScript helper for validating an email address","criterion_score":1.0}
+{"prompt_id":"code-train-003","text":"Here is a SQL query that joins customers and orders","criterion_score":1.0}
+{"prompt_id":"code-train-004","text":"Complete this Rust function signature:\nfn normalize_path","criterion_score":1.0}
+{"prompt_id":"code-train-005","text":"Return a JSON object with keys status, message, and","criterion_score":1.0}
+{"prompt_id":"code-train-006","text":"The shell command to recursively find Python files is","criterion_score":1.0}
+{"prompt_id":"code-train-007","text":"A TypeScript interface for this API response would include","criterion_score":1.0}
+{"prompt_id":"code-train-008","text":"Refactor this loop into a list comprehension:\nfor item in","criterion_score":1.0}
+{"prompt_id":"code-train-009","text":"The Dockerfile should start from a slim Python image and","criterion_score":1.0}
+{"prompt_id":"code-train-010","text":"Write unit tests for a function that sorts records by","criterion_score":1.0}
+{"prompt_id":"code-train-011","text":"In Go, create a struct with fields Name and","criterion_score":1.0}
+{"prompt_id":"code-train-012","text":"The regex should capture an ISO date like 2026-05","criterion_score":1.0}
+{"prompt_id":"code-train-013","text":"Use pandas to group the dataframe by region and aggregate","criterion_score":1.0}
+{"prompt_id":"code-train-014","text":"Create a React component that renders a controlled input for","criterion_score":1.0}
+{"prompt_id":"code-train-015","text":"A minimal HTTP server in Node.js can be written as","criterion_score":1.0}
+{"prompt_id":"code-train-016","text":"This error occurs because the tensor shape is","criterion_score":1.0}
+{"prompt_id":"code-train-017","text":"The migration should add an index on the account_id column","criterion_score":1.0}
+{"prompt_id":"code-train-018","text":"Use git to create a branch and commit the staged","criterion_score":1.0}
+{"prompt_id":"code-train-019","text":"The YAML configuration includes services, volumes, and environment","criterion_score":1.0}
+{"prompt_id":"code-train-020","text":"A safe parser should reject malformed input and return","criterion_score":1.0}
+{"prompt_id":"science-train-001","text":"The experiment measured the change in temperature after adding","criterion_score":0.0}
+{"prompt_id":"science-train-002","text":"A telescope collects light from distant galaxies and focuses","criterion_score":0.0}
+{"prompt_id":"science-train-003","text":"The enzyme catalyzes the reaction by lowering the activation","criterion_score":0.0}
+{"prompt_id":"science-train-004","text":"Ocean currents move heat from the equator toward","criterion_score":0.0}
+{"prompt_id":"science-train-005","text":"The mineral sample showed a crystalline structure under polarized","criterion_score":0.0}
+{"prompt_id":"writing-train-001","text":"The essay opens with a quiet scene in the","criterion_score":0.0}
+{"prompt_id":"writing-train-002","text":"A concise executive summary should name the decision, context","criterion_score":0.0}
+{"prompt_id":"writing-train-003","text":"The novel's narrator remembers the summer through fragments of","criterion_score":0.0}
+{"prompt_id":"writing-train-004","text":"The product announcement should sound confident, useful, and","criterion_score":0.0}
+{"prompt_id":"writing-train-005","text":"The grant proposal describes the community need and evaluation","criterion_score":0.0}
+{"prompt_id":"history-train-001","text":"The treaty changed the balance of power between neighboring","criterion_score":0.0}
+{"prompt_id":"history-train-002","text":"During the early industrial period, factories reorganized labor","criterion_score":0.0}
+{"prompt_id":"history-train-003","text":"The archive preserves letters, maps, and official records","criterion_score":0.0}
+{"prompt_id":"history-train-004","text":"The election result reflected regional differences in economic priorities","criterion_score":0.0}
+{"prompt_id":"history-train-005","text":"A primary source can reveal assumptions that later summaries","criterion_score":0.0}
+{"prompt_id":"business-train-001","text":"The quarterly forecast depends on retention, acquisition costs,","criterion_score":0.0}
+{"prompt_id":"business-train-002","text":"The operations team reduced delays by changing the handoff","criterion_score":0.0}
+{"prompt_id":"business-train-003","text":"A customer success review should identify risks before renewal","criterion_score":0.0}
+{"prompt_id":"business-train-004","text":"The pricing memo compares annual plans with usage-based","criterion_score":0.0}
+{"prompt_id":"business-train-005","text":"The hiring plan prioritizes roles that unblock product delivery","criterion_score":0.0}
+{"prompt_id":"math-train-001","text":"To solve the equation, isolate the variable on one","criterion_score":0.0}
+{"prompt_id":"math-train-002","text":"The triangle inequality gives an upper bound on the","criterion_score":0.0}
+{"prompt_id":"math-train-003","text":"A probability distribution assigns mass to each possible outcome","criterion_score":0.0}
+{"prompt_id":"math-train-004","text":"The derivative describes the instantaneous rate of change at","criterion_score":0.0}
+{"prompt_id":"math-train-005","text":"The matrix has eigenvalues that determine the stability of","criterion_score":0.0}
+{"prompt_id":"dialog-train-001","text":"User: Can you summarize this meeting?\nAssistant: The main","criterion_score":0.0}
+{"prompt_id":"dialog-train-002","text":"User: What should I pack for the trip?\nAssistant:","criterion_score":0.0}
+{"prompt_id":"dialog-train-003","text":"User: Explain this policy in plain English.\nAssistant:","criterion_score":0.0}
+{"prompt_id":"dialog-train-004","text":"User: Draft a polite follow-up email.\nAssistant:","criterion_score":0.0}
+{"prompt_id":"dialog-train-005","text":"User: Give me three options for dinner.\nAssistant:","criterion_score":0.0}
+{"prompt_id":"data-train-001","text":"The table lists country, population, median age, and","criterion_score":0.0}
+{"prompt_id":"data-train-002","text":"A dashboard should show revenue, churn, and support","criterion_score":0.0}
+{"prompt_id":"data-train-003","text":"The survey responses were cleaned, deduplicated, and categorized","criterion_score":0.0}
+{"prompt_id":"data-train-004","text":"The chart compares monthly growth across three market segments","criterion_score":0.0}
+{"prompt_id":"data-train-005","text":"The report includes confidence intervals and notes the sample","criterion_score":0.0}
+{"prompt_id":"safety-train-001","text":"Before operating the machine, inspect the guard and emergency","criterion_score":0.0}
+{"prompt_id":"safety-train-002","text":"The medication label lists dosage, warnings, and possible","criterion_score":0.0}
+{"prompt_id":"safety-train-003","text":"A security review checks authentication, authorization, and logging","criterion_score":0.0}
+{"prompt_id":"safety-train-004","text":"The incident response plan defines escalation steps and owner","criterion_score":0.0}
+{"prompt_id":"safety-train-005","text":"The lab protocol requires gloves, ventilation, and labeled","criterion_score":0.0}
+{"prompt_id":"creative-train-001","text":"The song begins with a sparse piano motif and","criterion_score":0.0}
+{"prompt_id":"creative-train-002","text":"A story about a lighthouse keeper could begin with","criterion_score":0.0}
+{"prompt_id":"creative-train-003","text":"The visual design uses contrast, alignment, and whitespace","criterion_score":0.0}
+{"prompt_id":"creative-train-004","text":"The game level teaches the jump mechanic before adding","criterion_score":0.0}
+{"prompt_id":"creative-train-005","text":"The poem repeats a phrase until it changes meaning","criterion_score":0.0}

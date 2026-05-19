@@ -87,6 +87,29 @@ def test_scale_plan_uses_env_profile_as_advisory_route():
     assert any(action["id"] == "review_environment_route" for action in plan["agent_next_actions"])
 
 
+def test_scale_plan_flags_model_weights_that_exceed_local_memory():
+    env_profile = _fake_profile(
+        gpu_count=0,
+        total_gpu_memory=0,
+        max_gpu_memory=0,
+    )
+    env_profile["routing"] = build_environment_routing(env_profile)
+
+    plan = ScalePlan(
+        model_params=5_000_000_000,
+        tokens=12,
+        d_model=1536,
+        selected_layers=1,
+        latent_dim=512,
+        dtype="bf16",
+        profile="local-cpu",
+        model_weight_bytes=96 * 1024**3,
+        environment_profile=env_profile,
+    ).to_dict()
+
+    assert any("model weights exceed local available RAM" in item["message"] for item in plan["risk_flags"])
+
+
 def test_scale_plan_env_profile_path_cli(tmp_path: Path):
     env_profile = _fake_profile(
         gpu_count=0,

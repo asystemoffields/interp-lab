@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib
 import json
 import re
@@ -13,6 +14,7 @@ from oracle_sae.hf_records import PromptRecord, load_prompt_records, split_promp
 from oracle_sae.reporting import load_inspection_report
 
 FEATURE_PATTERN = re.compile(r"^L(?P<layer>\d+):D(?P<dimension>\d+)$")
+AUTO_TARGET_TOKEN = "auto"
 DEFAULT_TARGET_TOKENS = [
     " meters",
     " meter",
@@ -74,6 +76,9 @@ def export_hf_intervention_records(
     positive_indexes, negative_indexes = split_prompt_record_indexes(prompts)
     if not positive_indexes:
         raise ValueError("HF interventions need at least one positive-scored prompt")
+    requested_target_tokens = target_tokens
+    score_target_tokens = requested_target_tokens or DEFAULT_TARGET_TOKENS
+    token_strategy = target_token_strategy(requested_target_tokens)
 
     tokenizer, model, runtime_device = load_hf_text_model(
         transformers=transformers,
@@ -88,7 +93,14 @@ def export_hf_intervention_records(
         model_kwargs=model_kwargs,
         tokenizer_kwargs=tokenizer_kwargs,
     )
-    target_ids = _target_token_ids(tokenizer, target_tokens or DEFAULT_TARGET_TOKENS)
+    target_ids, resolved_target_tokens = resolve_target_token_ids(
+        model=model,
+        tokenizer=tokenizer,
+        prompts=prompts,
+        target_tokens=score_target_tokens,
+        device=runtime_device,
+        max_length=max_length,
+    )
     if not target_ids:
         raise ValueError("No target token ids resolved for intervention scoring")
 
@@ -110,7 +122,8 @@ def export_hf_intervention_records(
                         "behavior_score": "target_token_probability_mass",
                         "negative_prompt_count": len(negative_indexes),
                         "positive_prompt_count": len(positive_indexes),
-                        "target_tokens": target_tokens or DEFAULT_TARGET_TOKENS,
+                        "target_token_strategy": token_strategy,
+                        "target_tokens": resolved_target_tokens,
                     },
                     positive_indexes=positive_indexes,
                     negative_indexes=negative_indexes,
@@ -137,7 +150,8 @@ def export_hf_intervention_records(
                         "group_members": [item[2] for item in group_ablations],
                         "negative_prompt_count": len(negative_indexes),
                         "positive_prompt_count": len(positive_indexes),
-                        "target_tokens": target_tokens or DEFAULT_TARGET_TOKENS,
+                        "target_token_strategy": token_strategy,
+                        "target_tokens": resolved_target_tokens,
                     },
                     positive_indexes=positive_indexes,
                     negative_indexes=negative_indexes,
@@ -282,10 +296,56 @@ def parse_target_tokens(values: list[str] | None) -> list[str] | None:
         for chunk in value.split(","):
             token = chunk.strip()
             if token:
-                if not token.startswith(" "):
+                if token.lower() == AUTO_TARGET_TOKEN:
+                    tokens.append(AUTO_TARGET_TOKEN)
+                    continue
+                raw = False
+                if token.startswith("raw:"):
+                    raw = True
+                    token = token[len("raw:") :]
+                elif token.startswith("space:"):
+                    token = token[len("space:") :]
+                if not raw and not token.startswith(" "):
                     token = " " + token
-                tokens.append(token)
+                if token:
+                    tokens.append(token)
     return tokens
+
+
+def target_tokens_are_auto(target_tokens: list[str]) -> bool:
+    return len(target_tokens) == 1 and target_tokens[0].lower() == AUTO_TARGET_TOKEN
+
+
+def target_token_strategy(target_tokens: list[str] | None) -> str:
+    if target_tokens is None:
+        return "default"
+    if target_tokens_are_auto(target_tokens):
+        return "auto"
+    return "explicit"
+
+
+def resolve_target_token_ids(
+    *,
+    model: Any,
+    tokenizer: Any,
+    prompts: list[PromptRecord],
+    target_tokens: list[str],
+    device: str,
+    max_length: int,
+    auto_top_k: int = 16,
+) -> tuple[list[int], list[str]]:
+    if target_tokens_are_auto(target_tokens):
+        token_ids = _auto_target_token_ids(
+            model=model,
+            tokenizer=tokenizer,
+            prompts=prompts,
+            device=device,
+            max_length=max_length,
+            top_k=auto_top_k,
+        )
+        labels = [_decode_token(tokenizer, token_id) for token_id in token_ids]
+        return token_ids, labels
+    return _target_token_ids(tokenizer, target_tokens), target_tokens
 
 
 def build_intervention_parser() -> argparse.ArgumentParser:
@@ -377,6 +437,58 @@ def _target_token_ids(tokenizer: Any, target_tokens: list[str]) -> list[int]:
         if ids:
             token_ids.add(int(ids[-1]))
     return sorted(token_ids)
+
+
+def _auto_target_token_ids(
+    *,
+    model: Any,
+    tokenizer: Any,
+    prompts: list[PromptRecord],
+    device: str,
+    max_length: int,
+    top_k: int,
+) -> list[int]:
+    positive_indexes, negative_indexes = split_prompt_record_indexes(prompts)
+    totals: dict[int, list[float]] = {}
+    try:
+        torch = importlib.import_module("torch")
+        no_grad = torch.no_grad()
+    except ImportError:
+        no_grad = contextlib.nullcontext()
+    with no_grad:
+        for index in sorted(positive_indexes | negative_indexes):
+            prompt = prompts[index]
+            encoded = tokenizer(
+                prompt.text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=max_length,
+            )
+            encoded = {key: value.to(device) for key, value in encoded.items()}
+            outputs = model(**encoded, use_cache=False)
+            probabilities = outputs.logits[0, -1].softmax(dim=-1)
+            count = min(top_k, int(probabilities.shape[-1]))
+            values, indices = probabilities.topk(count)
+            side = 0 if index in positive_indexes else 2
+            for value, token_id in zip(values.detach().cpu().tolist(), indices.detach().cpu().tolist()):
+                stats = totals.setdefault(int(token_id), [0.0, 0.0, 0.0, 0.0])
+                stats[side] += float(value)
+                stats[side + 1] += 1.0
+    ranked = []
+    for token_id, (positive_sum, positive_count, negative_sum, negative_count) in totals.items():
+        positive_mean = positive_sum / positive_count if positive_count else 0.0
+        negative_mean = negative_sum / negative_count if negative_count else 0.0
+        ranked.append((positive_mean - negative_mean, positive_mean, token_id))
+    ranked.sort(reverse=True)
+    return [token_id for score, positive_mean, token_id in ranked[:top_k] if score > 0 or positive_mean > 0]
+
+
+def _decode_token(tokenizer: Any, token_id: int) -> str:
+    try:
+        text = tokenizer.decode([token_id])
+    except Exception:
+        text = ""
+    return text if text else f"<token:{token_id}>"
 
 
 def _score_prompt(

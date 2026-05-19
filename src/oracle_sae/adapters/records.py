@@ -67,14 +67,17 @@ class ActivationRecordFeatureProvider:
         self.path = Path(path)
         self.signature_size = signature_size
         self.examples_per_feature = examples_per_feature
+        self._last_summary: dict[str, Any] = {}
 
     def features_for(self, model: str, criterion: Criterion) -> list[FeatureEvidence]:
         stats_by_feature: dict[str, _FeatureStats] = {}
         metadata_by_feature: dict[str, dict[str, Any]] = defaultdict(dict)
+        summary = _RecordSummary()
 
         for record in self._iter_records():
             if record.model != model:
                 continue
+            summary.add(record.criterion_score)
             for feature_id, activation in record.features.items():
                 stats = stats_by_feature.setdefault(
                     feature_id,
@@ -83,7 +86,9 @@ class ActivationRecordFeatureProvider:
                 stats.add(activation, record.criterion_score, record.prompt_id, record.text)
                 metadata_by_feature[feature_id].update(record.feature_metadata.get(feature_id, {}))
         if not stats_by_feature:
+            self._last_summary = summary.to_dict(feature_count=0)
             return []
+        self._last_summary = summary.to_dict(feature_count=len(stats_by_feature))
         for record in self._iter_records():
             if record.model != model:
                 continue
@@ -134,6 +139,9 @@ class ActivationRecordFeatureProvider:
 
     def _load_records(self) -> list[ActivationRecord]:
         return list(self._iter_records())
+
+    def report_metadata(self) -> dict[str, Any]:
+        return {"evidence": dict(self._last_summary)} if self._last_summary else {}
 
     def _iter_records(self):
         with self.path.open("r", encoding="utf-8") as handle:
@@ -280,6 +288,38 @@ class _FeatureStats:
         self.examples.append((activation, score, prompt_id, text))
         self.examples.sort(key=lambda item: abs(item[0]), reverse=True)
         del self.examples[self.examples_per_feature :]
+
+
+@dataclass
+class _RecordSummary:
+    count: int = 0
+    score_sum: float = 0.0
+    min_score: float | None = None
+    max_score: float | None = None
+    positive_count: int = 0
+    negative_count: int = 0
+
+    def add(self, score: float) -> None:
+        self.count += 1
+        self.score_sum += score
+        self.min_score = score if self.min_score is None else min(self.min_score, score)
+        self.max_score = score if self.max_score is None else max(self.max_score, score)
+        if score > 0:
+            self.positive_count += 1
+        else:
+            self.negative_count += 1
+
+    def to_dict(self, *, feature_count: int) -> dict[str, Any]:
+        return {
+            "source": "activation-records",
+            "record_count": self.count,
+            "feature_count": feature_count,
+            "criterion_score_mean": round(self.score_sum / self.count, 6) if self.count else 0.0,
+            "criterion_score_min": round(float(self.min_score), 6) if self.min_score is not None else 0.0,
+            "criterion_score_max": round(float(self.max_score), 6) if self.max_score is not None else 0.0,
+            "positive_record_count": self.positive_count,
+            "negative_record_count": self.negative_count,
+        }
 
 
 def _coerce_layer(raw_layer: Any, feature_id: str) -> int | None:

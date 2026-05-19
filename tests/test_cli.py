@@ -225,6 +225,42 @@ def test_export_attribution_graph_command(tmp_path: Path):
     assert data["schema_version"] == "interp-lab.attribution_graph.v1"
 
 
+def test_export_attribution_graph_command_accepts_path_records(tmp_path: Path):
+    exit_code = main(["demo", "--out", str(tmp_path / "demo")])
+    assert exit_code == 0
+    path_records = tmp_path / "paths.jsonl"
+    path_records.write_text(
+        json.dumps(
+            {
+                "source_feature_id": "L8:F1",
+                "target_feature_id": "L9:F2",
+                "target_activation_delta": 0.25,
+                "strength": 2.0,
+                "prompt_id": "p",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    graph = tmp_path / "graph.json"
+    exit_code = main(
+        [
+            "export-attribution-graph",
+            "--report",
+            str(tmp_path / "demo" / "model-a" / "report.json"),
+            "--path-records",
+            str(path_records),
+            "--out",
+            str(graph),
+        ]
+    )
+
+    data = json.loads(graph.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert any(edge["type"] == "path_patch" for edge in data["edges"])
+
+
 def test_run_config_writes_manifest_and_report(tmp_path: Path):
     records = tmp_path / "records.jsonl"
     rows = [

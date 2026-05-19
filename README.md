@@ -184,6 +184,8 @@ interp-lab train-sae \
 
 Production mode uses token-level activation rows, top-k sparse codes, held-out reconstruction metrics, dead-latent reporting, and optional SAE-latent steering interventions when `--causal-out` is provided. You can override any preset choice, such as `--epochs`, `--batch-size`, `--top-k`, or `--max-records`.
 
+Add `--target-token auto` when you want causal scoring tokens derived from the positive prompts. Prefix tokens with `raw:` for exact tokenizer text, which is often useful outside GPT-style leading-space tokenizers.
+
 Then inspect the learned SAE latents with the normal records backend:
 
 ```bash
@@ -193,6 +195,31 @@ interp-lab inspect \
   --backend records \
   --records reports/real-small/distilgpt2-unit/trained-sae/records.jsonl \
   --out reports/real-small/distilgpt2-unit/trained-sae/inspect
+```
+
+Measure real source-to-target SAE paths between two trained layers:
+
+```bash
+interp-lab export-hf-sae-paths \
+  --model distilgpt2 \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --criterion "the next token should be a physical measurement unit" \
+  --source-sae reports/sae-layer6/sae.json \
+  --target-sae reports/sae-layer10/sae.json \
+  --source-report reports/sae-layer6/report/report.json \
+  --target-report reports/sae-layer10/report/report.json \
+  --out reports/sae-paths/layer6-to-layer10.jsonl \
+  --strength-sweep=-4,-2,2,4
+```
+
+This steers selected source SAE decoder directions, re-encodes the downstream hidden state with the target SAE, and writes measured target-latent deltas plus optional behavior-score deltas. Feed the result into the attribution graph:
+
+```bash
+interp-lab export-attribution-graph \
+  --report reports/sae-layer6/report/report.json \
+  --report reports/sae-layer10/report/report.json \
+  --path-records reports/sae-paths/layer6-to-layer10.jsonl \
+  --out reports/sae-paths/graph.json
 ```
 
 `train-sae` can also train from an existing activation-record JSONL:
@@ -307,6 +334,8 @@ interp-lab export-attribution-graph \
   --include-similarity-edges
 ```
 
+Repeat `--report` to fuse reports from multiple layers. Graph exports include feature nodes, criterion edges, candidate feature-group supernodes, coactivation edges from aligned activation signatures, and a `mechanism_summary` with candidate paths plus validation next steps.
+
 Plan a large run before harvesting activations:
 
 ```bash
@@ -396,6 +425,8 @@ For `ablate`, `zero`, `remove`, `knockout`, `suppress`, and `clamp_down`, a scor
 
 Hugging Face exporters use positive-scored prompts for criterion effects and negative-scored prompts for side-effect estimates. That makes a report prefer features that move the requested behavior while leaving nearby unrelated prompts stable.
 
+When an intervention row includes `metadata.behavior_score`, reports summarize the baseline behavior score, target-token strategy, and target-token count. If the score is saturated or near zero, the report adds a note suggesting narrower tokens, harder prompts, `auto` targets, or exact `raw:` tokenizer forms.
+
 Rows with a `criterion` field are matched to the CLI criterion by normalized exact text. Omit `criterion`, or pass `--allow-intervention-criterion-mismatch`, when you want to reuse intervention files across paraphrased criteria.
 
 Control rows can be included in the same intervention JSONL by setting `metadata.control_type` to values such as `random_feature`, `matched_frequency`, or `placebo`. Reports include confidence intervals, control-effect summaries, and a `strong_causal_score`.
@@ -424,6 +455,7 @@ The SAE Lens backend is optional because it can pull in heavier model tooling. I
 - Gemma Scope and Qwen-Scope: named wrappers around SAE-suite metadata.
 - TransformerLens: hook-cache activation export.
 - NNsight: trace-based activation export for local or remote model execution.
+- Modal: remote GPU activation runs that return compact records and reports.
 - Hugging Face Hub: artifact publishing for reports, records, interventions, and trained SAE metadata.
 
 Each bridge is optional. The base package keeps the portable JSONL evidence formats stable, while heavier model tooling lives behind extras.
@@ -441,7 +473,14 @@ For large models, use interp-lab as the orchestration and evidence layer:
 
 `interp-lab profile-env` inspects CPU cores, RAM, disk space, local accelerators, optional packages, and sanitized environment flags such as whether Goodfire or NNsight credentials are present. It returns advisory route options, including local CPU, single GPU, cluster, remote API, and frontier-lab style harvesting.
 
-`interp-lab plan-scale` accepts human-friendly sizes such as `70B`, `1T`, `1B`, and `64GB`. It estimates dense activation storage, sparse feature-record storage, SAE parameter storage, causal validation forward passes, shard counts, risk flags, and agent next actions. Add `--from-env` to profile the current machine while planning, or `--env-profile other-machine.json` to plan against a saved profile from another environment. Every route suggestion can be overridden with `--profile`. Use `--json` or `--out scale-plan.json` when an AI agent or workflow should consume the plan directly. See `docs/SCALING.md` for the 1T+ path.
+`interp-lab plan-scale` accepts human-friendly sizes such as `70B`, `1T`, `1B`, and `64GB`. It estimates model-weight load, dense activation storage, sparse feature-record storage, SAE parameter storage, causal validation forward passes, shard counts, risk flags, and agent next actions. Add `--model-weight-size` when the checkpoint size is known, `--from-env` to profile the current machine while planning, or `--env-profile other-machine.json` to plan against a saved profile from another environment. Every route suggestion can be overridden with `--profile`. Use `--json` or `--out scale-plan.json` when an AI agent or workflow should consume the plan directly. See `docs/SCALING.md` for the 1T+ path.
+
+Modal users can run the Gemma 4 remote workflow directly:
+
+```bash
+modal run examples/modal_gemma4.py --workflow contrast --out-dir reports/gemma4-modal/contrast
+modal run examples/modal_gemma4.py --workflow hidden --out-dir reports/gemma4-modal/hidden
+```
 
 ## Architecture
 

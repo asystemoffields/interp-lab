@@ -92,15 +92,22 @@ class ScalePlan:
     causal_prompts: int = 256
     interventions_per_feature: int = 2
     train_batch_size: int = 4096
+    model_weight_bytes: int | None = None
     environment_profile: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         dtype_bytes = DTYPE_BYTES[self.dtype]
+        model_weight_bytes = (
+            self.model_weight_bytes
+            if self.model_weight_bytes is not None
+            else int(self.model_params * dtype_bytes)
+        )
         activation_bytes = self.tokens * self.d_model * self.selected_layers * dtype_bytes
         profile, profile_reason = _resolve_profile(
             self.profile,
             self.model_params,
             activation_bytes,
+            model_weight_bytes=model_weight_bytes,
             environment_profile=self.environment_profile,
         )
         preset = PROFILE_PRESETS[profile]
@@ -132,9 +139,11 @@ class ScalePlan:
             dtype_bytes=dtype_bytes,
             sparse_event_bytes=sparse_event_bytes,
             artifact_format=artifact_format,
+            has_explicit_model_weight_size=self.model_weight_bytes is not None,
         )
         risks = risk_flags_for_plan(
             model_params=self.model_params,
+            model_weight_bytes=model_weight_bytes,
             activation_bytes=activation_bytes,
             sparse_record_bytes=sparse_record_bytes,
             profile=profile,
@@ -146,12 +155,14 @@ class ScalePlan:
             environment_risk_flags_for_plan(
                 environment_profile=self.environment_profile,
                 selected_profile=profile,
+                model_weight_bytes=model_weight_bytes,
                 activation_bytes=activation_bytes,
                 training_memory_floor_bytes=training_memory_floor_bytes,
             )
         )
         recommendations = recommendations_for_plan(
             model_params=self.model_params,
+            model_weight_bytes=model_weight_bytes,
             activation_bytes=activation_bytes,
             sparse_record_bytes=sparse_record_bytes,
             shards=shards,
@@ -184,6 +195,7 @@ class ScalePlan:
                 "causal_prompts": self.causal_prompts,
                 "interventions_per_feature": self.interventions_per_feature,
                 "train_batch_size": self.train_batch_size,
+                "model_weight_size": self.model_weight_bytes,
                 "environment_profile": bool(self.environment_profile),
             },
             "profile": profile,
@@ -192,6 +204,7 @@ class ScalePlan:
             "assumptions": assumptions,
             "estimates": {
                 "dense_activation_storage": _byte_estimate(activation_bytes),
+                "model_weight_storage": _byte_estimate(model_weight_bytes),
                 "sparse_feature_record_storage": _byte_estimate(sparse_record_bytes),
                 "sae_parameter_storage": _byte_estimate(sae_parameter_bytes),
                 "sae_training_memory_floor": _byte_estimate(training_memory_floor_bytes),
@@ -229,6 +242,8 @@ class ScalePlan:
             "activation_storage_human": _format_bytes(activation_bytes),
             "activation_storage_per_shard_bytes": activation_bytes // max(shards, 1),
             "activation_storage_per_shard_human": _format_bytes(activation_bytes // max(shards, 1)),
+            "model_weight_bytes": model_weight_bytes,
+            "model_weight_human": _format_bytes(model_weight_bytes),
             "sae_parameter_bytes": sae_parameter_bytes,
             "sae_parameter_human": _format_bytes(sae_parameter_bytes),
         }
@@ -268,6 +283,11 @@ def build_scale_plan_parser() -> argparse.ArgumentParser:
     parser.add_argument("--causal-prompts", type=int, default=256, help="Prompts per causal validation batch.")
     parser.add_argument("--interventions-per-feature", type=int, default=2, help="Interventions per feature.")
     parser.add_argument("--train-batch-size", type=parse_count_int, default=4096, help="SAE train batch size for memory floor estimate.")
+    parser.add_argument(
+        "--model-weight-size",
+        type=parse_bytes,
+        help="Known resident model weight size, e.g. 9.54GB. Defaults to model_params * dtype bytes.",
+    )
     parser.add_argument(
         "--from-env",
         action="store_true",
@@ -324,6 +344,7 @@ def run_scale_plan_from_args(args: argparse.Namespace) -> dict[str, Any]:
         causal_prompts=args.causal_prompts,
         interventions_per_feature=args.interventions_per_feature,
         train_batch_size=args.train_batch_size,
+        model_weight_bytes=args.model_weight_size,
         environment_profile=environment_profile,
     ).to_dict()
     if args.out:
@@ -346,6 +367,7 @@ def render_scale_plan(plan: dict[str, Any]) -> str:
         f"Model parameters: {plan['model_params']:.3g}",
         f"Profile: {plan['profile']} ({plan['profile_reason']})",
         f"Artifact format: {plan['artifact_format']}",
+        f"Estimated model weights: {estimates['model_weight_storage']['human']}",
         f"Activation tokens: {plan['tokens']:,}",
         f"Captured hook points: {plan['selected_layers']}",
         f"Dense activation storage: {estimates['dense_activation_storage']['human']}",
@@ -387,6 +409,7 @@ def render_scale_plan(plan: dict[str, Any]) -> str:
 def recommendations_for_plan(
     *,
     model_params: float,
+    model_weight_bytes: int,
     activation_bytes: int,
     sparse_record_bytes: int,
     shards: int,
@@ -402,6 +425,8 @@ def recommendations_for_plan(
     ]
     if model_params >= 1e12:
         recommendations.append("Use remote inference or colocated activation harvesting for 1T+ models.")
+    if model_weight_bytes >= 8 * 1024**3 and profile == "local-cpu":
+        recommendations.append("Plan model loading explicitly; use quantization, offload, or a larger route for heavy weights.")
     if activation_bytes > 10 * 1024**4:
         recommendations.append("Store activations in shards and stream them into SAE training or feature ranking.")
     if sparse_record_bytes < activation_bytes:
@@ -420,6 +445,7 @@ def recommendations_for_plan(
 def risk_flags_for_plan(
     *,
     model_params: float,
+    model_weight_bytes: int,
     activation_bytes: int,
     sparse_record_bytes: int,
     profile: str,
@@ -451,6 +477,14 @@ def risk_flags_for_plan(
                 "level": "high",
                 "message": "The selected profile is too small for direct 1T+ model execution.",
                 "mitigation": "Use remote-api, cluster, or frontier-lab profile for model execution.",
+            }
+        )
+    if model_weight_bytes >= 80 * 1024**3 and profile in {"local-cpu", "single-gpu"}:
+        risks.append(
+            {
+                "level": "high",
+                "message": "The selected profile is small for the estimated model weight load.",
+                "mitigation": "Use a cluster, remote-api, frontier-lab route, or an explicitly quantized/offloaded runtime.",
             }
         )
     if sparse_record_bytes > 10 * 1024**4:
@@ -563,6 +597,7 @@ def environment_risk_flags_for_plan(
     *,
     environment_profile: dict[str, Any] | None,
     selected_profile: str,
+    model_weight_bytes: int,
     activation_bytes: int,
     training_memory_floor_bytes: int,
 ) -> list[dict[str, str]]:
@@ -598,6 +633,23 @@ def environment_risk_flags_for_plan(
             }
         )
     available_memory = int(memory.get("available_bytes") or memory.get("total_bytes") or 0)
+    total_memory = int(memory.get("total_bytes") or available_memory or 0)
+    if selected_profile == "local-cpu" and available_memory and model_weight_bytes > available_memory:
+        risks.append(
+            {
+                "level": "high",
+                "message": "Estimated model weights exceed local available RAM.",
+                "mitigation": "Use a smaller or quantized model, disk/offload-aware loading, or run on a larger/remote route.",
+            }
+        )
+    elif selected_profile == "local-cpu" and total_memory and model_weight_bytes > total_memory:
+        risks.append(
+            {
+                "level": "high",
+                "message": "Estimated model weights exceed local total RAM.",
+                "mitigation": "Use a smaller or quantized model, disk/offload-aware loading, or run on a larger/remote route.",
+            }
+        )
     if selected_profile == "local-cpu" and available_memory and training_memory_floor_bytes > available_memory:
         risks.append(
             {
@@ -616,11 +668,11 @@ def environment_risk_flags_for_plan(
                     "mitigation": "Use --env-profile from the GPU machine or choose a CPU, remote, or cluster profile.",
                 }
             )
-        elif max_gpu_memory and training_memory_floor_bytes > max_gpu_memory:
+        elif max_gpu_memory and model_weight_bytes + training_memory_floor_bytes > max_gpu_memory:
             risks.append(
                 {
                     "level": "medium",
-                    "message": "Estimated SAE training memory exceeds the largest detected GPU VRAM.",
+                    "message": "Estimated model weights plus SAE training memory exceed the largest detected GPU VRAM.",
                     "mitigation": "Lower latent_dim or batch size, use CPU offload, or train on a larger GPU/cluster route.",
                 }
             )
@@ -632,11 +684,12 @@ def _resolve_profile(
     model_params: float,
     activation_bytes: int,
     *,
+    model_weight_bytes: int,
     environment_profile: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     if profile != "auto":
         return profile, "selected explicitly"
-    base_profile, base_reason = _resolve_profile_from_job(model_params, activation_bytes)
+    base_profile, base_reason = _resolve_profile_from_job(model_params, activation_bytes, model_weight_bytes)
     if environment_profile is None:
         return base_profile, base_reason
     env_profile = str(environment_profile.get("routing", {}).get("suggested_profile") or "")
@@ -647,13 +700,17 @@ def _resolve_profile(
     return base_profile, f"{base_reason}; environment advisory route is {env_profile}"
 
 
-def _resolve_profile_from_job(model_params: float, activation_bytes: int) -> tuple[str, str]:
-    if model_params >= 1e12 or activation_bytes >= 100 * 1024**4:
+def _resolve_profile_from_job(
+    model_params: float,
+    activation_bytes: int,
+    model_weight_bytes: int,
+) -> tuple[str, str]:
+    if model_params >= 1e12 or model_weight_bytes >= 1024**4 or activation_bytes >= 100 * 1024**4:
         return "frontier-lab", "auto-selected for frontier-scale model or activation volume"
-    if activation_bytes >= 2 * 1024**4:
-        return "cluster", "auto-selected for multi-terabyte activation volume"
-    if activation_bytes >= 100 * 1024**3:
-        return "single-gpu", "auto-selected for medium activation volume"
+    if model_weight_bytes >= 80 * 1024**3 or activation_bytes >= 2 * 1024**4:
+        return "cluster", "auto-selected for large model load or multi-terabyte activation volume"
+    if model_weight_bytes >= 8 * 1024**3 or activation_bytes >= 100 * 1024**3:
+        return "single-gpu", "auto-selected for model load or medium activation volume"
     return "local-cpu", "auto-selected for small activation volume"
 
 
@@ -679,8 +736,20 @@ def _profile_rank(profile: str) -> int:
     return PROFILE_ORDER.get(profile, 0)
 
 
-def _assumptions(*, dtype_bytes: int, sparse_event_bytes: int, artifact_format: str) -> list[dict[str, Any]]:
+def _assumptions(
+    *,
+    dtype_bytes: int,
+    sparse_event_bytes: int,
+    artifact_format: str,
+    has_explicit_model_weight_size: bool,
+) -> list[dict[str, Any]]:
     return [
+        {
+            "id": "model_weight_storage",
+            "formula": "model_weight_size if provided else model_params * dtype_bytes",
+            "dtype_bytes": dtype_bytes,
+            "source": "explicit" if has_explicit_model_weight_size else "estimated",
+        },
         {
             "id": "dense_activation_storage",
             "formula": "tokens * d_model * selected_layers * dtype_bytes",

@@ -112,6 +112,21 @@ def test_scale_plan_marks_trillion_parameter_remote_path():
     assert any("1T+" in item for item in plan["recommendations"])
 
 
+def test_scale_plan_accounts_for_model_weight_load():
+    plan = ScalePlan(
+        model_params=5_000_000_000,
+        tokens=12,
+        d_model=1536,
+        selected_layers=1,
+        latent_dim=512,
+        dtype="bf16",
+    ).to_dict()
+
+    assert plan["profile"] == "single-gpu"
+    assert plan["estimates"]["model_weight_storage"]["bytes"] == 10_000_000_000
+    assert plan["model_weight_bytes"] == 10_000_000_000
+
+
 def test_scale_plan_accepts_human_friendly_values():
     assert parse_count_float("1T") == 1_000_000_000_000
     assert parse_count_int("1.5B") == 1_500_000_000

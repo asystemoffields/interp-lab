@@ -68,6 +68,9 @@ goodfire = [
 gguf = [
   "llama-cpp-python>=0.3"
 ]
+modal = [
+  "modal>=1.4"
+]
 publish = [
   "huggingface-hub>=1.0"
 ]
@@ -81,6 +84,7 @@ all = [
   "transformer-lens>=3.0",
   "nnsight>=0.6",
   "goodfire>=0.3",
+  "modal>=1.4",
   "huggingface-hub>=1.0"
 ]
 

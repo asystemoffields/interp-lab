@@ -11,6 +11,7 @@ from oracle_sae.schema import (
 )
 
 from interp_lab.api import (
+    PathPatchResult,
     SaeTrainingResult,
     WrittenGraph,
     WrittenInspection,
@@ -19,6 +20,7 @@ from interp_lab.api import (
     compare,
     doctor,
     inspect,
+    path_patch,
     publish_hf_artifact,
     profile_environment,
     run,
@@ -34,6 +36,7 @@ __all__ = [
     "FeatureFingerprint",
     "InspectionReport",
     "MatchReport",
+    "PathPatchResult",
     "SaeTrainingResult",
     "WrittenGraph",
     "WrittenInspection",
@@ -42,6 +45,7 @@ __all__ = [
     "compare",
     "doctor",
     "inspect",
+    "path_patch",
     "publish_hf_artifact",
     "profile_environment",
     "run",

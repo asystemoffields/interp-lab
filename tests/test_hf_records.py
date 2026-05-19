@@ -14,6 +14,7 @@ from oracle_sae.hf_interventions import (
     _register_gpt2_hidden_ablations,
     append_hf_group_activation_record,
     parse_target_tokens,
+    target_token_strategy,
 )
 
 
@@ -44,6 +45,24 @@ def test_parse_target_tokens_adds_leading_spaces():
         " kilogram",
     ]
     assert parse_target_tokens(None) is None
+
+
+def test_parse_target_tokens_supports_raw_prefix():
+    assert parse_target_tokens(["raw:def, return", "space:class"]) == [
+        "def",
+        " return",
+        " class",
+    ]
+
+
+def test_parse_target_tokens_supports_auto():
+    assert parse_target_tokens(["auto"]) == ["auto"]
+
+
+def test_target_token_strategy_tracks_default_auto_and_explicit():
+    assert target_token_strategy(None) == "default"
+    assert target_token_strategy(["auto"]) == "auto"
+    assert target_token_strategy([" Python"]) == "explicit"
 
 
 def test_parse_strength_sweep():

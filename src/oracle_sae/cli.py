@@ -26,6 +26,7 @@ from oracle_sae.hf_contrast import build_contrast_parser, run_contrast_from_args
 from oracle_sae.hf_interventions import build_intervention_parser, run_interventions_from_args
 from oracle_sae.hf_publish import build_hf_publish_parser, run_hf_publish_from_args
 from oracle_sae.hf_records import build_export_parser, run_export_from_args
+from oracle_sae.hf_sae_paths import build_hf_sae_paths_parser, run_hf_sae_paths_from_args
 from oracle_sae.nnsight_records import build_nnsight_export_parser, run_nnsight_export_from_args
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
@@ -236,6 +237,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     train_sae.set_defaults(func=run_train_sae)
 
+    hf_sae_paths = subparsers.add_parser(
+        "export-hf-sae-paths",
+        help="Patch source SAE latents and measure downstream SAE latent paths.",
+        parents=[build_hf_sae_paths_parser()],
+        add_help=False,
+    )
+    hf_sae_paths.set_defaults(func=run_export_hf_sae_paths)
+
     publish_hf = subparsers.add_parser(
         "publish-hf-artifact",
         help="Publish reports and artifacts to Hugging Face Hub.",
@@ -385,6 +394,12 @@ def run_train_sae(args: argparse.Namespace) -> int:
     print(f"Wrote {artifact_path}")
     if records_path is not None:
         print(f"Wrote {records_path}")
+    return 0
+
+
+def run_export_hf_sae_paths(args: argparse.Namespace) -> int:
+    path = run_hf_sae_paths_from_args(args)
+    print(f"Wrote {path}")
     return 0
 
 

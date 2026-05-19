@@ -53,11 +53,13 @@ def inspect_model(
             )
         )
     cards.sort(key=lambda card: card.importance, reverse=True)
+    metadata = {"feature_count": len(evidence_items), "kept_feature_count": len(cards)}
+    metadata.update(_provider_report_metadata(feature_provider))
     return InspectionReport(
         model=model,
         criterion=criterion,
         cards=cards[:top_k],
-        metadata={"feature_count": len(evidence_items), "kept_feature_count": len(cards)},
+        metadata=metadata,
     )
 
 
@@ -100,3 +102,11 @@ def _should_keep_evidence(
     if should_keep is None:
         return True
     return bool(should_keep(evidence, criterion))
+
+
+def _provider_report_metadata(feature_provider: FeatureProvider) -> dict:
+    metadata_for_report = getattr(feature_provider, "report_metadata", None)
+    if metadata_for_report is None:
+        return {}
+    metadata = metadata_for_report()
+    return dict(metadata) if metadata else {}

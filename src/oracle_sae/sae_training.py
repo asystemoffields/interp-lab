@@ -11,7 +11,12 @@ from typing import Any
 
 from oracle_sae.adapters.records import ActivationRecord
 from oracle_sae.hf_contrast import _register_gpt2_steering, _select_best_strength, parse_strength_sweep
-from oracle_sae.hf_interventions import DEFAULT_TARGET_TOKENS, parse_target_tokens
+from oracle_sae.hf_interventions import (
+    DEFAULT_TARGET_TOKENS,
+    parse_target_tokens,
+    resolve_target_token_ids,
+    target_token_strategy,
+)
 from oracle_sae.hf_loading import add_hf_loading_args, hf_loading_options_from_args, load_hf_text_model
 from oracle_sae.hf_records import PromptRecord, _pool_hidden_state, load_prompt_records
 from oracle_sae.math_utils import mean, norm, pearson
@@ -157,6 +162,7 @@ def train_sae_from_hf(
     *,
     model_name: str,
     dataset_path: str | Path,
+    causal_dataset_path: str | Path | None = None,
     out_path: str | Path,
     records_out: str | Path | None = None,
     layer: int | None = None,
@@ -229,6 +235,11 @@ def train_sae_from_hf(
     )
     artifact_path = write_sae_artifact(artifact, out_path)
     activation_records_path = None
+    causal_latent_indexes = (
+        {index for index, _score in _rank_latents_by_association(matrix, artifact)[:causal_top_k]}
+        if causal_out is not None
+        else set()
+    )
     if records_out is not None:
         activation_records_path = write_sae_activation_records(
             matrix,
@@ -236,20 +247,21 @@ def train_sae_from_hf(
             records_out,
             top_k_features=top_k_features,
             decoder_signature_size=decoder_signature_size,
+            force_latent_indexes=causal_latent_indexes,
         )
     if causal_out is not None:
         if criterion is None:
             raise ValueError("criterion is required when causal_out is set")
         export_hf_sae_interventions(
             model_name=model_name,
-            dataset_path=dataset_path,
+            dataset_path=causal_dataset_path or dataset_path,
             artifact=artifact,
             matrix=matrix,
             criterion=criterion,
             out_path=causal_out,
             top_k=causal_top_k,
             strength_sweep=causal_strength_sweep or [3.0, 10.0, 30.0],
-            target_tokens=target_tokens or DEFAULT_TARGET_TOKENS,
+            target_tokens=target_tokens,
             device=device,
             max_length=max_length,
             model_class=model_class,
@@ -339,6 +351,13 @@ def load_activation_matrix_from_hf(
     max_length: int = 128,
     max_records: int | None = None,
     seed: int = 0,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
 ) -> ActivationMatrix:
     torch = _optional_import("torch", "Install `interp-lab[hf]` or `interp-lab[train]` to train from HF activations.")
     transformers = _optional_import(
@@ -484,6 +503,7 @@ def write_sae_activation_records(
     *,
     top_k_features: int | None = None,
     decoder_signature_size: int = 128,
+    force_latent_indexes: set[int] | None = None,
 ) -> Path:
     activations = encode_with_artifact(matrix.values, artifact)
     path = Path(out_path)
@@ -491,9 +511,14 @@ def write_sae_activation_records(
     layer = artifact.get("layer")
     source_feature_ids = list(artifact["source_feature_ids"])
     decoder_rows = list(artifact["decoder_weight"])
+    training_summary = _sae_training_summary(artifact, sample_count=len(matrix.rows))
     with path.open("w", encoding="utf-8") as handle:
         for row, latent_values in zip(matrix.rows, activations):
-            selected = _select_latents(latent_values, top_k_features)
+            selected = _select_latents(
+                latent_values,
+                top_k_features,
+                force_latent_indexes=force_latent_indexes,
+            )
             features = []
             metadata = {}
             for latent_index, activation in selected:
@@ -513,6 +538,7 @@ def write_sae_activation_records(
                     "layer": layer,
                     "source": "trained-sae",
                     "decoder_top_sources": _top_decoder_sources(decoder, source_feature_ids, limit=8),
+                    "sae_training": training_summary,
                     "training_method": artifact["method"],
                 }
             handle.write(
@@ -532,6 +558,54 @@ def write_sae_activation_records(
     return path
 
 
+def _sae_training_summary(artifact: dict[str, Any], *, sample_count: int) -> dict[str, Any]:
+    metrics = dict(artifact.get("metrics", {}))
+    config = dict(artifact.get("config", {}))
+    latent_dim = int(artifact.get("latent_dim", 0) or 0)
+    dead_count = int(metrics.get("dead_latent_count", 0) or 0)
+    active_fraction = float(metrics.get("active_latent_fraction", 0.0) or 0.0)
+    summary: dict[str, Any] = {
+        "method": str(artifact.get("method", "unknown")),
+        "sample_count": int(sample_count),
+        "latent_dim": latent_dim,
+        "active_latent_fraction": round(active_fraction, 6),
+        "dead_latent_count": dead_count,
+        "average_l0": _round_optional(metrics.get("average_l0")),
+        "train_reconstruction_mse": _round_optional(metrics.get("train_reconstruction_mse")),
+        "validation_reconstruction_mse": _round_optional(metrics.get("validation_reconstruction_mse")),
+        "sparsity": str(config.get("sparsity", "")),
+        "top_k": config.get("top_k"),
+    }
+    advisories = []
+    dead_fraction = dead_count / latent_dim if latent_dim else 0.0
+    if sample_count < latent_dim:
+        advisories.append("Training rows are fewer than latents; collect more activations or reduce latent_dim.")
+    if dead_fraction >= 0.5:
+        advisories.append("Dead-latent fraction is high; increase data, lower latent_dim, or retune sparsity.")
+    train_mse = _optional_float(metrics.get("train_reconstruction_mse"))
+    validation_mse = _optional_float(metrics.get("validation_reconstruction_mse"))
+    if train_mse is not None and validation_mse is not None and train_mse > 0:
+        if validation_mse > train_mse * 1.5:
+            advisories.append("Validation reconstruction is much worse than train; use more held-out data.")
+    if advisories:
+        summary["advisories"] = advisories
+    return summary
+
+
+def _round_optional(value: Any) -> float | None:
+    parsed = _optional_float(value)
+    return round(parsed, 6) if parsed is not None else None
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def export_hf_sae_interventions(
     *,
     model_name: str,
@@ -542,7 +616,7 @@ def export_hf_sae_interventions(
     out_path: str | Path,
     top_k: int,
     strength_sweep: list[float],
-    target_tokens: list[str],
+    target_tokens: list[str] | None,
     device: str,
     max_length: int,
     model_class: str = "auto-causal-lm",
@@ -566,6 +640,9 @@ def export_hf_sae_interventions(
 
     prompts = load_prompt_records(dataset_path)
     positive_prompt_indexes, negative_prompt_indexes = _split_prompt_indexes(prompts)
+    requested_target_tokens = target_tokens
+    score_target_tokens = requested_target_tokens or DEFAULT_TARGET_TOKENS
+    token_strategy = target_token_strategy(requested_target_tokens)
     tokenizer, model, runtime_device = load_hf_text_model(
         transformers=transformers,
         torch=torch,
@@ -579,7 +656,14 @@ def export_hf_sae_interventions(
         model_kwargs=model_kwargs,
         tokenizer_kwargs=tokenizer_kwargs,
     )
-    target_ids = _target_token_ids(tokenizer, target_tokens)
+    target_ids, resolved_target_tokens = resolve_target_token_ids(
+        model=model,
+        tokenizer=tokenizer,
+        prompts=prompts,
+        target_tokens=score_target_tokens,
+        device=runtime_device,
+        max_length=max_length,
+    )
     if not target_ids:
         raise ValueError("No target token ids resolved for SAE causal validation")
 
@@ -638,7 +722,8 @@ def export_hf_sae_interventions(
                                         "signed_association": round(signed_association, 8),
                                         "steer_sign": sign,
                                         "steer_strength": strength,
-                                        "target_tokens": target_tokens,
+                                        "target_token_strategy": token_strategy,
+                                        "target_tokens": resolved_target_tokens,
                                     },
                                 }
                             )
@@ -687,6 +772,10 @@ def build_train_sae_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", help="Model id to filter/use with --records.")
     parser.add_argument("--hf-model", help="Hugging Face model name to collect activations from directly.")
     parser.add_argument("--dataset", help="Prompt JSONL with text and criterion_score for --hf-model.")
+    parser.add_argument(
+        "--causal-dataset",
+        help="Optional criterion-scored prompt JSONL for --causal-out. Defaults to --dataset.",
+    )
     parser.add_argument("--layer", type=int, help="HF hidden-state layer. Defaults to final hidden state.")
     parser.add_argument("--pool", choices=["last", "mean"], default="last")
     parser.add_argument(
@@ -770,6 +859,7 @@ def run_train_sae_from_args(args: argparse.Namespace) -> tuple[Path, Path | None
         return train_sae_from_hf(
             model_name=args.hf_model,
             dataset_path=args.dataset,
+            causal_dataset_path=args.causal_dataset,
             out_path=args.out,
             records_out=args.records_out,
             layer=args.layer,
@@ -1344,12 +1434,23 @@ def _common_layer(records: list[ActivationRecord], feature_ids: list[str]) -> in
     return next(iter(layers)) if len(layers) == 1 else None
 
 
-def _select_latents(latent_values: list[float], top_k_features: int | None) -> list[tuple[int, float]]:
+def _select_latents(
+    latent_values: list[float],
+    top_k_features: int | None,
+    *,
+    force_latent_indexes: set[int] | None = None,
+) -> list[tuple[int, float]]:
     indexed = [(index, value) for index, value in enumerate(latent_values)]
     indexed.sort(key=lambda item: item[1], reverse=True)
     if top_k_features is None or top_k_features <= 0:
         return indexed
-    return indexed[:top_k_features]
+    selected = indexed[:top_k_features]
+    selected_indexes = {index for index, _value in selected}
+    for index in sorted(force_latent_indexes or set()):
+        if 0 <= index < len(latent_values) and index not in selected_indexes:
+            selected.append((index, latent_values[index]))
+    selected.sort(key=lambda item: item[1], reverse=True)
+    return selected
 
 
 def _latent_feature_id(layer: Any, latent_index: int) -> str:

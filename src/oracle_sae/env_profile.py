@@ -33,6 +33,7 @@ OPTIONAL_MODULES = {
     "transformer_lens": "TransformerLens activation export",
     "nnsight": "NNsight activation export",
     "goodfire": "Goodfire feature adapter",
+    "modal": "Modal remote execution",
     "llama_cpp": "GGUF runtime smoke tests",
     "huggingface_hub": "Hugging Face artifact publishing",
 }
@@ -47,6 +48,8 @@ ENV_FLAGS = [
     "HF_TOKEN",
     "HUGGINGFACE_HUB_TOKEN",
     "NNSIGHT_API_KEY",
+    "MODAL_TOKEN_ID",
+    "MODAL_TOKEN_SECRET",
     "CUDA_VISIBLE_DEVICES",
     "SLURM_JOB_ID",
     "SLURM_CPUS_ON_NODE",
@@ -174,8 +177,17 @@ def build_environment_routing(profile: dict[str, Any]) -> dict[str, Any]:
     max_gpu_memory = int(capabilities.get("max_gpu_memory_bytes") or 0)
     has_mps = bool(capabilities.get("has_mps"))
     has_cluster_env = bool(capabilities.get("has_cluster_environment"))
-    remote_ready = _flag_present(env_flags, "GOODFIRE_API_KEY") or _flag_present(env_flags, "NNSIGHT_API_KEY")
-    remote_possible = remote_ready or _module_available(modules, "goodfire") or _module_available(modules, "nnsight")
+    remote_ready = (
+        _flag_present(env_flags, "GOODFIRE_API_KEY")
+        or _flag_present(env_flags, "NNSIGHT_API_KEY")
+        or _flag_present(env_flags, "MODAL_TOKEN_ID")
+    )
+    remote_possible = (
+        remote_ready
+        or _module_available(modules, "goodfire")
+        or _module_available(modules, "nnsight")
+        or _module_available(modules, "modal")
+    )
     explicit_profile = _explicit_env_profile(env_flags)
 
     options = [

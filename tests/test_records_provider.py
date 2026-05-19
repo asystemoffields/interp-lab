@@ -32,12 +32,15 @@ def test_records_provider_aggregates_ranked_feature_evidence(tmp_path: Path):
     path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
     criterion = HeuristicCriterionCompiler().compile("evaluation awareness")
 
-    evidence = ActivationRecordFeatureProvider(path).features_for("m", criterion)
+    provider = ActivationRecordFeatureProvider(path)
+    evidence = provider.features_for("m", criterion)
 
     assert evidence[0].feature_id == "L2:F_eval"
     assert evidence[0].causal_effects["criterion"] > 0.9
     assert evidence[0].layer == 2
     assert evidence[0].examples[0].startswith("pos-1:")
+    assert provider.report_metadata()["evidence"]["record_count"] == 2
+    assert provider.report_metadata()["evidence"]["positive_record_count"] == 1
     suppressor = next(item for item in evidence if item.feature_id == "L3:F_other")
     assert suppressor.metadata["signed_association"] < 0
 

@@ -34,6 +34,10 @@ CONTROL_TYPES = {
     "random",
     "random_feature",
 }
+SATURATED_BASELINE_MEAN = 0.85
+SATURATED_BASELINE_MIN = 0.75
+FLOOR_BASELINE_MEAN = 0.02
+FLOOR_BASELINE_MAX = 0.05
 
 
 @dataclass(frozen=True)
@@ -197,6 +201,9 @@ class InterventionRecordRunner:
             "controls": control_summary,
             "examples": [_render_record(record) for record in effects[:5]],
         }
+        behavior_score = _summarize_behavior_scores(effects)
+        if behavior_score:
+            summary["behavior_score"] = behavior_score
         return {"interventions": summary}
 
     def should_keep(self, evidence: FeatureEvidence, criterion: Criterion) -> bool:
@@ -258,6 +265,55 @@ def _render_record(record: InterventionRecord) -> str:
         f"intervention={record.intervention_score:.3f}, "
         f"directed_effect={record.directed_effect:.3f}"
     )
+
+
+def _summarize_behavior_scores(records: list[InterventionRecord]) -> dict[str, Any]:
+    scored = [record for record in records if record.metadata.get("behavior_score")]
+    if not scored:
+        return {}
+    baselines = [record.baseline_score for record in scored]
+    interventions = [record.intervention_score for record in scored]
+    deltas = [record.intervention_score - record.baseline_score for record in scored]
+    baseline_mean = mean(baselines)
+    baseline_min = min(baselines)
+    baseline_max = max(baselines)
+    summary: dict[str, Any] = {
+        "name": str(_first_metadata(scored, "behavior_score") or "score"),
+        "count": len(scored),
+        "baseline_mean": round(baseline_mean, 6),
+        "baseline_min": round(baseline_min, 6),
+        "baseline_max": round(baseline_max, 6),
+        "intervention_mean": round(mean(interventions), 6),
+        "score_delta_mean": round(mean(deltas), 6),
+    }
+    strategy = _first_metadata(scored, "target_token_strategy")
+    if strategy is not None:
+        summary["target_token_strategy"] = str(strategy)
+    target_tokens = _first_metadata(scored, "target_tokens")
+    if isinstance(target_tokens, list):
+        summary["target_token_count"] = len(target_tokens)
+        summary["target_token_sample"] = [str(token) for token in target_tokens[:8]]
+    if baseline_mean >= SATURATED_BASELINE_MEAN or baseline_min >= SATURATED_BASELINE_MIN:
+        summary["diagnostic"] = "saturated_baseline"
+        summary["advisory"] = (
+            "Baseline score is already high; use a narrower target-token set, "
+            "harder positive prompts, or a more specific behavior scorer."
+        )
+    elif baseline_mean <= FLOOR_BASELINE_MEAN and baseline_max <= FLOOR_BASELINE_MAX:
+        summary["diagnostic"] = "near_zero_baseline"
+        summary["advisory"] = (
+            "Baseline score is near zero; use auto targets, raw tokenizer forms, "
+            "or target tokens that appear in positive completions."
+        )
+    return summary
+
+
+def _first_metadata(records: list[InterventionRecord], key: str) -> Any:
+    for record in records:
+        value = record.metadata.get(key)
+        if value is not None:
+            return value
+    return None
 
 
 def _mean_confidence_interval(values: list[float]) -> tuple[float, float]:

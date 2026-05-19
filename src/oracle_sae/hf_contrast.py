@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from oracle_sae.hf_hooks import register_hidden_steering
-from oracle_sae.hf_interventions import DEFAULT_TARGET_TOKENS, parse_target_tokens
+from oracle_sae.hf_interventions import (
+    DEFAULT_TARGET_TOKENS,
+    parse_target_tokens,
+    resolve_target_token_ids,
+    target_token_strategy,
+)
 from oracle_sae.hf_loading import add_hf_loading_args, hf_loading_options_from_args, load_hf_text_model
 from oracle_sae.hf_records import PromptRecord, load_prompt_records, split_prompt_record_indexes
 
@@ -87,7 +92,16 @@ def export_hf_contrast_feature(
     )
     intervention_path = None
     if interventions_out is not None:
-        target_ids = _target_token_ids(tokenizer, target_tokens or DEFAULT_TARGET_TOKENS)
+        requested_target_tokens = target_tokens
+        score_target_tokens = requested_target_tokens or DEFAULT_TARGET_TOKENS
+        target_ids, resolved_target_tokens = resolve_target_token_ids(
+            model=model,
+            tokenizer=tokenizer,
+            prompts=prompts,
+            target_tokens=score_target_tokens,
+            device=runtime_device,
+            max_length=max_length,
+        )
         if not target_ids:
             raise ValueError("No target token ids resolved for intervention scoring")
         intervention_path = _write_steering_interventions(
@@ -100,7 +114,8 @@ def export_hf_contrast_feature(
             layer=resolved_layer,
             criterion=criterion,
             target_ids=target_ids,
-            target_tokens=target_tokens or DEFAULT_TARGET_TOKENS,
+            target_tokens=resolved_target_tokens,
+            target_token_strategy=target_token_strategy(requested_target_tokens),
             steer_strength=steer_strength,
             strength_sweep=strength_sweep,
             device=runtime_device,
@@ -278,6 +293,7 @@ def _write_steering_interventions(
     criterion: str,
     target_ids: list[int],
     target_tokens: list[str],
+    target_token_strategy: str,
     steer_strength: float,
     strength_sweep: list[float] | None,
     device: str,
@@ -334,6 +350,7 @@ def _write_steering_interventions(
                                 "negative_prompt_count": len(negative_indexes),
                                 "positive_prompt_count": len(positive_indexes),
                                 "steer_strength": strength,
+                                "target_token_strategy": target_token_strategy,
                                 "target_tokens": target_tokens,
                             },
                         }

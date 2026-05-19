@@ -23,8 +23,9 @@ from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, T
 from oracle_sae.cli import main as _cli_main
 from oracle_sae.doctor import collect_diagnostics
 from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
-from oracle_sae.graphs import build_attribution_graph, export_attribution_graph
+from oracle_sae.graphs import build_attribution_graph, export_attribution_graph, load_graph_report, load_path_patch_records
 from oracle_sae.hf_publish import PublishResult, publish_hf_artifact as _publish_hf_artifact
+from oracle_sae.hf_sae_paths import export_hf_sae_path_records
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
     load_inspection_report,
@@ -67,6 +68,11 @@ class SaeTrainingResult:
 class WrittenGraph:
     graph: dict[str, Any]
     json_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class PathPatchResult:
+    path_records: Path
 
 
 def inspect(
@@ -312,6 +318,65 @@ def train_sae(
     raise ValueError("Either records or hf_model is required")
 
 
+def path_patch(
+    *,
+    model: str,
+    dataset: str | Path,
+    criterion: str,
+    source_sae: str | Path,
+    target_sae: str | Path,
+    out: str | Path,
+    source_features: list[str] | None = None,
+    target_features: list[str] | None = None,
+    source_report: str | Path | None = None,
+    target_report: str | Path | None = None,
+    source_top_k: int = 4,
+    target_top_k: int = 8,
+    pool: str = "last",
+    strength_sweep: list[float] | None = None,
+    score_behavior: bool = True,
+    target_tokens: list[str] | None = None,
+    device: str = "cpu",
+    max_length: int = 128,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
+) -> PathPatchResult:
+    """Patch source SAE latents and write measured downstream SAE path records."""
+    path = export_hf_sae_path_records(
+        model_name=model,
+        dataset_path=dataset,
+        source_artifact_path=source_sae,
+        target_artifact_path=target_sae,
+        out_path=out,
+        criterion=criterion,
+        source_features=source_features,
+        target_features=target_features,
+        source_report_path=source_report,
+        target_report_path=target_report,
+        source_top_k=source_top_k,
+        target_top_k=target_top_k,
+        pool=pool,
+        strength_sweep=strength_sweep,
+        score_behavior=score_behavior,
+        target_tokens=target_tokens,
+        device=device,
+        max_length=max_length,
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs=model_kwargs,
+        tokenizer_kwargs=tokenizer_kwargs,
+    )
+    return PathPatchResult(path_records=path)
+
+
 def run(
     config: str | Path,
     *,
@@ -336,18 +401,29 @@ def profile_environment(path: str | Path = ".") -> dict[str, Any]:
 
 
 def attribution_graph(
-    report: InspectionReport | str | Path,
+    report: InspectionReport | str | Path | list[str | Path],
     *,
     out: str | Path | None = None,
     include_similarity_edges: bool = False,
     similarity_threshold: float = 0.9,
+    include_coactivation_edges: bool = True,
+    coactivation_threshold: float = 0.65,
+    include_supernodes: bool = True,
+    strong_causal_threshold: float = 0.05,
+    path_records: str | Path | list[str | Path] | None = None,
 ) -> dict[str, Any] | WrittenGraph:
-    """Build or write an attribution graph from an inspection report."""
+    """Build or write a candidate mechanism graph from one or more inspection reports."""
+    loaded_path_records = load_path_patch_records(path_records) if path_records is not None else []
     if isinstance(report, InspectionReport):
         graph = build_attribution_graph(
             report,
             include_similarity_edges=include_similarity_edges,
             similarity_threshold=similarity_threshold,
+            include_coactivation_edges=include_coactivation_edges,
+            coactivation_threshold=coactivation_threshold,
+            include_supernodes=include_supernodes,
+            strong_causal_threshold=strong_causal_threshold,
+            path_records=loaded_path_records,
         )
         if out is None:
             return graph
@@ -358,22 +434,37 @@ def attribution_graph(
         path.write_text(json.dumps(graph, indent=2, sort_keys=True), encoding="utf-8")
         return WrittenGraph(graph=graph, json_path=path)
     if out is None:
-        loaded = load_inspection_report(report)
+        loaded = load_graph_report(report)
         return build_attribution_graph(
             loaded,
             include_similarity_edges=include_similarity_edges,
             similarity_threshold=similarity_threshold,
+            include_coactivation_edges=include_coactivation_edges,
+            coactivation_threshold=coactivation_threshold,
+            include_supernodes=include_supernodes,
+            strong_causal_threshold=strong_causal_threshold,
+            path_records=loaded_path_records,
         )
     path = export_attribution_graph(
         report_path=report,
         out_path=out,
         include_similarity_edges=include_similarity_edges,
         similarity_threshold=similarity_threshold,
+        include_coactivation_edges=include_coactivation_edges,
+        coactivation_threshold=coactivation_threshold,
+        include_supernodes=include_supernodes,
+        strong_causal_threshold=strong_causal_threshold,
+        path_records_path=path_records,
     )
     graph = build_attribution_graph(
-        load_inspection_report(report),
+        load_graph_report(report),
         include_similarity_edges=include_similarity_edges,
         similarity_threshold=similarity_threshold,
+        include_coactivation_edges=include_coactivation_edges,
+        coactivation_threshold=coactivation_threshold,
+        include_supernodes=include_supernodes,
+        strong_causal_threshold=strong_causal_threshold,
+        path_records=loaded_path_records,
     )
     return WrittenGraph(graph=graph, json_path=path)
 

@@ -30,9 +30,10 @@ The north star:
 - Hidden-dimension ablation export.
 - Contrast-direction steering export.
 - SAE-latent steering export.
+- SAE-latent path patching across layers.
 - Side-effect suite with unrelated criteria.
 - Control rows and confidence intervals.
-- Attribution graph export.
+- Attribution graph export with candidate feature groups, coactivation paths, and validation next steps.
 
 ## Milestone 4: Natural-Language Oracles
 

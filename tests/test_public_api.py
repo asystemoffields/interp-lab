@@ -102,6 +102,21 @@ def test_run_and_doctor_api(tmp_path: Path):
 def test_graph_publish_and_scale_public_apis(tmp_path: Path):
     result = inspect("toy/a", "benchmark awareness", backend="toy", out=tmp_path / "inspect", top_k=2)
     graph = attribution_graph(result.report)
+    paths = tmp_path / "paths.jsonl"
+    paths.write_text(
+        json.dumps(
+            {
+                "source_feature_id": result.report.cards[0].feature_id,
+                "target_feature_id": result.report.cards[1].feature_id,
+                "target_activation_delta": 0.1,
+                "strength": 2.0,
+                "prompt_id": "p",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    graph_with_paths = attribution_graph(result.report, path_records=paths)
     written_graph = attribution_graph(result.json_path, out=tmp_path / "graph.json")
     dry_run = publish_hf_artifact(
         repo_id="user/interp-lab-demo",
@@ -111,6 +126,7 @@ def test_graph_publish_and_scale_public_apis(tmp_path: Path):
     plan = scale_plan(model_params=1e12, tokens=1000, d_model=1024)
 
     assert graph["schema_version"] == "interp-lab.attribution_graph.v1"
+    assert any(edge["type"] == "path_patch" for edge in graph_with_paths["edges"])
     assert written_graph.json_path == tmp_path / "graph.json"
     assert dry_run.uploaded == ["report.json"]
     assert plan["schema_version"] == "interp-lab.scale_plan.v2"

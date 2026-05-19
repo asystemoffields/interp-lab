@@ -87,6 +87,7 @@ The Hugging Face exporters currently generate two useful intervention families:
 
 - hidden-dimension ablations, including grouped top-k ablations;
 - contrast-direction steering, with optional strength sweeps that select the setting with the best criterion effect minus side-effect movement.
+- SAE-latent path patching, where source SAE decoder directions are patched into an earlier layer and downstream SAE latent changes are measured directly.
 
 Prompt datasets with `criterion_score` support specificity checks: positive-scored prompts estimate the requested criterion effect, and negative-scored prompts estimate side effects.
 
@@ -140,14 +141,18 @@ Match reports preserve labels and signed effects. Candidate equivalents with opp
 
 ## Attribution Graphs
 
-`export-attribution-graph` converts a report into a graph JSON with:
+`export-attribution-graph` converts one or more reports into a graph JSON with:
 
 - a criterion node;
 - feature nodes;
 - feature-to-criterion causal edges;
-- optional feature-to-feature fingerprint-similarity edges.
+- candidate feature-group supernodes;
+- feature-to-feature coactivation edges from aligned activation signatures;
+- optional feature-to-feature fingerprint-similarity edges;
+- measured path-patch edges from `export-hf-sae-paths`;
+- a `mechanism_summary` with strong causal features, candidate paths, feature groups, and validation next steps.
 
-The graph schema keeps effect sizes, signed effects, specificity, side effects, strong causal scores, confidence intervals, and intervention record counts.
+The graph schema keeps effect sizes, signed effects, specificity, side effects, strong causal scores, confidence intervals, intervention record counts, coactivation correlations, measured target-latent deltas, behavior-score deltas, and group-level aggregate causal scores. Repeating `--report` fuses layer-specific reports into one graph so cross-layer candidate paths can be inspected together.
 
 ## Scaling Model
 

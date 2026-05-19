@@ -10,22 +10,13 @@ google/gemma-4-E2B-it
 
 References: [Google Gemma 4 model card](https://ai.google.dev/gemma/docs/core/model_card_4) and [Transformers Gemma 4 docs](https://huggingface.co/docs/transformers/v5.5.0/model_doc/gemma4).
 
-PMRA GGUF artifact:
-
-```text
-Asystemoffields/gemma-4-E2B-it-PMRA-GGUF
-gemma4_e2b_it_pmra_calib_knapsack.gguf
-```
-
-Reference: [Asystemoffields/gemma-4-E2B-it-PMRA-GGUF](https://huggingface.co/Asystemoffields/gemma-4-E2B-it-PMRA-GGUF).
-
 Local model:
 
 ```text
 C:/models/your-gemma4-quant
 ```
 
-The local path should contain the tokenizer/config files and weights loadable by Transformers. GGUF or llama.cpp-only files can still be used by exporting activation records from that runtime and then using the `records` backend.
+The local path should contain the tokenizer/config files and weights loadable by Transformers. If another runtime exports activation records, point `interp-lab inspect --backend records` at those records directly.
 
 ## Install Extras
 
@@ -35,10 +26,11 @@ python -m pip install -U "interp-lab[hf,train]"
 
 For quantized local checkpoints, install the quantization runtime required by that checkpoint, such as bitsandbytes, accelerate, torchao, or the package that produced the local artifact.
 
-For GGUF runtime smoke tests:
+For Modal GPU runs:
 
 ```bash
-python -m pip install -U "interp-lab[gguf]" huggingface_hub
+python -m pip install -U "interp-lab[modal]"
+modal setup
 ```
 
 ## Profile The Environment
@@ -54,9 +46,10 @@ Then plan the run:
 
 ```bash
 interp-lab plan-scale \
-  --model-params 2B \
+  --model-params 5B \
+  --model-weight-size 9.543GB \
   --tokens 12 \
-  --d-model <hidden-size> \
+  --d-model 1536 \
   --selected-layers 1 \
   --latent-dim 256 \
   --from-env \
@@ -64,6 +57,37 @@ interp-lab plan-scale \
 ```
 
 The planner will suggest a starting route and leave every route selectable with `--profile`.
+For `google/gemma-4-E2B-it`, the current text stack reports hidden size `1536`, `35` text layers, and about `9.543GB` of bfloat16 safetensors.
+
+## Run On Modal
+
+The Modal example runs Gemma 4 on a remote GPU, caches Hugging Face weights in a Modal volume, and writes compact records and reports back to the local `reports/` directory.
+
+Start with the contrast workflow:
+
+```bash
+modal run examples/modal_gemma4.py \
+  --workflow contrast \
+  --dataset examples/gemma4_code_prompts.jsonl \
+  --out-dir reports/gemma4-modal/contrast
+```
+
+Run hidden-dimension discovery with causal validation:
+
+```bash
+modal run examples/modal_gemma4.py \
+  --workflow hidden \
+  --dataset examples/gemma4_code_prompts.jsonl \
+  --layers 20,28,35 \
+  --features-per-layer 32 \
+  --top-k 16 \
+  --group-top-k 8 \
+  --out-dir reports/gemma4-modal/hidden
+```
+
+Set `INTERP_LAB_MODAL_GPU=L40S` or another Modal GPU name before `modal run` when you want a larger accelerator. The default is `A10G`.
+
+The Modal workflows default to `--target-token auto`. Read the causal report's behavior-score line after the run: if the baseline score is saturated, rerun with a narrower explicit target-token set for the behavior you care about.
 
 ## Choose The Model
 
@@ -77,12 +101,6 @@ Use a local quantized checkpoint as `<GEMMA4_MODEL>`:
 
 ```bash
 C:/models/your-gemma4-quant
-```
-
-Use the PMRA GGUF file as `<GEMMA4_GGUF>`:
-
-```bash
-models/gemma4-pmra/gemma4_e2b_it_pmra_calib_knapsack.gguf
 ```
 
 Gemma 4 uses a conditional-generation class in current Transformers builds:
@@ -114,23 +132,6 @@ To find the hidden size for a local or official checkpoint:
 ```bash
 python -c "from transformers import AutoConfig; c=AutoConfig.from_pretrained('<GEMMA4_MODEL>', trust_remote_code=True); t=getattr(c, 'text_config', c); print(getattr(t, 'hidden_size', 'unknown'))"
 ```
-
-## Download The PMRA GGUF
-
-```bash
-huggingface-cli download \
-  Asystemoffields/gemma-4-E2B-it-PMRA-GGUF \
-  gemma4_e2b_it_pmra_calib_knapsack.gguf \
-  --local-dir models/gemma4-pmra
-```
-
-Smoke-test generation with llama-cpp-python:
-
-```bash
-python -c "from llama_cpp import Llama; llm=Llama(model_path='models/gemma4-pmra/gemma4_e2b_it_pmra_calib_knapsack.gguf', n_ctx=2048); print(llm('Write a Python function that', max_tokens=48)['choices'][0]['text'])"
-```
-
-GGUF is a strong local runtime target for generation and behavior checks. The activation, SAE, and causal-hook commands below use a Transformers-compatible model path because those steps need hidden states and forward hooks. If a GGUF runtime exports activation records, point `interp-lab inspect --backend records` at those records directly.
 
 ## Export Hidden-State Records
 
@@ -174,7 +175,7 @@ interp-lab export-hf-interventions \
   --group-top-k 6 \
   --records reports/gemma4-code/records.jsonl \
   --append-group-records reports/gemma4-code/records-with-group.jsonl \
-  --target-token "def,import,return,class,function,const,{,[" \
+  --target-token auto \
   --out reports/gemma4-code/interventions.jsonl \
   --max-length 96
 ```
@@ -239,3 +240,6 @@ The files to read are:
 - `reports/gemma4-code/trained-sae/sae.json`
 
 These are all JSON and can be passed directly into follow-up tooling.
+
+Use `--target-token auto` to derive behavior-scoring tokens from positive prompts. Target tokens otherwise default to GPT-style leading-space forms. Prefix a token with `raw:` to score exact token text as well, which is useful for Gemma-style tokenizers.
+The causal report includes behavior-score diagnostics so agents and researchers can spot saturated or near-zero scoring setups before over-reading a weak causal effect.

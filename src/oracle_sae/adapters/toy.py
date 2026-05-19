@@ -63,16 +63,10 @@ class ToyFeatureProvider:
 
 class ToyVerbalizer:
     def explain(self, evidence: FeatureEvidence, criterion: Criterion) -> str:
-        direction = _direction_phrase(
-            evidence.causal_effects.get(
-                "signed_causal_effect",
-                evidence.metadata.get("signed_association"),
-            )
-        )
-        return (
-            f"This feature appears to represent '{evidence.label}' in contexts related to "
-            f"'{criterion.text}'{direction}. Treat this as a hypothesis, then check intervention results."
-        )
+        examples = _example_summary(evidence.examples)
+        if examples:
+            return f"Activation summary: {evidence.label}. Representative high-activation contexts include {examples}."
+        return f"Activation summary: {evidence.label}."
 
 
 class ToyInterventionRunner:
@@ -93,12 +87,11 @@ def _unit_vector(values: list[float]) -> list[float]:
     return [round(value / length, 6) for value in values]
 
 
-def _direction_phrase(raw_value: object) -> str:
-    if raw_value is None:
-        return ""
-    value = float(raw_value)
-    if value > 0.05:
-        return " and is positively associated with the criterion"
-    if value < -0.05:
-        return " and is negatively associated with the criterion"
-    return " and has a weak signed association with the criterion"
+def _example_summary(examples: list[str]) -> str:
+    cleaned = []
+    for example in examples[:2]:
+        text = " ".join(str(example).split())
+        if len(text) > 120:
+            text = text[:117].rstrip() + "..."
+        cleaned.append(text)
+    return "; ".join(cleaned)
