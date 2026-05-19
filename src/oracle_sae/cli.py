@@ -461,6 +461,17 @@ def run_demo(args: argparse.Namespace) -> int:
 
 
 def run_studio(args: argparse.Namespace) -> int:
+    if args.serve:
+        from oracle_sae.web_server import serve_web_app
+
+        serve_web_app(
+            host=args.host,
+            port=args.port,
+            reports_dir=args.reports_dir,
+            command_specs=command_specs_from_parser(build_parser()),
+            open_browser=args.open,
+        )
+        return 0
     path = write_web_app(args.out, command_specs=command_specs_from_parser(build_parser()))
     print(f"Wrote {path}")
     return 0

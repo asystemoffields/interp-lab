@@ -125,6 +125,14 @@ interp-lab studio --out reports/interp-lab-studio.html
 
 Studio is a self-contained local HTML app generated from the CLI parser. It covers the interp-lab command surface, builds shell commands, and emits single-step run-config JSON that can be pasted into a larger workflow or handed to an agent.
 
+Serve Studio locally when you want to run jobs and browse reports from the browser:
+
+```bash
+interp-lab studio --serve --reports-dir reports
+```
+
+The served app keeps job history for the current session, launches known interp-lab commands, and exposes generated HTML, JSON, Markdown, and graph artifacts under the current workspace. The static file remains useful for sharing commands and configs; served mode adds the local runner.
+
 Run a reproducible workflow from config:
 
 ```bash

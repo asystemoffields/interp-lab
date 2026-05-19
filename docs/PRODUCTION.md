@@ -25,6 +25,14 @@ interp-lab studio --out reports/interp-lab-studio.html
 
 Studio reads the CLI parser, exposes every command as a form, and writes both shell commands and single-step run-config JSON. The generated file is static HTML, so it can live next to reports, demos, and shared artifacts.
 
+For less technical users, run the local Studio server:
+
+```bash
+interp-lab studio --serve --reports-dir reports
+```
+
+Served Studio adds a local runner, session job history, artifact browsing, HTML report preview, and graph JSON summaries. It uses the same CLI command specs as the static page, only launches known interp-lab subcommands, and keeps artifacts inside the current workspace.
+
 ## Supported Platforms
 
 CI runs on:

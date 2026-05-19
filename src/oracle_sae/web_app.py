@@ -525,12 +525,71 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
       padding-left: 10px;
       color: var(--muted);
     }}
+    .status-line {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }}
+    .history-list, .artifact-list {{
+      display: grid;
+      gap: 8px;
+      max-height: 260px;
+      overflow: auto;
+    }}
+    .history-item, .artifact-item {{
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #f8faf9;
+      padding: 9px 10px;
+      display: grid;
+      gap: 4px;
+      color: var(--ink);
+      font: inherit;
+      text-align: left;
+    }}
+    button.artifact-item {{
+      cursor: pointer;
+    }}
+    .item-meta {{
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }}
+    .artifact-layout {{
+      display: grid;
+      grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
+      gap: 12px;
+    }}
+    .artifact-frame {{
+      width: 100%;
+      min-height: 360px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      display: none;
+    }}
+    .graph-summary {{
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }}
+    .graph-counts {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }}
+    .server-disabled {{
+      opacity: 0.58;
+    }}
     .extra {{
       grid-column: 1 / -1;
     }}
     @media (max-width: 900px) {{
       main {{ width: min(100vw - 20px, 1220px); }}
-      .shell, .output-grid, .grid, .workflow {{ grid-template-columns: 1fr; }}
+      .shell, .output-grid, .grid, .workflow, .artifact-layout {{ grid-template-columns: 1fr; }}
       .sidebar {{ position: static; }}
       .command-list {{ max-height: none; }}
     }}
@@ -591,6 +650,39 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
           <h2>Suggested Next Actions</h2>
           <div class="note" id="next-action"></div>
         </section>
+        <section class="panel" id="server-panel">
+          <div class="status-line">
+            <div>
+              <h2>Local Runner</h2>
+              <p class="subhead" id="server-detail">Checking for the local Studio server.</p>
+            </div>
+            <span class="pill" id="server-status">checking</span>
+          </div>
+          <div class="hero-actions">
+            <button class="action primary" id="start-job" type="button">Run Command</button>
+            <button class="action" id="start-config-job" type="button">Run Config</button>
+            <button class="action" id="refresh-jobs" type="button">Refresh Jobs</button>
+          </div>
+          <div class="history-list" id="job-list" style="margin-top:10px"></div>
+        </section>
+        <section class="panel" id="artifact-panel">
+          <div class="status-line">
+            <div>
+              <h2>Reports And Graphs</h2>
+              <p class="subhead">Browse generated artifacts when Studio is served locally.</p>
+            </div>
+            <button class="action" id="refresh-artifacts" type="button">Refresh Artifacts</button>
+          </div>
+          <div class="artifact-layout">
+            <div class="artifact-list" id="artifact-list"></div>
+            <div>
+              <h3 id="artifact-title">No artifact selected</h3>
+              <div class="graph-summary" id="graph-overview"></div>
+              <iframe class="artifact-frame" id="artifact-frame" title="Artifact preview"></iframe>
+              <pre id="artifact-preview"></pre>
+            </div>
+          </div>
+        </section>
       </section>
     </div>
   </main>
@@ -607,6 +699,9 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     ];
     let selected = commandSpecs[0];
     const values = new Map();
+    let serverAvailable = false;
+    let jobs = [];
+    let artifacts = [];
 
     const byId = (id) => document.getElementById(id);
     const commandList = byId("command-list");
@@ -789,6 +884,191 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
       return actions[id] || "Copy the command or run-config step, then run it in the environment that has access to the model and data.";
     }}
 
+    async function checkServer() {{
+      try {{
+        const response = await fetch("/api/health", {{ cache: "no-store" }});
+        if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
+        const health = await response.json();
+        setServerState(true, `Workspace: ${{health.workspace}}`);
+        await Promise.all([refreshJobs(), refreshArtifacts()]);
+      }} catch (error) {{
+        setServerState(false, "Static HTML mode. Run `interp-lab studio --serve` to launch commands and browse artifacts here.");
+      }}
+    }}
+
+    function setServerState(available, detail) {{
+      serverAvailable = available;
+      byId("server-status").textContent = available ? "connected" : "static";
+      byId("server-detail").textContent = detail;
+      byId("server-panel").classList.toggle("server-disabled", !available);
+      byId("artifact-panel").classList.toggle("server-disabled", !available);
+      byId("start-job").disabled = !available;
+      byId("start-config-job").disabled = !available;
+      byId("refresh-jobs").disabled = !available;
+      byId("refresh-artifacts").disabled = !available;
+      if (!available) {{
+        byId("job-list").innerHTML = `<div class="history-item"><span>Local runner unavailable</span><span class="item-meta">Serve Studio locally to run jobs from this page.</span></div>`;
+        byId("artifact-list").innerHTML = `<div class="history-item"><span>Artifact browser unavailable</span><span class="item-meta">Serve Studio locally to browse generated reports.</span></div>`;
+      }}
+    }}
+
+    async function startJob(useConfig) {{
+      if (!serverAvailable) return;
+      const data = readForm();
+      const payload = useConfig
+        ? {{ run_config: buildRunConfig(selected, data) }}
+        : {{ argv: buildArgv(selected, data, false) }};
+      const response = await fetch("/api/jobs", {{
+        method: "POST",
+        headers: {{ "Content-Type": "application/json" }},
+        body: JSON.stringify(payload),
+      }});
+      if (!response.ok) {{
+        const error = await response.json().catch(() => ({{ error: response.statusText }}));
+        byId("job-list").innerHTML = `<div class="history-item"><strong>Job rejected</strong><span class="item-meta">${{escapeHtml(error.error || "Unknown error")}}</span></div>`;
+        return;
+      }}
+      const payloadJson = await response.json();
+      jobs = [payloadJson.job, ...jobs.filter((job) => job.id !== payloadJson.job.id)];
+      renderJobs();
+      pollJob(payloadJson.job.id);
+    }}
+
+    async function pollJob(jobId) {{
+      for (let attempt = 0; attempt < 180; attempt += 1) {{
+        await delay(1000);
+        const response = await fetch(`/api/jobs/${{encodeURIComponent(jobId)}}`, {{ cache: "no-store" }});
+        if (!response.ok) return;
+        const payload = await response.json();
+        jobs = [payload.job, ...jobs.filter((job) => job.id !== payload.job.id)];
+        renderJobs();
+        if (payload.job.status === "succeeded" || payload.job.status === "failed") {{
+          await refreshArtifacts();
+          return;
+        }}
+      }}
+    }}
+
+    async function refreshJobs() {{
+      if (!serverAvailable) return;
+      const response = await fetch("/api/jobs", {{ cache: "no-store" }});
+      if (!response.ok) return;
+      const payload = await response.json();
+      jobs = payload.jobs || [];
+      renderJobs();
+    }}
+
+    function renderJobs() {{
+      const list = byId("job-list");
+      if (!jobs.length) {{
+        list.innerHTML = `<div class="history-item"><span>No jobs yet</span><span class="item-meta">Run a command or run-config from this page.</span></div>`;
+        return;
+      }}
+      list.innerHTML = "";
+      for (const job of jobs.slice(0, 12)) {{
+        const item = document.createElement("div");
+        item.className = "history-item";
+        const output = [job.stdout, job.stderr].filter(Boolean).join("\\n").slice(-1800);
+        item.innerHTML = `
+          <strong>${{escapeHtml(job.command || job.id)}} <span class="pill">${{escapeHtml(job.status)}}</span></strong>
+          <span class="item-meta">${{escapeHtml((job.argv || []).join(" "))}}</span>
+          <span class="item-meta">${{job.exit_code === null || job.exit_code === undefined ? "" : `exit ${{job.exit_code}}`}} ${{escapeHtml(job.finished_at || job.started_at || job.created_at || "")}}</span>
+          ${{output ? `<pre>${{escapeHtml(output)}}</pre>` : ""}}
+        `;
+        list.appendChild(item);
+      }}
+    }}
+
+    async function refreshArtifacts() {{
+      if (!serverAvailable) return;
+      const response = await fetch("/api/artifacts", {{ cache: "no-store" }});
+      if (!response.ok) return;
+      const payload = await response.json();
+      artifacts = payload.artifacts || [];
+      renderArtifacts();
+    }}
+
+    function renderArtifacts() {{
+      const list = byId("artifact-list");
+      if (!artifacts.length) {{
+        list.innerHTML = `<div class="history-item"><span>No artifacts found</span><span class="item-meta">Run a demo, inspection, or graph export to populate reports.</span></div>`;
+        return;
+      }}
+      list.innerHTML = "";
+      for (const artifact of artifacts.slice(0, 80)) {{
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "artifact-item";
+        button.innerHTML = `
+          <strong>${{escapeHtml(artifact.relative_path || artifact.name)}}</strong>
+          <span class="item-meta">${{escapeHtml(artifact.kind)}} · ${{formatBytes(artifact.size_bytes)}} · ${{escapeHtml(artifact.modified_at)}}</span>
+        `;
+        button.addEventListener("click", () => loadArtifact(artifact));
+        list.appendChild(button);
+      }}
+    }}
+
+    async function loadArtifact(artifact) {{
+      byId("artifact-title").textContent = artifact.relative_path || artifact.name;
+      const response = await fetch(`/api/artifact?path=${{encodeURIComponent(artifact.path)}}`, {{ cache: "no-store" }});
+      if (!response.ok) return;
+      const payload = await response.json();
+      const preview = byId("artifact-preview");
+      const frame = byId("artifact-frame");
+      renderGraphOverview(payload.text, artifact.kind);
+      if (artifact.kind === "html") {{
+        frame.src = `/api/raw?path=${{encodeURIComponent(artifact.path)}}`;
+        frame.style.display = "block";
+        preview.style.display = "none";
+      }} else {{
+        frame.style.display = "none";
+        preview.style.display = "block";
+        preview.textContent = payload.text.slice(0, 32000);
+      }}
+    }}
+
+    function renderGraphOverview(text, kind) {{
+      const target = byId("graph-overview");
+      target.innerHTML = "";
+      if (kind !== "graph") return;
+      try {{
+        const graph = JSON.parse(text);
+        const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+        const edges = Array.isArray(graph.edges) ? graph.edges : [];
+        const edgeTypes = {{}};
+        for (const edge of edges) {{
+          const type = edge.type || "edge";
+          edgeTypes[type] = (edgeTypes[type] || 0) + 1;
+        }}
+        const typeText = Object.entries(edgeTypes)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 6)
+          .map(([type, count]) => `${{type}}: ${{count}}`)
+          .join(", ");
+        target.innerHTML = `
+          <div class="graph-counts">
+            <span class="pill">${{nodes.length}} nodes</span>
+            <span class="pill">${{edges.length}} edges</span>
+            <span class="pill">${{escapeHtml(graph.schema_version || "graph")}}</span>
+          </div>
+          <div class="item-meta">${{escapeHtml(typeText || "No edge types found")}}</div>
+        `;
+      }} catch (error) {{
+        target.innerHTML = `<div class="item-meta">Graph preview unavailable: ${{escapeHtml(error.message)}}</div>`;
+      }}
+    }}
+
+    function delay(ms) {{
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }}
+
+    function formatBytes(value) {{
+      const bytes = Number(value || 0);
+      if (bytes < 1024) return `${{bytes}} B`;
+      if (bytes < 1024 * 1024) return `${{(bytes / 1024).toFixed(1)}} KB`;
+      return `${{(bytes / (1024 * 1024)).toFixed(1)}} MB`;
+    }}
+
     function shellQuote(value) {{
       if (/^[A-Za-z0-9_./:=,@+-]+$/.test(value)) return value;
       return "'" + String(value).replace(/'/g, "'\\\"'\\\"'") + "'";
@@ -844,10 +1124,15 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     byId("extra-flags").addEventListener("input", updateOutputs);
     byId("copy-command").addEventListener("click", async () => navigator.clipboard?.writeText(byId("generated-command").textContent));
     byId("copy-config").addEventListener("click", async () => navigator.clipboard?.writeText(byId("run-config-output").textContent));
+    byId("start-job").addEventListener("click", () => startJob(false));
+    byId("start-config-job").addEventListener("click", () => startJob(true));
+    byId("refresh-jobs").addEventListener("click", refreshJobs);
+    byId("refresh-artifacts").addEventListener("click", refreshArtifacts);
     renderWorkflows();
     renderCommandList();
     renderForm();
     updateOutputs();
+    checkServer();
   </script>
 </body>
 </html>
@@ -855,8 +1140,17 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
 
 
 def build_web_app_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Write the self-contained interp-lab Studio HTML app.")
+    parser = argparse.ArgumentParser(description="Write or serve the interp-lab Studio web app.")
     parser.add_argument("--out", default="reports/interp-lab-studio.html", help="Output HTML path.")
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Serve Studio locally with job launching, run history, and artifact browsing.",
+    )
+    parser.add_argument("--host", default="127.0.0.1", help="Host for --serve.")
+    parser.add_argument("--port", type=int, default=8765, help="Port for --serve. Use 0 for any free port.")
+    parser.add_argument("--reports-dir", default="reports", help="Reports directory exposed by --serve.")
+    parser.add_argument("--open", action="store_true", help="Open the served Studio page in a browser.")
     return parser
 
 
