@@ -17,6 +17,14 @@ print(doctor()["ok"])
 run("examples/run_records.json")
 ```
 
+For browser-driven command setup, generate the local Studio page:
+
+```bash
+interp-lab studio --out reports/interp-lab-studio.html
+```
+
+Studio reads the CLI parser, exposes every command as a form, and writes both shell commands and single-step run-config JSON. The generated file is static HTML, so it can live next to reports, demos, and shared artifacts.
+
 ## Supported Platforms
 
 CI runs on:

@@ -115,6 +115,16 @@ Create a demo run:
 interp-lab demo --out reports/demo
 ```
 
+The demo writes a complete tour: feature reports for two toy models, cross-model matches, match validation, an attribution graph, HTML viewers, a compact graph summary, and a local Studio page.
+
+Open the browser Studio command builder:
+
+```bash
+interp-lab studio --out reports/interp-lab-studio.html
+```
+
+Studio is a self-contained local HTML app generated from the CLI parser. It covers the interp-lab command surface, builds shell commands, and emits single-step run-config JSON that can be pasted into a larger workflow or handed to an agent.
+
 Run a reproducible workflow from config:
 
 ```bash
@@ -623,6 +633,7 @@ Adapters are intentionally small:
 - Natural Language Autoencoder adapter.
 - Crosscoder training and import.
 - Rich HTML feature cards.
+- Studio workflows that prepare local or remote runs from the browser.
 - Distributed SAE training manifests.
 - Remote causal validation workers.
 - Feature transfer tests across model families.

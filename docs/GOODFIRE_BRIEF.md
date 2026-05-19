@@ -33,6 +33,7 @@ The target workflow:
 - Self-contained HTML feature-card reports.
 - Self-contained HTML attribution graph viewer.
 - Self-contained HTML cross-model match validation viewer.
+- Self-contained Studio frontend for building CLI commands and run-config steps in a browser.
 - Hugging Face artifact publishing for reports and records.
 - Scale planning for very large model runs.
 - Config-driven runs with manifests for reproducibility.

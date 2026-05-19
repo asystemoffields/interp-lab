@@ -24,6 +24,8 @@ from oracle_sae.env_profile import build_environment_profile_parser, run_environ
 from oracle_sae.graphs import (
     build_graph_export_parser,
     build_graph_summary_parser,
+    export_attribution_graph,
+    export_attribution_graph_summary,
     run_graph_export_from_args,
     run_graph_summary_from_args,
 )
@@ -39,7 +41,11 @@ from oracle_sae.hf_records import (
 )
 from oracle_sae.hf_sae_paths import build_hf_sae_paths_parser, run_hf_sae_paths_from_args
 from oracle_sae.hf_sae_validation import build_hf_sae_validation_parser, run_hf_sae_validation_from_args
-from oracle_sae.match_validation import build_match_validation_parser, run_match_validation_from_args
+from oracle_sae.match_validation import (
+    build_match_validation_parser,
+    export_match_validation_report,
+    run_match_validation_from_args,
+)
 from oracle_sae.nnsight_records import build_nnsight_export_parser, run_nnsight_export_from_args
 from oracle_sae.pipeline import inspect_model, match_reports
 from oracle_sae.reporting import (
@@ -56,6 +62,7 @@ from oracle_sae.transformerlens_records import (
     build_transformerlens_export_parser,
     run_transformerlens_export_from_args,
 )
+from oracle_sae.web_app import build_web_app_parser, command_specs_from_parser, write_web_app
 from oracle_sae.workflows import build_init_run_parser, run_init_run_from_args
 
 
@@ -189,6 +196,15 @@ def build_parser() -> argparse.ArgumentParser:
     demo = subparsers.add_parser("demo", help="Run two toy inspections and match their features.")
     demo.add_argument("--out", default="reports/demo", help="Output directory.")
     demo.set_defaults(func=run_demo)
+
+    studio = subparsers.add_parser(
+        "studio",
+        aliases=["web-app"],
+        help="Write the self-contained interp-lab Studio HTML command builder.",
+        parents=[build_web_app_parser()],
+        add_help=False,
+    )
+    studio.set_defaults(func=run_studio)
 
     doctor = subparsers.add_parser("doctor", help="Check the local interp-lab environment.")
     doctor.add_argument("--json", action="store_true", help="Print diagnostics as JSON.")
@@ -395,15 +411,57 @@ def run_demo(args: argparse.Namespace) -> int:
         intervention_runner=ToyInterventionRunner(),
         top_k=8,
     )
-    left_json, _ = write_inspection_report(left, base / "model-a")
-    right_json, _ = write_inspection_report(right, base / "model-b")
+    left_json, left_markdown = write_inspection_report(left, base / "model-a")
+    right_json, right_markdown = write_inspection_report(right, base / "model-b")
+    left_html = write_inspection_html(left, base / "model-a" / "report.html")
+    right_html = write_inspection_html(right, base / "model-b" / "report.html")
     matches = match_reports(left, right, top_k=10)
     match_path = write_match_report(matches, base / "matches.json")
     match_markdown_path = write_match_markdown(matches, base / "matches.md")
+    match_validation = export_match_validation_report(
+        matches_path=match_path,
+        out_path=base / "match-validation.json",
+        html_out_path=base / "match-validation.html",
+    )
+    graph_path = export_attribution_graph(
+        report_path=[left_json, right_json],
+        out_path=base / "graph.json",
+        markdown_out_path=base / "graph.md",
+        html_out_path=base / "graph.html",
+        include_similarity_edges=True,
+        similarity_threshold=0.75,
+    )
+    graph_summary_path = export_attribution_graph_summary(
+        graph_path=graph_path,
+        out_path=base / "graph-summary.json",
+    )
+    studio_path = write_web_app(
+        base / "studio.html",
+        command_specs=command_specs_from_parser(build_parser()),
+    )
     print(f"Wrote {left_json}")
+    print(f"Wrote {left_markdown}")
+    print(f"Wrote {left_html}")
     print(f"Wrote {right_json}")
+    print(f"Wrote {right_markdown}")
+    print(f"Wrote {right_html}")
     print(f"Wrote {match_path}")
     print(f"Wrote {match_markdown_path}")
+    print(f"Wrote {match_validation.json_path}")
+    print(f"Wrote {match_validation.markdown_path}")
+    if match_validation.html_path is not None:
+        print(f"Wrote {match_validation.html_path}")
+    print(f"Wrote {graph_path}")
+    print(f"Wrote {graph_path.with_suffix('.md')}")
+    print(f"Wrote {graph_path.with_suffix('.html')}")
+    print(f"Wrote {graph_summary_path}")
+    print(f"Wrote {studio_path}")
+    return 0
+
+
+def run_studio(args: argparse.Namespace) -> int:
+    path = write_web_app(args.out, command_specs=command_specs_from_parser(build_parser()))
+    print(f"Wrote {path}")
     return 0
 
 

@@ -9,9 +9,43 @@ def test_demo_command_writes_reports(tmp_path: Path):
 
     assert exit_code == 0
     assert (tmp_path / "model-a" / "report.json").exists()
+    assert (tmp_path / "model-a" / "report.html").exists()
     assert (tmp_path / "model-b" / "report.json").exists()
+    assert (tmp_path / "model-b" / "report.html").exists()
     assert (tmp_path / "matches.json").exists()
     assert (tmp_path / "matches.md").exists()
+    assert (tmp_path / "match-validation.json").exists()
+    assert (tmp_path / "match-validation.md").exists()
+    assert (tmp_path / "match-validation.html").exists()
+    assert (tmp_path / "graph.json").exists()
+    assert (tmp_path / "graph.md").exists()
+    assert (tmp_path / "graph.html").exists()
+    assert (tmp_path / "graph-summary.json").exists()
+    assert (tmp_path / "studio.html").exists()
+    graph_summary = json.loads((tmp_path / "graph-summary.json").read_text(encoding="utf-8"))
+    assert graph_summary["schema_version"] == "interp-lab.attribution_graph_summary.v1"
+
+
+def test_studio_command_writes_web_app(tmp_path: Path):
+    out = tmp_path / "studio.html"
+
+    exit_code = main(["studio", "--out", str(out)])
+
+    html = out.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "Interp Lab Studio" in html
+    assert "export-transformerlens-records" in html
+    assert "export-nnsight-records" in html
+    assert "generated-command" in html
+
+
+def test_web_app_alias_writes_web_app(tmp_path: Path):
+    out = tmp_path / "alias.html"
+
+    exit_code = main(["web-app", "--out", str(out)])
+
+    assert exit_code == 0
+    assert out.exists()
 
 
 def test_records_backend_writes_report(tmp_path: Path):

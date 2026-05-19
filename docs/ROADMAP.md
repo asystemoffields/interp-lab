@@ -15,6 +15,7 @@ The north star:
 - Match validation with claim grades and agent next actions.
 - Self-contained HTML feature-card reports.
 - Self-contained HTML match-validation viewer.
+- Self-contained Studio frontend for CLI command and run-config generation.
 - Markdown and JSON reports.
 
 ## Milestone 2: Real Feature Sources
