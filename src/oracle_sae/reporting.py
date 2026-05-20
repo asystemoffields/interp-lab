@@ -822,7 +822,7 @@ def _direction_line(card) -> str:
 
 
 def _evidence_line(card) -> str:
-    if isinstance(card.metadata.get("interventions"), dict):
+    if _has_measured_intervention(card):
         return "Evidence: causal intervention records"
     if card.source == "activation-records":
         return "Evidence: activation/criterion association"
@@ -1005,9 +1005,9 @@ def _feature_detail_card(card, index: int) -> str:
     layer = _layer_value(card)
     source = str(card.source or "unknown")
     strong = float(card.causal_effects.get("strong_causal_score", 0.0))
-    evidence = _feature_evidence_key(card)
+    evidence_key = _feature_evidence_key(card)
     direction = _direction_line(card)
-    evidence = _evidence_line(card)
+    evidence_line = _evidence_line(card)
     interpretation = _html_card_interpretation(card)
     examples = "\n".join(
         f'<div class="example">{_h(example)}</div>' for example in card.examples[:4]
@@ -1028,7 +1028,7 @@ def _feature_detail_card(card, index: int) -> str:
         if item
     )
     return f"""
-        <article class="feature-card" data-feature="card" data-layer="{_attr(layer)}" data-source="{_attr(source)}" data-evidence="{_attr(evidence)}" data-search="{_attr(_feature_search_text(card))}">
+        <article class="feature-card" data-feature="card" data-layer="{_attr(layer)}" data-source="{_attr(source)}" data-evidence="{_attr(evidence_key)}" data-search="{_attr(_feature_search_text(card))}">
           <h3>
             <span>{index}. <code>{_h(card.feature_id)}</code></span>
             <span class="pill blue">{_h(_display_label(card))}</span>
@@ -1043,7 +1043,7 @@ def _feature_detail_card(card, index: int) -> str:
             {_component_meter("strong", strong)}
           </div>
           {_html_note(direction)}
-          {_html_note(evidence)}
+          {_html_note(evidence_line)}
           {interpretation}
           {training}
           {interventions}

@@ -32,6 +32,11 @@ def test_public_api_signature_contract_is_current():
         assert expected_parameters == list(dict.fromkeys(expected_parameters)), function_name
 
 
+def test_public_api_contract_covers_full_stable_workflow_signatures():
+    for function_name in ("inspect", "intervene", "train_sae"):
+        assert PUBLIC_API_SIGNATURES[function_name] == list(inspect.signature(getattr(interp_lab, function_name)).parameters)
+
+
 def test_schema_contracts_stay_versioned():
     assert SCHEMA_CONTRACTS["scale_plan"] == "interp-lab.scale_plan.v2"
     for key, schema in SCHEMA_CONTRACTS.items():

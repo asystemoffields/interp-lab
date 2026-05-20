@@ -692,6 +692,7 @@ Intervention records let the report distinguish correlational evidence from caus
 
 ```json
 {
+  "schema_version": "interp-lab.intervention_record.v1",
   "model": "my/model",
   "feature_id": "L18:F104921",
   "criterion": "the model is aware it is being evaluated",
@@ -788,7 +789,7 @@ Adapters are intentionally small:
 
 ## Roadmap
 
-- Natural Language Autoencoder adapter.
+- Richer Natural Language Autoencoder explanation audits.
 - Crosscoder training and import.
 - Distributed SAE training manifests.
 - Remote causal validation workers.

@@ -156,21 +156,21 @@ def test_studio_server_health_jobs_and_artifacts(tmp_path: Path):
     )
     server.start()
     try:
-        health = _get_json(server.url + "api/health")
+        health = _get_json(server.url + "api/health", token=server.token)
         assert health["ok"] is True
         assert health["command_count"] == 2
         assert health["history_schema_version"] == "interp-lab.studio_history.v1"
         assert health["history_path"].endswith("jobs.json")
 
-        artifacts = _get_json(server.url + "api/artifacts")["artifacts"]
+        artifacts = _get_json(server.url + "api/artifacts", token=server.token)["artifacts"]
         assert {item["relative_path"] for item in artifacts} >= {"graph.json", "report.html"}
 
-        artifact = _get_json(server.url + "api/artifact?path=" + _quote(str(graph)))
+        artifact = _get_json(server.url + "api/artifact?path=" + _quote(str(graph)), token=server.token)
         assert artifact["kind"] == "graph"
         assert "attribution_graph" in artifact["text"]
 
-        created = _post_json(server.url + "api/jobs", {"argv": ["demo", "--out", "reports/demo"]})["job"]
-        job = _wait_for_job(server.url, created["id"])
+        created = _post_json(server.url + "api/jobs", {"argv": ["demo", "--out", "reports/demo"]}, token=server.token)["job"]
+        job = _wait_for_job(server.url, created["id"], token=server.token)
         assert job["status"] == "succeeded"
         assert job["stdout"] == "done"
         assert ran == [["demo", "--out", "reports/demo"]]
@@ -179,15 +179,15 @@ def test_studio_server_health_jobs_and_artifacts(tmp_path: Path):
             "schema_version": "interp-lab.run.v1",
             "steps": [{"name": "demo", "command": "demo", "args": {"out": "reports/demo"}}],
         }
-        created_config = _post_json(server.url + "api/jobs", {"run_config": config})["job"]
-        config_job = _wait_for_job(server.url, created_config["id"])
+        created_config = _post_json(server.url + "api/jobs", {"run_config": config}, token=server.token)["job"]
+        config_job = _wait_for_job(server.url, created_config["id"], token=server.token)
         assert config_job["status"] == "succeeded"
         assert config_job["source"] == "run_config"
         assert config_job["run_config_path"]
         assert json.loads(Path(config_job["run_config_path"]).read_text(encoding="utf-8")) == config
         assert ran[1][0] == "run"
 
-        job_listing = _get_json(server.url + "api/jobs")
+        job_listing = _get_json(server.url + "api/jobs", token=server.token)
         assert job_listing["schema_version"] == "interp-lab.studio_history.v1"
         assert len(job_listing["jobs"]) == 2
     finally:
@@ -211,8 +211,8 @@ def test_studio_server_persists_job_history(tmp_path: Path):
     )
     server.start()
     try:
-        created = _post_json(server.url + "api/jobs", {"argv": ["demo"]})["job"]
-        completed = _wait_for_job(server.url, created["id"])
+        created = _post_json(server.url + "api/jobs", {"argv": ["demo"]}, token=server.token)["job"]
+        completed = _wait_for_job(server.url, created["id"], token=server.token)
         assert completed["status"] == "succeeded"
     finally:
         server.stop()
@@ -232,7 +232,7 @@ def test_studio_server_persists_job_history(tmp_path: Path):
     )
     restarted.start()
     try:
-        jobs = _get_json(restarted.url + "api/jobs")["jobs"]
+        jobs = _get_json(restarted.url + "api/jobs", token=restarted.token)["jobs"]
         assert jobs[0]["id"] == created["id"]
         assert jobs[0]["stdout"] == "persisted"
         assert jobs[0]["status"] == "succeeded"
@@ -272,7 +272,7 @@ def test_studio_server_marks_stale_running_jobs_interrupted(tmp_path: Path):
     )
     server.start()
     try:
-        jobs = _get_json(server.url + "api/jobs")["jobs"]
+        jobs = _get_json(server.url + "api/jobs", token=server.token)["jobs"]
         assert jobs[0]["id"] == "stale-job"
         assert jobs[0]["status"] == "interrupted"
         assert "stopped before this job completed" in jobs[0]["stderr"]
@@ -296,7 +296,7 @@ def test_studio_server_rejects_unknown_commands(tmp_path: Path):
     server.start()
     try:
         try:
-            _post_json(server.url + "api/jobs", {"argv": ["not-real"]})
+            _post_json(server.url + "api/jobs", {"argv": ["not-real"]}, token=server.token)
         except urllib.error.HTTPError as exc:
             assert exc.code == 400
             body = json.loads(exc.read().decode("utf-8"))
@@ -307,26 +307,150 @@ def test_studio_server_rejects_unknown_commands(tmp_path: Path):
         server.stop()
 
 
-def _get_json(url: str):
-    with urllib.request.urlopen(url, timeout=5) as response:
+def test_studio_server_requires_token_for_api(tmp_path: Path):
+    server = build_studio_server(
+        host="127.0.0.1",
+        port=0,
+        reports_dir=tmp_path / "reports",
+        command_specs=[{"id": "demo", "label": "Demo", "group": "Utility", "fields": []}],
+        command_runner=lambda argv, workspace: (0, "", ""),
+        workspace=tmp_path,
+    )
+    server.start()
+    try:
+        try:
+            _post_json(server.url + "api/jobs", {"argv": ["demo"]})
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 403
+            body = json.loads(exc.read().decode("utf-8"))
+            assert "token" in body["error"]
+        else:  # pragma: no cover - failure branch.
+            raise AssertionError("missing token was accepted")
+    finally:
+        server.stop()
+
+
+def test_studio_server_rejects_cross_origin_api_requests(tmp_path: Path):
+    server = build_studio_server(
+        host="127.0.0.1",
+        port=0,
+        reports_dir=tmp_path / "reports",
+        command_specs=[{"id": "demo", "label": "Demo", "group": "Utility", "fields": []}],
+        command_runner=lambda argv, workspace: (0, "", ""),
+        workspace=tmp_path,
+    )
+    server.start()
+    try:
+        try:
+            _post_json(
+                server.url + "api/jobs",
+                {"argv": ["demo"]},
+                token=server.token,
+                headers={"Origin": "https://example.com"},
+            )
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 403
+            body = json.loads(exc.read().decode("utf-8"))
+            assert "origin" in body["error"]
+        else:  # pragma: no cover - failure branch.
+            raise AssertionError("cross-origin request was accepted")
+    finally:
+        server.stop()
+
+
+def test_studio_server_rejects_imported_run_config_nested_server(tmp_path: Path):
+    server = build_studio_server(
+        host="127.0.0.1",
+        port=0,
+        reports_dir=tmp_path / "reports",
+        command_specs=[
+            {"id": "run", "label": "Run", "group": "Utility", "fields": []},
+            {"id": "studio", "label": "Studio", "group": "Utility", "fields": []},
+        ],
+        command_runner=lambda argv, workspace: (0, "", ""),
+        workspace=tmp_path,
+    )
+    server.start()
+    try:
+        try:
+            _post_json(
+                server.url + "api/jobs",
+                {
+                    "run_config": {
+                        "schema_version": "interp-lab.run.v1",
+                        "steps": [{"name": "serve", "command": "studio", "args": {"serve": True}}],
+                    }
+                },
+                token=server.token,
+            )
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 400
+            body = json.loads(exc.read().decode("utf-8"))
+            assert "nested server" in body["error"]
+        else:  # pragma: no cover - failure branch.
+            raise AssertionError("nested Studio run config was accepted")
+    finally:
+        server.stop()
+
+
+def test_studio_artifacts_are_limited_to_reports_dir(tmp_path: Path):
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "report.json").write_text('{"ok": true}', encoding="utf-8")
+    secret = tmp_path / "pyproject.toml"
+    secret.write_text("[project]\nname = 'private'\n", encoding="utf-8")
+    server = build_studio_server(
+        host="127.0.0.1",
+        port=0,
+        reports_dir=reports,
+        command_specs=[{"id": "demo", "label": "Demo", "group": "Utility", "fields": []}],
+        command_runner=lambda argv, workspace: (0, "", ""),
+        workspace=tmp_path,
+    )
+    server.start()
+    try:
+        artifact = _get_json(server.url + "api/artifact?path=report.json", token=server.token)
+        assert artifact["path"] == "report.json"
+
+        try:
+            _get_json(server.url + "api/artifact?path=" + _quote(str(secret)), token=server.token)
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 400
+            body = json.loads(exc.read().decode("utf-8"))
+            assert "reports directory" in body["error"]
+        else:  # pragma: no cover - failure branch.
+            raise AssertionError("workspace file outside reports was accepted")
+    finally:
+        server.stop()
+
+
+def _get_json(url: str, *, token: str = "", headers: dict[str, str] | None = None):
+    request_headers = dict(headers or {})
+    if token:
+        request_headers["X-Interp-Lab-Studio-Token"] = token
+    request = urllib.request.Request(url, headers=request_headers)
+    with urllib.request.urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _post_json(url: str, payload: dict):
+def _post_json(url: str, payload: dict, *, token: str = "", headers: dict[str, str] | None = None):
     data = json.dumps(payload).encode("utf-8")
+    request_headers = {"Content-Type": "application/json", **(headers or {})}
+    if token:
+        request_headers["X-Interp-Lab-Studio-Token"] = token
     request = urllib.request.Request(
         url,
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=request_headers,
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _wait_for_job(base_url: str, job_id: str):
+def _wait_for_job(base_url: str, job_id: str, *, token: str):
     for _ in range(50):
-        job = _get_json(base_url + "api/jobs/" + job_id)["job"]
+        job = _get_json(base_url + "api/jobs/" + job_id, token=token)["job"]
         if job["status"] in {"succeeded", "failed"}:
             return job
         time.sleep(0.05)

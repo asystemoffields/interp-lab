@@ -174,8 +174,8 @@ def build_demo_sweep_report(
     return {
         "schema_version": REAL_MODEL_DEMO_SWEEP_SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "repo_root": str(root),
-        "manifest_dir": str(demo_dir),
+        "repo_root": _public_path(root, root),
+        "manifest_dir": _public_path(demo_dir, root),
         "selected_demo_count": len(demo_reports),
         "run_commands": bool(run),
         "allow_external": bool(allow_external),
@@ -253,7 +253,7 @@ def _build_single_demo_report(
     if not ok:
         return {
             "status": "failed",
-            "manifest_path": str(manifest_path),
+            "manifest_path": _public_path(manifest_path, repo_root),
             "detail": detail,
             "commands": [],
             "artifacts": [],
@@ -321,7 +321,7 @@ def _build_single_demo_report(
         "criterion": payload["criterion"],
         "workflow": payload["workflow"],
         "doc": payload["doc"],
-        "manifest_path": str(manifest_path),
+        "manifest_path": _public_path(manifest_path, repo_root),
         "status": status,
         "detail": _demo_detail(status, input_summary, artifact_summary, command_summary, run),
         "inputs": inputs,
@@ -420,6 +420,8 @@ def _run_external_command(
             argv,
             cwd=repo_root,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             check=False,
             timeout=timeout,
@@ -493,7 +495,6 @@ def _input_record(item: str | dict[str, Any], *, repo_root: Path) -> dict[str, A
     path = _resolve_under_root(repo_root, relative)
     return {
         "path": relative,
-        "absolute_path": str(path),
         "kind": kind,
         "description": description,
         "exists": path.exists(),
@@ -505,7 +506,6 @@ def _artifact_record(artifact: dict[str, Any], *, repo_root: Path) -> dict[str, 
     exists = path.exists()
     record: dict[str, Any] = {
         "path": artifact["path"],
-        "absolute_path": str(path),
         "kind": artifact["kind"],
         "exists": exists,
         "why_it_matters": artifact["why_it_matters"],
@@ -551,6 +551,16 @@ def _resolve_under_root(root: Path, path: str | Path) -> Path:
     if not resolved.is_absolute():
         resolved = root / resolved
     return resolved.resolve()
+
+
+def _public_path(path: Path, root: Path) -> str:
+    try:
+        relative = path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return path.name
+    if str(relative) == ".":
+        return "."
+    return relative.as_posix()
 
 
 def _status_counts(demos: list[dict[str, Any]]) -> dict[str, int]:

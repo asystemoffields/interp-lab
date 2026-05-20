@@ -108,7 +108,28 @@ def test_explanation_consistency_uses_distinct_report_coverage(tmp_path: Path):
     assert check["status"] == "missing_in_some_reports"
     assert check["covered_report_count"] == 1
     assert check["duplicate_report_indexes"] == [0]
+    assert report["summary"]["duplicate_feature_id_count"] == 1
     assert report["summary"]["shared_feature_count"] == 0
+
+
+def test_explanation_consistency_does_not_treat_blank_text_as_consistent(tmp_path: Path):
+    left_path = _write_report(
+        tmp_path / "left",
+        criterion="successful tool calls",
+        cards=[_card("L1:F1", "", "", 0.9)],
+    )
+    right_path = _write_report(
+        tmp_path / "right",
+        criterion="successful tool calls",
+        cards=[_card("L1:F1", "", "", 0.8)],
+    )
+
+    report = build_explanation_consistency_report(reports=[left_path, right_path])
+    check = report["checks"][0]
+
+    assert check["mean_explanation_similarity"] == 0.0
+    assert check["status"] == "explanation_drift"
+    assert report["summary"]["consistent_count"] == 0
 
 
 def test_feature_search_ranks_natural_language_query(tmp_path: Path):
@@ -229,6 +250,63 @@ def test_text_pivot_does_not_upgrade_label_only_or_association_only_matches(tmp_
     assert match["text_pivot_source"] == "label"
     assert match["components"]["causal_evidence"] == 0.0
     assert match["evidence_grade"] == "label_or_example_text_candidate"
+
+
+def test_text_pivot_requires_measured_intervention_for_causal_support(tmp_path: Path):
+    left = _write_report(
+        tmp_path / "left",
+        criterion="successful tool calls",
+        cards=[
+            _card(
+                "L1:F1",
+                "tool call syntax",
+                "Represents valid tool-call argument construction.",
+                0.9,
+                causal_effects={"signed_causal_effect": 0.9, "strong_causal_score": 0.9},
+            )
+        ],
+    )
+    right = _write_report(
+        tmp_path / "right",
+        criterion="successful tool calls",
+        cards=[
+            _card(
+                "L1:F2",
+                "tool call syntax",
+                "Represents valid tool-call argument construction.",
+                0.9,
+                causal_effects={"signed_causal_effect": 0.9, "strong_causal_score": 0.9},
+            )
+        ],
+    )
+
+    report = build_text_pivot_match_report(left_reports=[left], right_reports=[right], top_k=1, per_left=1)
+    match = report["matches"][0]
+
+    assert match["components"]["causal_evidence"] == 0.0
+    assert match["evidence_grade"] != "text_pivot_with_causal_support"
+
+
+def test_text_pivot_filters_matches_below_min_text_score(tmp_path: Path):
+    left = _write_report(
+        tmp_path / "left",
+        criterion="successful tool calls",
+        cards=[_card("L1:F1", "", "", 0.9)],
+    )
+    right = _write_report(
+        tmp_path / "right",
+        criterion="successful tool calls",
+        cards=[_card("L1:F2", "", "", 0.9)],
+    )
+
+    report = build_text_pivot_match_report(
+        left_reports=[left],
+        right_reports=[right],
+        min_text_score=0.1,
+    )
+
+    assert report["matches"] == []
+    assert report["summary"]["candidate_count"] == 0
 
 
 def test_text_pivot_rejects_zero_per_left(tmp_path: Path):
@@ -459,7 +537,11 @@ def _card(
     model: str = "m",
     causal_effects: dict[str, float] | None = None,
 ) -> FeatureCard:
-    causal = causal_effects or {"criterion": importance, "signed_causal_effect": importance}
+    causal = causal_effects or {
+        "criterion": importance,
+        "signed_causal_effect": importance,
+        "intervention_record_count": 2.0,
+    }
     evidence = FeatureEvidence(
         feature_id=feature_id,
         model=model,

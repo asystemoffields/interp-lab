@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import secrets
 import subprocess
 import sys
 import threading
@@ -15,11 +16,13 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 from urllib.parse import parse_qs, unquote, urlparse
 
-from oracle_sae.web_app import COMMAND_SPECS, render_web_app_html
+from oracle_sae.web_app import COMMAND_SPECS, command_specs_from_parser, render_web_app_html
 
 CommandRunner = Callable[[list[str], Path], tuple[int, str, str]]
 STUDIO_HISTORY_SCHEMA = "interp-lab.studio_history.v1"
 MAX_CAPTURED_OUTPUT_CHARS = 20000
+MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
+STUDIO_TOKEN_HEADER = "X-Interp-Lab-Studio-Token"
 
 
 @dataclass
@@ -27,6 +30,7 @@ class StudioServer:
     server: ThreadingHTTPServer
     thread: threading.Thread | None
     url: str
+    token: str
 
     def start(self) -> None:
         if self.thread is not None:
@@ -53,15 +57,17 @@ def build_studio_server(
     workspace_path = Path.cwd() if workspace is None else Path(workspace)
     workspace_path = workspace_path.resolve()
     reports_path = _resolve_under_workspace(reports_dir, workspace_path)
-    specs = list(COMMAND_SPECS if command_specs is None else command_specs)
+    specs = list(_default_command_specs() if command_specs is None else command_specs)
     allowed_commands = {str(spec.get("id")) for spec in specs if spec.get("id")}
-    html = render_web_app_html(command_specs=specs)
+    token = secrets.token_urlsafe(32)
+    html = render_web_app_html(command_specs=specs, studio_token=token)
     state = _ServerState(
         workspace=workspace_path,
         reports_dir=reports_path,
         command_specs=specs,
         allowed_commands=allowed_commands,
         command_runner=command_runner or _subprocess_runner,
+        token=token,
     )
 
     class Handler(_StudioRequestHandler):
@@ -70,11 +76,13 @@ def build_studio_server(
 
     httpd = ThreadingHTTPServer((host, int(port)), Handler)
     actual_host, actual_port = httpd.server_address[:2]
+    state.allowed_hosts = _allowed_hosts(host, str(actual_host), int(actual_port))
     display_host = host if host not in {"", "0.0.0.0"} else str(actual_host)
     return StudioServer(
         server=httpd,
         thread=None,
         url=f"http://{display_host}:{actual_port}/",
+        token=token,
     )
 
 
@@ -113,12 +121,15 @@ class _ServerState:
         command_specs: list[dict[str, Any]],
         allowed_commands: set[str],
         command_runner: CommandRunner,
+        token: str,
     ) -> None:
         self.workspace = workspace
         self.reports_dir = reports_dir
         self.command_specs = command_specs
         self.allowed_commands = allowed_commands
         self.command_runner = command_runner
+        self.token = token
+        self.allowed_hosts: set[str] = set()
         self.history_path = self.reports_dir / ".studio" / "jobs.json"
         self.lock = threading.Lock()
         self.jobs: dict[str, dict[str, Any]] = self._load_jobs()
@@ -170,6 +181,7 @@ class _ServerState:
         return dict(job)
 
     def create_config_job(self, config: dict[str, Any]) -> dict[str, Any]:
+        self._validate_run_config(config)
         job_id = uuid.uuid4().hex[:12]
         run_dir = self.reports_dir / "studio-runs" / job_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -187,6 +199,27 @@ class _ServerState:
             raise ValueError(f"unknown interp-lab command: {command}")
         if command in {"studio", "web-app"} and "--serve" in argv[1:]:
             raise ValueError("Studio cannot launch a nested server job")
+
+    def _validate_run_config(self, config: dict[str, Any]) -> None:
+        if "steps" not in config:
+            if self.allowed_commands and "inspect" not in self.allowed_commands:
+                raise ValueError("imported run config resolves to inspect, which is not an allowed Studio command")
+            return
+        steps = config.get("steps")
+        if not isinstance(steps, list) or not steps:
+            raise ValueError("run_config steps must be a non-empty list")
+        for index, step in enumerate(steps, start=1):
+            if not isinstance(step, dict):
+                raise ValueError(f"run_config step {index} must be an object")
+            command = step.get("command")
+            if not isinstance(command, str) or not command:
+                raise ValueError(f"run_config step {index} is missing command")
+            if command == "run":
+                raise ValueError("Studio run configs cannot recursively call interp-lab run")
+            if self.allowed_commands and command not in self.allowed_commands:
+                raise ValueError(f"unknown interp-lab command in run_config step {index}: {command}")
+            if command in {"studio", "web-app"} and _step_requests_server(step.get("args", {})):
+                raise ValueError("Studio cannot launch a nested server job from an imported run_config")
 
     def _run_job(self, job_id: str) -> None:
         with self.lock:
@@ -265,6 +298,8 @@ class _StudioRequestHandler(BaseHTTPRequestHandler):
         if parsed.path in {"", "/"}:
             self._send_text(self.index_html, content_type="text/html; charset=utf-8")
             return
+        if parsed.path.startswith("/api/") and not self._authorize_api_request(parsed.query):
+            return
         if parsed.path == "/api/health":
             self._send_json(
                 {
@@ -304,6 +339,8 @@ class _StudioRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API.
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/") and not self._authorize_api_request(parsed.query):
+            return
         if parsed.path != "/api/jobs":
             self._send_error_json(HTTPStatus.NOT_FOUND, "not found")
             return
@@ -325,6 +362,9 @@ class _StudioRequestHandler(BaseHTTPRequestHandler):
         self._send_json({"job": job}, status=HTTPStatus.ACCEPTED)
 
     def do_OPTIONS(self) -> None:  # noqa: N802 - stdlib handler API.
+        if not self._origin_allowed():
+            self._send_error_json(HTTPStatus.FORBIDDEN, "origin is not allowed")
+            return
         self.send_response(HTTPStatus.NO_CONTENT)
         self._send_common_headers()
         self.end_headers()
@@ -339,19 +379,22 @@ class _StudioRequestHandler(BaseHTTPRequestHandler):
             self._send_error_json(HTTPStatus.BAD_REQUEST, "path is required")
             return
         try:
-            path = _safe_workspace_path(path_values[0], self.server_state.workspace)
+            path = _safe_artifact_path(path_values[0], self.server_state.reports_dir)
         except ValueError as exc:
             self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
             return
         if not path.exists() or not path.is_file():
             self._send_error_json(HTTPStatus.NOT_FOUND, "artifact not found")
             return
+        if path.stat().st_size > MAX_ARTIFACT_BYTES:
+            self._send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "artifact is too large to preview")
+            return
         if raw:
             content_type = mimetypes.guess_type(path.name)[0] or "text/plain"
             self._send_bytes(path.read_bytes(), content_type=content_type)
             return
         text = path.read_text(encoding="utf-8", errors="replace")
-        self._send_json({"path": str(path), "kind": _artifact_kind(path), "text": text})
+        self._send_json({"path": _public_artifact_path(path, self.server_state.reports_dir), "kind": _artifact_kind(path), "text": text})
 
     def _read_json(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0") or "0")
@@ -393,9 +436,50 @@ class _StudioRequestHandler(BaseHTTPRequestHandler):
 
     def _send_common_headers(self) -> None:
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        origin = self.headers.get("Origin")
+        if origin and self._origin_allowed():
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", f"Content-Type, {STUDIO_TOKEN_HEADER}, Authorization")
+
+    def _authorize_api_request(self, query: str) -> bool:
+        if not self._host_allowed():
+            self._send_error_json(HTTPStatus.FORBIDDEN, "host is not allowed")
+            return False
+        if not self._origin_allowed():
+            self._send_error_json(HTTPStatus.FORBIDDEN, "origin is not allowed")
+            return False
+        if not self._token_allowed(query):
+            self._send_error_json(HTTPStatus.FORBIDDEN, "Studio token is required")
+            return False
+        return True
+
+    def _host_allowed(self) -> bool:
+        host = self.headers.get("Host")
+        if not host or not self.server_state.allowed_hosts:
+            return True
+        return host.lower() in self.server_state.allowed_hosts
+
+    def _origin_allowed(self) -> bool:
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        parsed = urlparse(origin)
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        netloc = parsed.netloc.lower()
+        return not self.server_state.allowed_hosts or netloc in self.server_state.allowed_hosts
+
+    def _token_allowed(self, query: str) -> bool:
+        token = self.headers.get(STUDIO_TOKEN_HEADER, "")
+        if not token:
+            authorization = self.headers.get("Authorization", "")
+            if authorization.startswith("Bearer "):
+                token = authorization.removeprefix("Bearer ").strip()
+        if not token:
+            token = parse_qs(query).get("token", [""])[0]
+        return secrets.compare_digest(token, self.server_state.token)
 
 
 def _subprocess_runner(argv: list[str], workspace: Path) -> tuple[int, str, str]:
@@ -407,6 +491,14 @@ def _subprocess_runner(argv: list[str], workspace: Path) -> tuple[int, str, str]
         check=False,
     )
     return process.returncode, process.stdout, process.stderr
+
+
+def _default_command_specs() -> list[dict[str, Any]]:
+    try:
+        from oracle_sae.cli import build_parser
+    except ImportError:  # pragma: no cover - import-cycle fallback.
+        return list(COMMAND_SPECS)
+    return command_specs_from_parser(build_parser())
 
 
 def _normalize_job_record(item: dict[str, Any], workspace: Path) -> dict[str, Any]:
@@ -454,10 +546,12 @@ def _artifact_records(reports_dir: Path, *, limit: int = 300) -> list[dict[str, 
     for path in sorted(reports_dir.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in suffixes:
             continue
+        if _contains_private_path_part(path.relative_to(reports_dir)):
+            continue
         stat = path.stat()
         records.append(
             {
-                "path": str(path),
+                "path": _public_artifact_path(path, reports_dir),
                 "name": path.name,
                 "relative_path": str(path.relative_to(reports_dir)),
                 "kind": _artifact_kind(path),
@@ -487,16 +581,26 @@ def _artifact_kind(path: Path) -> str:
     return "json"
 
 
-def _safe_workspace_path(path_text: str, workspace: Path) -> Path:
+def _safe_artifact_path(path_text: str, reports_dir: Path) -> Path:
     text = unquote(path_text)
     path = Path(text)
-    candidate = path if path.is_absolute() else workspace / path
+    candidate = path if path.is_absolute() else reports_dir / path
     resolved = candidate.resolve()
     try:
-        resolved.relative_to(workspace)
+        relative = resolved.relative_to(reports_dir)
     except ValueError as exc:
-        raise ValueError("artifact path must stay inside the workspace") from exc
+        raise ValueError("artifact path must stay inside the reports directory") from exc
+    if _contains_private_path_part(relative):
+        raise ValueError("artifact path cannot reference private Studio files")
     return resolved
+
+
+def _public_artifact_path(path: Path, reports_dir: Path) -> str:
+    return str(path.relative_to(reports_dir))
+
+
+def _contains_private_path_part(path: Path) -> bool:
+    return any(part.startswith(".") for part in path.parts)
 
 
 def _resolve_under_workspace(path: str | Path, workspace: Path) -> Path:
@@ -507,6 +611,28 @@ def _resolve_under_workspace(path: str | Path, workspace: Path) -> Path:
     except ValueError as exc:
         raise ValueError("reports directory must stay inside the workspace") from exc
     return resolved
+
+
+def _allowed_hosts(configured_host: str, actual_host: str, port: int) -> set[str]:
+    host_candidates = {configured_host, actual_host, "127.0.0.1", "localhost", "::1"}
+    values = set()
+    for host in host_candidates:
+        if not host or host == "0.0.0.0":
+            continue
+        display = f"[{host}]" if ":" in host and not host.startswith("[") else host
+        values.add(f"{display}:{port}".lower())
+    return values
+
+
+def _step_requests_server(args: Any) -> bool:
+    if isinstance(args, list):
+        return "--serve" in {str(item) for item in args}
+    if isinstance(args, dict):
+        value = args.get("serve")
+        if isinstance(value, str):
+            return value.lower() not in {"", "0", "false", "no"}
+        return bool(value)
+    return False
 
 
 def _utc_timestamp(seconds: float | None = None) -> str:

@@ -45,7 +45,11 @@ def test_demo_sweep_passes_when_expected_artifacts_exist(tmp_path: Path):
 
     assert report["status"] == "passed"
     assert report["summary"]["passed"] == 1
+    assert report["repo_root"] == "."
+    assert report["manifest_dir"] == "examples/real_model_demos"
+    assert str(tmp_path) not in json.dumps(report)
     assert report["demos"][0]["artifacts"][0]["sha256"]
+    assert "absolute_path" not in report["demos"][0]["artifacts"][0]
 
 
 def test_demo_sweep_runs_internal_commands_and_skips_external_by_default(tmp_path: Path):

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import heapq
+
 from oracle_sae.math_utils import clamp, cosine
 from oracle_sae.schema import CandidateMatch, FeatureCard, FeatureFingerprint
 
@@ -36,7 +38,10 @@ def match_feature_cards(
     top_k: int = 10,
     min_score: float = 0.0,
 ) -> list[CandidateMatch]:
-    matches: list[CandidateMatch] = []
+    if top_k <= 0:
+        return []
+    heap: list[tuple[float, int, CandidateMatch]] = []
+    counter = 0
     for left in left_cards:
         for right in right_cards:
             score, components = fingerprint_similarity(left.fingerprint, right.fingerprint)
@@ -47,22 +52,25 @@ def match_feature_cards(
                 components["signed_effect"] = round(signed_component, 6)
                 score = _score_with_signed_effect(score, signed_component, left_signed, right_signed)
             if score >= min_score:
-                matches.append(
-                    CandidateMatch(
-                        left_feature_id=left.feature_id,
-                        right_feature_id=right.feature_id,
-                        left_model=left.model,
-                        right_model=right.model,
-                        score=score,
-                        components=components,
-                        left_label=left.label,
-                        right_label=right.label,
-                        left_signed_effect=left_signed,
-                        right_signed_effect=right_signed,
-                    )
+                match = CandidateMatch(
+                    left_feature_id=left.feature_id,
+                    right_feature_id=right.feature_id,
+                    left_model=left.model,
+                    right_model=right.model,
+                    score=score,
+                    components=components,
+                    left_label=left.label,
+                    right_label=right.label,
+                    left_signed_effect=left_signed,
+                    right_signed_effect=right_signed,
                 )
-    matches.sort(key=lambda item: item.score, reverse=True)
-    return matches[:top_k]
+                item = (match.score, counter, match)
+                counter += 1
+                if len(heap) < top_k:
+                    heapq.heappush(heap, item)
+                elif match.score > heap[0][0]:
+                    heapq.heapreplace(heap, item)
+    return [item[2] for item in sorted(heap, key=lambda item: (-item[0], item[1]))]
 
 
 def _to_unit(value: float) -> float:

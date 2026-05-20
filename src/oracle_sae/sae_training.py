@@ -719,6 +719,7 @@ def export_hf_sae_interventions(
                         if prompt_index in positive_prompt_indexes:
                             rows_by_strength[strength].append(
                                 {
+                                    "schema_version": "interp-lab.intervention_record.v1",
                                     "model": model_name,
                                     "feature_id": _latent_feature_id(layer, latent_index),
                                     "criterion": criterion,

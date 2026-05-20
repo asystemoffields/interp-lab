@@ -33,6 +33,7 @@ Run locally:
 python -m pip install -e ".[dev]"
 python -m pytest
 python -m compileall src tests
+python -c "import shutil, pathlib; [shutil.rmtree(path) if path.is_dir() else path.unlink() for pattern in ('dist', 'build', '*.egg-info') for path in pathlib.Path('.').glob(pattern)]"
 python -m build
 python -m twine check dist/*
 interp-lab doctor

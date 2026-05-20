@@ -210,6 +210,7 @@ def _score_intervention_rows(
         if prompt_index in positive_indexes:
             rows.append(
                 {
+                    "schema_version": "interp-lab.intervention_record.v1",
                     "model": model_name,
                     "feature_id": feature_id,
                     "criterion": criterion,

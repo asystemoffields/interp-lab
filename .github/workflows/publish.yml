@@ -18,7 +18,35 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install build tools
-        run: python -m pip install build twine
+        run: python -m pip install -e ".[dev]" build twine
+      - name: Verify release tag matches package version
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import tomllib
+
+          version = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          event = os.environ.get("GITHUB_EVENT_NAME", "")
+          ref = os.environ.get("GITHUB_REF_NAME", "")
+          if event == "release" and ref != f"v{version}":
+              raise SystemExit(f"Release tag {ref!r} does not match package version v{version}")
+          print(f"package version: {version}")
+          PY
+      - name: Verify release assets
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' > release-assets.txt
+          grep -Fx "real-model-demo-sweep.json" release-assets.txt
+          grep -Fx "release-check.json" release-assets.txt
+      - name: Run tests
+        run: python -m pytest
+      - name: Compile sources
+        run: python -m compileall src tests
+      - name: Clean old distributions
+        run: rm -rf dist build *.egg-info
       - name: Build package
         run: python -m build
       - name: Check package metadata

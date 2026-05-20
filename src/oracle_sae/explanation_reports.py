@@ -188,6 +188,8 @@ def build_explanation_consistency_report(
             for index in covered_report_indexes
             if sum(1 for item_index, _, _ in occurrences if item_index == index) > 1
         )
+        comparison_count = len(cards) * (len(cards) - 1) // 2
+        _check_pairwise_budget(comparison_count, context=f"explanation consistency for {feature_id}")
         similarities = [
             _text_similarity(_explanation_text(left), _explanation_text(right))
             for left, right in itertools.combinations(cards, 2)
@@ -237,8 +239,12 @@ def build_explanation_consistency_report(
         "explanation_drift_count": sum(1 for item in checks if item["status"] == "explanation_drift"),
         "rank_drift_count": sum(1 for item in checks if item["status"] == "rank_drift"),
         "missing_count": sum(1 for item in checks if item["status"] == "missing_in_some_reports"),
-        "duplicate_feature_id_count": sum(1 for item in checks if item["status"] == "duplicate_feature_id"),
-        "shared_feature_count": sum(1 for item in checks if item["covered_report_count"] == len(loaded)),
+        "duplicate_feature_id_count": sum(1 for item in checks if item["duplicate_report_indexes"]),
+        "shared_feature_count": sum(
+            1
+            for item in checks
+            if item["covered_report_count"] == len(loaded) and not item["duplicate_report_indexes"]
+        ),
     }
     summary["shared_feature_fraction"] = round(
         summary["shared_feature_count"] / summary["feature_count"],
@@ -431,7 +437,7 @@ def build_text_pivot_match_report(
         candidates = []
         for right_item in right_cards:
             match = _text_pivot_match(left_item, right_item, min_text_score=min_text_score)
-            if match["score"] >= min_score:
+            if match["score"] >= min_score and match["components"]["text_pivot"] >= min_text_score:
                 candidates.append(match)
         candidates.sort(key=lambda item: item["score"], reverse=True)
         kept = candidates[:per_left]
@@ -948,12 +954,12 @@ def _card_search_text(card: FeatureCard) -> str:
 
 
 def _explanation_text(card: FeatureCard) -> str:
-    return card.explanation or card.label
+    return card.explanation
 
 
 def _text_similarity(left: str, right: str) -> float:
     if not left.strip() and not right.strip():
-        return 1.0
+        return 0.0
     if not left.strip() or not right.strip():
         return 0.0
     return (cosine(hash_text_vector(left), hash_text_vector(right)) + 1.0) / 2.0
@@ -1003,7 +1009,20 @@ def _signed_effect(card: FeatureCard) -> float | None:
 
 
 def _has_intervention_evidence(card: FeatureCard) -> bool:
-    return any(key in card.causal_effects for key in ("signed_causal_effect", "strong_causal_score"))
+    count = card.causal_effects.get("intervention_record_count")
+    try:
+        if count is not None and float(count) > 0.0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    interventions = card.metadata.get("interventions")
+    if isinstance(interventions, dict):
+        try:
+            intervention_count = float(interventions.get("count", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            intervention_count = 0.0
+        return intervention_count > 0.0 and interventions.get("mean_directed_effect") is not None
+    return False
 
 
 def _norm(values: list[float]) -> float:

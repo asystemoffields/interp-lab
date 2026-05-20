@@ -169,6 +169,7 @@ def test_empty_intervention_metadata_is_not_rendered_as_measured_causal_evidence
     markdown = render_inspection_markdown(report)
 
     assert "Criterion score: 0.620" in markdown
+    assert "Evidence: causal intervention records" not in markdown
     assert "Interventions: n=" not in markdown
 
 
@@ -228,6 +229,7 @@ def test_inspection_html_renders_searchable_feature_cards(tmp_path):
     assert "copy-command" in html
     assert "copyCommand" in html
     assert "visibleRows" in html
+    assert 'data-evidence="causal_records"' in html
 
     path = write_inspection_html(report, tmp_path / "report.html")
     assert path == tmp_path / "report.html"

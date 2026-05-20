@@ -493,9 +493,10 @@ def write_web_app(out_path: str | Path, command_specs: Sequence[dict[str, Any]] 
     return path
 
 
-def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -> str:
-    effective_specs = list(COMMAND_SPECS if command_specs is None else command_specs)
+def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None, *, studio_token: str = "") -> str:
+    effective_specs = list(_default_command_specs() if command_specs is None else command_specs)
     specs = _json_payload(effective_specs)
+    token_payload = _json_payload(studio_token)
     command_count = len(effective_specs)
     return f"""<!doctype html>
 <html lang="en">
@@ -885,6 +886,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
   <script id="command-specs" type="application/json">{specs}</script>
   <script>
     const commandSpecs = JSON.parse(document.getElementById("command-specs").textContent);
+    const studioToken = {token_payload};
     const workflows = [
       {{ title: "Start with a toy tour", command: "demo", values: {{ out: "reports/demo" }} }},
       {{ title: "Validate an assay", command: "validate-assay", values: {{ preset_file: "examples/presets/math-reasoning.json", out: "reports/assay-validation.json" }} }},
@@ -1086,7 +1088,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
 
     async function checkServer() {{
       try {{
-        const response = await fetch("/api/health", {{ cache: "no-store" }});
+        const response = await apiFetch("/api/health", {{ cache: "no-store" }});
         if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
         const health = await response.json();
         setServerState(true, `Workspace: ${{health.workspace}} · history: ${{health.history_path || "in memory"}}`);
@@ -1143,7 +1145,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     }}
 
     async function submitJobPayload(payload) {{
-      const response = await fetch("/api/jobs", {{
+      const response = await apiFetch("/api/jobs", {{
         method: "POST",
         headers: {{ "Content-Type": "application/json" }},
         body: JSON.stringify(payload),
@@ -1166,7 +1168,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     async function pollJob(jobId) {{
       for (let attempt = 0; attempt < 180; attempt += 1) {{
         await delay(1000);
-        const response = await fetch(`/api/jobs/${{encodeURIComponent(jobId)}}`, {{ cache: "no-store" }});
+        const response = await apiFetch(`/api/jobs/${{encodeURIComponent(jobId)}}`, {{ cache: "no-store" }});
         if (!response.ok) return;
         const payload = await response.json();
         jobs = [payload.job, ...jobs.filter((job) => job.id !== payload.job.id)];
@@ -1180,7 +1182,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
 
     async function refreshJobs() {{
       if (!serverAvailable) return;
-      const response = await fetch("/api/jobs", {{ cache: "no-store" }});
+      const response = await apiFetch("/api/jobs", {{ cache: "no-store" }});
       if (!response.ok) return;
       const payload = await response.json();
       jobs = payload.jobs || [];
@@ -1211,7 +1213,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
 
     async function refreshArtifacts() {{
       if (!serverAvailable) return;
-      const response = await fetch("/api/artifacts", {{ cache: "no-store" }});
+      const response = await apiFetch("/api/artifacts", {{ cache: "no-store" }});
       if (!response.ok) return;
       const payload = await response.json();
       artifacts = payload.artifacts || [];
@@ -1240,14 +1242,14 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
 
     async function loadArtifact(artifact) {{
       byId("artifact-title").textContent = artifact.relative_path || artifact.name;
-      const response = await fetch(`/api/artifact?path=${{encodeURIComponent(artifact.path)}}`, {{ cache: "no-store" }});
+      const response = await apiFetch(`/api/artifact?path=${{encodeURIComponent(artifact.path)}}`, {{ cache: "no-store" }});
       if (!response.ok) return;
       const payload = await response.json();
       const preview = byId("artifact-preview");
       const frame = byId("artifact-frame");
       renderGraphOverview(payload.text, artifact.kind);
       if (artifact.kind === "html") {{
-        frame.src = `/api/raw?path=${{encodeURIComponent(artifact.path)}}`;
+        frame.src = apiUrl(`/api/raw?path=${{encodeURIComponent(artifact.path)}}`);
         frame.style.display = "block";
         preview.style.display = "none";
       }} else {{
@@ -1255,6 +1257,18 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
         preview.style.display = "block";
         preview.textContent = payload.text.slice(0, 32000);
       }}
+    }}
+
+    function apiUrl(path) {{
+      if (!studioToken) return path;
+      const separator = path.includes("?") ? "&" : "?";
+      return `${{path}}${{separator}}token=${{encodeURIComponent(studioToken)}}`;
+    }}
+
+    function apiFetch(path, options = {{}}) {{
+      const headers = new Headers(options.headers || {{}});
+      if (studioToken) headers.set("X-Interp-Lab-Studio-Token", studioToken);
+      return fetch(path, {{ ...options, headers }});
     }}
 
     function renderGraphOverview(text, kind) {{
@@ -1393,6 +1407,14 @@ def run_web_app_from_args(
     command_specs: Sequence[dict[str, Any]] | None = None,
 ) -> Path:
     return write_web_app(args.out, command_specs=command_specs)
+
+
+def _default_command_specs() -> list[dict[str, Any]]:
+    try:
+        from oracle_sae.cli import build_parser
+    except ImportError:  # pragma: no cover - import-cycle fallback.
+        return list(COMMAND_SPECS)
+    return command_specs_from_parser(build_parser())
 
 
 def _find_subparsers(parser: argparse.ArgumentParser) -> argparse._SubParsersAction | None:
