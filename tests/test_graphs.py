@@ -198,7 +198,11 @@ def test_attribution_graph_html_is_self_contained_viewer():
     assert "<!doctype html>" in html
     assert "interp-lab attribution graph" in html
     assert "Candidate Paths" in html
+    assert "Evidence Summary" in html
     assert "feature-search" in html
+    assert "role-filter" in html
+    assert "status-filter" in html
+    assert "copy-command" in html
     assert "graph-data" in html
     assert "summary-data" in html
     assert "robust" in html

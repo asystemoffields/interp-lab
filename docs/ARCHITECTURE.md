@@ -16,7 +16,7 @@ criterion text
 
 The same feature card can come from a sparse autoencoder, crosscoder, natural-language autoencoder, manual feature dump, or a future activation oracle.
 
-Inspection reports are written as JSON and Markdown. `inspect --html-out` adds a self-contained feature-card viewer with search, layer/source filters, metric bars, causal notes, training summaries, intervention snippets, and activation examples.
+Inspection reports are written as JSON and Markdown. `inspect --html-out` adds a self-contained feature-card viewer with search, layer/source/evidence filters, metric bars, causal notes, training summaries, intervention snippets, copyable next-action commands, and activation examples.
 
 ## Feature Providers
 
@@ -160,7 +160,7 @@ For human review, `--html-out` writes a self-contained match-validation viewer w
 
 The graph schema keeps effect sizes, signed effects, specificity, side effects, strong causal scores, confidence intervals, intervention record counts, coactivation correlations, measured target-latent deltas, behavior-score deltas, and group-level aggregate scores. Criterion edges are typed as `criterion_association` until measured intervention evidence is present; measured intervention edges are typed as `causal_effect`. Feature node IDs are namespaced by model while raw feature IDs are preserved for path validation and downstream tooling. Repeating `--report` fuses same-criterion layer-specific reports into one graph so cross-layer candidate paths can be inspected together.
 
-Graph export can also write Markdown and HTML digests for human and agent review. The Markdown digest lists strong causal features, candidate paths with validation details when present, candidate feature groups, and the validation plan. The self-contained HTML viewer adds summary metrics, a searchable feature table, candidate path tables, agent next actions, and an SVG graph.
+Graph export can also write Markdown and HTML digests for human and agent review. The Markdown digest lists strong causal features, candidate paths with validation details when present, candidate feature groups, and the validation plan. The self-contained HTML viewer adds summary metrics, an evidence summary, role/status filters, searchable feature and path tables, copyable agent next actions, and an SVG graph.
 
 `summarize-attribution-graph` writes a compact JSON view of a graph for automation. It preserves the model and criterion, graph counts, top strong features, candidate paths with validation fields, run-level validation assessment, and agent next actions without requiring a caller to parse the full graph or Markdown.
 

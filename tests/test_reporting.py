@@ -219,11 +219,14 @@ def test_inspection_html_renders_searchable_feature_cards(tmp_path):
     assert "feature-search" in html
     assert "layer-filter" in html
     assert "source-filter" in html
+    assert "evidence-filter" in html
     assert "SAE:L24:F8" in html
     assert "code planning latent" in html
     assert "strong causal 0.072" in html
     assert "Agent Next Actions" in html
     assert "interp-lab intervene --report report.json --dry-run --json" in html
+    assert "copy-command" in html
+    assert "copyCommand" in html
     assert "visibleRows" in html
 
     path = write_inspection_html(report, tmp_path / "report.html")

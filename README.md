@@ -71,7 +71,7 @@ interp-lab inspect \
   --html-out reports/inspection/report.html
 ```
 
-This writes JSON and Markdown by default. `--html-out` adds a self-contained searchable feature-card report. Reports include `agent_next_actions` with exact follow-up command templates for intervention planning, causal re-inspection, and graph export.
+This writes JSON and Markdown by default. `--html-out` adds a self-contained searchable feature-card report with layer/source/evidence filters and copyable next-action commands. Reports include `agent_next_actions` with exact follow-up command templates for intervention planning, causal re-inspection, and graph export.
 
 Build a prompt dataset from prompts you wrote:
 
@@ -385,7 +385,7 @@ interp-lab export-attribution-graph \
   --html-out reports/sae-paths/graph.html
 ```
 
-The Markdown graph digest summarizes strong causal features, measured candidate paths, validation status counts when present, feature groups, and the next validation checks. The HTML graph viewer is a self-contained local file with summary metrics, searchable feature rows, candidate paths, agent actions, and an SVG graph.
+The Markdown graph digest summarizes strong causal features, measured candidate paths, validation status counts when present, feature groups, and the next validation checks. The HTML graph viewer is a self-contained local file with an evidence summary, role/status filters, searchable feature rows, candidate paths, copyable agent actions, and an SVG graph.
 
 For automation, write a compact graph summary JSON:
 

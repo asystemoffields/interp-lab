@@ -95,9 +95,14 @@ def render_attribution_graph_html(graph: dict[str, Any]) -> str:
             '<section class="toolbar" aria-label="Graph controls">',
             '<label for="feature-search">Filter features</label>',
             '<input id="feature-search" type="search" placeholder="Search labels, IDs, roles, tokens">',
+            '<label for="role-filter">Role</label>',
+            '<select id="role-filter"><option value="">All roles</option></select>',
+            '<label for="status-filter">Path status</label>',
+            '<select id="status-filter"><option value="">All path statuses</option></select>',
             '<span id="filter-count" class="muted"></span>',
             "</section>",
             '<section id="metrics" class="metrics" aria-label="Summary metrics"></section>',
+            '<section id="graph-brief" class="panel" aria-label="Evidence summary"></section>',
             '<section class="panel graph-panel">',
             "<h2>Graph</h2>",
             '<svg id="graph-svg" role="img" aria-label="Attribution graph visualization"></svg>',
@@ -1255,6 +1260,11 @@ code { background: #eef2f7; border: 1px solid var(--line); border-radius: 4px; p
 .toolbar input {
   min-width: min(420px, 100%);
   flex: 1;
+}
+.toolbar select {
+  min-width: 160px;
+}
+.toolbar input, .toolbar select {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px 12px;
@@ -1277,6 +1287,18 @@ code { background: #eef2f7; border: 1px solid var(--line); border-radius: 4px; p
 .metric .value { display: block; font-size: 24px; font-weight: 800; }
 .metric .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
 .panel { padding: 16px; margin-bottom: 16px; }
+.brief-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.brief-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfe;
+}
+.brief-item strong { display: block; margin-bottom: 4px; }
 .graph-panel { overflow-x: auto; }
 #graph-svg { width: 100%; min-width: 900px; height: 560px; border: 1px solid var(--line); border-radius: 6px; background: #fbfcfe; }
 .grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr); gap: 16px; }
@@ -1300,6 +1322,26 @@ tr:last-child td { border-bottom: 0; }
 .node-label { font-size: 11px; fill: #1f2937; pointer-events: none; }
 .node.dimmed, .edge.dimmed { opacity: 0.12; }
 .feature-row.hidden { display: none; }
+.path-row.hidden { display: none; }
+.command-cell {
+  display: grid;
+  gap: 6px;
+}
+.copy-command {
+  justify-self: start;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.copy-command:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
 .empty { color: var(--muted); font-style: italic; }
 @media (max-width: 760px) {
   header, main { padding: 18px; }
@@ -1336,6 +1378,16 @@ function pill(value) {
   if (!value) return "";
   const css = String(value).replaceAll(/[^a-zA-Z0-9_-]/g, "_");
   return `<span class="pill ${css}">${escapeHtml(value)}</span>`;
+}
+
+function compactText(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function copyButton(command) {
+  if (!command) return "";
+  return `<button type="button" class="copy-command" data-command="${escapeHtml(command)}">Copy</button>`;
 }
 
 function cssEscape(value) {
@@ -1381,6 +1433,37 @@ function renderMetrics() {
   document.getElementById("metrics").innerHTML = items.map(([label, value]) => `
     <div class="metric"><span class="value">${escapeHtml(value ?? 0)}</span><span class="label">${escapeHtml(label)}</span></div>
   `).join("");
+}
+
+function renderBrief() {
+  const validation = summary.validation || {};
+  const strongest = Array.isArray(summary.strongest_features) ? summary.strongest_features[0] : null;
+  const paths = Array.isArray(summary.candidate_paths) ? summary.candidate_paths : [];
+  const bestPath = paths[0] || null;
+  const nextAction = Array.isArray(summary.agent_next_actions) ? summary.agent_next_actions[0] : null;
+  const items = [
+    ["Evidence grade", compactText(validation.overall_claim_grade, "unvalidated")],
+    ["Strongest feature", strongest ? `${compactText(strongest.feature_id)} ${number(strongest.strong_causal_score)}` : "none"],
+    ["Top path", bestPath ? `${compactText(bestPath.source_feature_id)} -> ${compactText(bestPath.target_feature_id)}` : "none measured"],
+    ["Next action", compactText(validation.recommended_next_action || (nextAction && nextAction.title), "measure or validate candidate paths")],
+  ];
+  document.getElementById("graph-brief").innerHTML = `
+    <h2>Evidence Summary</h2>
+    <div class="brief-grid">
+      ${items.map(([label, value]) => `<div class="brief-item"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`).join("")}
+    </div>
+  `;
+}
+
+function populateFilters() {
+  const roleFilter = document.getElementById("role-filter");
+  const statusFilter = document.getElementById("status-filter");
+  const roles = [...new Set(nodes.map((node) => node.role).filter(Boolean))].sort();
+  const statuses = [...new Set((Array.isArray(summary.candidate_paths) ? summary.candidate_paths : [])
+    .map((row) => row.status || row.claim_grade || row.evidence)
+    .filter(Boolean))].sort();
+  roleFilter.innerHTML = '<option value="">All roles</option>' + roles.map((role) => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join("");
+  statusFilter.innerHTML = '<option value="">All path statuses</option>' + statuses.map((status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`).join("");
 }
 
 function renderGraph() {
@@ -1442,6 +1525,7 @@ function renderGraph() {
     group.classList.add("node");
     group.dataset.nodeId = String(node.id);
     group.dataset.search = searchableText(node);
+    group.dataset.role = String(node.role || "");
     const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     circle.setAttribute("cx", pos.x);
     circle.setAttribute("cy", pos.y);
@@ -1473,7 +1557,7 @@ function renderTable(targetId, rows, columns) {
     <table>
       <thead><tr>${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr></thead>
       <tbody>
-        ${rows.map((row) => `<tr class="${row._class || ""}" data-search="${escapeHtml(row._search || "")}">
+        ${rows.map((row) => `<tr class="${row._class || ""}" data-search="${escapeHtml(row._search || "")}" data-role="${escapeHtml(row._role || row.role || "")}" data-status="${escapeHtml(row._status || row.status || row.claim_grade || row.evidence || "")}">
           ${columns.map((column) => `<td>${column.render(row)}</td>`).join("")}
         </tr>`).join("")}
       </tbody>
@@ -1482,7 +1566,12 @@ function renderTable(targetId, rows, columns) {
 }
 
 function renderDetails() {
-  const paths = Array.isArray(summary.candidate_paths) ? summary.candidate_paths : [];
+  const paths = (Array.isArray(summary.candidate_paths) ? summary.candidate_paths : []).map((row) => ({
+    ...row,
+    _class: "path-row",
+    _status: row.status || row.claim_grade || row.evidence || "",
+    _search: [row.source_feature_id, row.target_feature_id, row.status, row.claim_grade, row.evidence, row.next_action].join(" ").toLowerCase(),
+  }));
   renderTable("candidate-paths", paths, [
     {label: "Status", render: (row) => pill(row.status || row.claim_grade || row.evidence)},
     {label: "Path", render: (row) => `<code>${escapeHtml(row.source_feature_id)} -> ${escapeHtml(row.target_feature_id)}</code>`},
@@ -1500,6 +1589,7 @@ function renderDetails() {
   const featureRows = nodes.filter((node) => node.type === "feature").map((node) => ({
     ...node,
     _class: "feature-row",
+    _role: node.role || "",
     _search: searchableText(node),
   }));
   renderTable("feature-cards", featureRows, [
@@ -1513,25 +1603,33 @@ function renderDetails() {
   renderTable("agent-actions", actions, [
     {label: "Action", render: (row) => `<code>${escapeHtml(row.id || "")}</code>`},
     {label: "Title", render: (row) => escapeHtml(row.title || "")},
-    {label: "Command", render: (row) => `<code>${escapeHtml(row.command || "")}</code>`},
+    {label: "Command", render: (row) => `<span class="command-cell"><code>${escapeHtml(row.command || "")}</code>${copyButton(row.command || "")}</span>`},
   ]);
 }
 
 function applyFilter() {
   const query = document.getElementById("feature-search").value.trim().toLowerCase();
-  const featureRows = [...document.querySelectorAll(".feature-row")];
+  const role = document.getElementById("role-filter").value;
+  const status = document.getElementById("status-filter").value;
+  const filteredRows = [...document.querySelectorAll(".feature-row, .path-row")];
   let visible = 0;
-  featureRows.forEach((row) => {
-    const match = !query || row.dataset.search.includes(query);
+  filteredRows.forEach((row) => {
+    const isPath = row.classList.contains("path-row");
+    const queryMatch = !query || row.dataset.search.includes(query);
+    const roleMatch = !role || row.dataset.role === role;
+    const statusMatch = !status || (isPath ? row.dataset.status === status : true);
+    const match = queryMatch && roleMatch && statusMatch;
     row.classList.toggle("hidden", !match);
-    if (match) visible += 1;
+    if (match && row.classList.contains("feature-row")) visible += 1;
   });
   document.querySelectorAll(".node").forEach((node) => {
-    const match = !query || node.dataset.search.includes(query) || !node.dataset.search;
+    const queryMatch = !query || node.dataset.search.includes(query) || !node.dataset.search;
+    const roleMatch = !role || node.dataset.role === role;
+    const match = queryMatch && roleMatch;
     node.classList.toggle("dimmed", !match);
   });
   document.querySelectorAll(".edge").forEach((edge) => {
-    if (!query) {
+    if (!query && !role) {
       edge.classList.remove("dimmed");
       return;
     }
@@ -1540,11 +1638,39 @@ function applyFilter() {
     const match = (source && !source.classList.contains("dimmed")) || (target && !target.classList.contains("dimmed"));
     edge.classList.toggle("dimmed", !match);
   });
-  document.getElementById("filter-count").textContent = query ? `${visible} matching feature rows` : "";
+  document.getElementById("filter-count").textContent = (query || role || status) ? `${visible} matching feature rows` : "";
+}
+
+async function copyCommand(button) {
+  const command = button.dataset.command || "";
+  try {
+    await navigator.clipboard.writeText(command);
+  } catch (error) {
+    const area = document.createElement("textarea");
+    area.value = command;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  const original = button.textContent;
+  button.textContent = "Copied";
+  window.setTimeout(() => { button.textContent = original; }, 1200);
 }
 
 renderMetrics();
+renderBrief();
+populateFilters();
 renderGraph();
 renderDetails();
 document.getElementById("feature-search").addEventListener("input", applyFilter);
+document.getElementById("role-filter").addEventListener("change", applyFilter);
+document.getElementById("status-filter").addEventListener("change", applyFilter);
+document.addEventListener("click", (event) => {
+  const button = event.target.closest(".copy-command");
+  if (button) copyCommand(button);
+});
 """

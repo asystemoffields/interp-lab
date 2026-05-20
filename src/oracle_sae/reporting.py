@@ -179,6 +179,10 @@ def render_inspection_html(report: InspectionReport) -> str:
         f'<option value="{_attr(source)}">{_h(source)}</option>'
         for source in sorted({str(card.source) for card in cards if card.source})
     )
+    evidence_options = "\n".join(
+        f'<option value="{_attr(value)}">{_h(label)}</option>'
+        for value, label in _evidence_filter_values(cards)
+    )
     metric_cards = "\n".join(
         _summary_card(label, value)
         for label, value in [
@@ -282,7 +286,7 @@ def render_inspection_html(report: InspectionReport) -> str:
     }}
     .toolbar {{
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) minmax(140px, 210px) minmax(140px, 210px) auto;
+      grid-template-columns: minmax(220px, 1fr) minmax(140px, 190px) minmax(140px, 190px) minmax(140px, 190px) auto;
       gap: 10px;
       align-items: center;
     }}
@@ -377,6 +381,26 @@ def render_inspection_html(report: InspectionReport) -> str:
       border-radius: 7px;
       background: #f6f8f7;
     }}
+    .action-head {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }}
+    .copy-command {{
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 5px 8px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }}
+    .copy-command:focus-visible {{
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }}
     .command {{
       display: block;
       white-space: pre-wrap;
@@ -442,6 +466,10 @@ def render_inspection_html(report: InspectionReport) -> str:
           <option value="">All sources</option>
           {source_options}
         </select>
+        <select id="evidence-filter" aria-label="Filter by evidence">
+          <option value="">All evidence</option>
+          {evidence_options}
+        </select>
         <div id="visible-count" class="visible-count">{len(cards)} visible</div>
       </div>
     </section>
@@ -474,25 +502,51 @@ def render_inspection_html(report: InspectionReport) -> str:
     const search = document.getElementById("feature-search");
     const layerFilter = document.getElementById("layer-filter");
     const sourceFilter = document.getElementById("source-filter");
+    const evidenceFilter = document.getElementById("evidence-filter");
     const visibleCount = document.getElementById("visible-count");
     function applyFilters() {{
       const query = search.value.trim().toLowerCase();
       const layer = layerFilter.value;
       const source = sourceFilter.value;
+      const evidence = evidenceFilter.value;
       let visibleRows = 0;
       document.querySelectorAll("[data-feature]").forEach((node) => {{
         const layerMatch = !layer || node.dataset.layer === layer;
         const sourceMatch = !source || node.dataset.source === source;
+        const evidenceMatch = !evidence || node.dataset.evidence === evidence;
         const searchMatch = !query || (node.dataset.search || "").includes(query);
-        const show = layerMatch && sourceMatch && searchMatch;
+        const show = layerMatch && sourceMatch && evidenceMatch && searchMatch;
         node.hidden = !show;
         if (show && node.dataset.feature === "row") visibleRows += 1;
       }});
       visibleCount.textContent = `${{visibleRows}} visible`;
     }}
+    async function copyCommand(button) {{
+      const command = button.dataset.command || "";
+      try {{
+        await navigator.clipboard.writeText(command);
+      }} catch (error) {{
+        const area = document.createElement("textarea");
+        area.value = command;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.left = "-9999px";
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+      }}
+      const original = button.textContent;
+      button.textContent = "Copied";
+      window.setTimeout(() => {{ button.textContent = original; }}, 1200);
+    }}
     search.addEventListener("input", applyFilters);
     layerFilter.addEventListener("change", applyFilters);
     sourceFilter.addEventListener("change", applyFilters);
+    evidenceFilter.addEventListener("change", applyFilters);
+    document.querySelectorAll(".copy-command").forEach((button) => {{
+      button.addEventListener("click", () => copyCommand(button));
+    }});
   </script>
 </body>
 </html>
@@ -901,8 +955,9 @@ def _feature_table_row(card, index: int) -> str:
     layer = _layer_value(card)
     source = str(card.source or "unknown")
     strong = float(card.causal_effects.get("strong_causal_score", 0.0))
+    evidence = _feature_evidence_key(card)
     return f"""
-            <tr data-feature="row" data-layer="{_attr(layer)}" data-source="{_attr(source)}" data-search="{_attr(_feature_search_text(card))}">
+            <tr data-feature="row" data-layer="{_attr(layer)}" data-source="{_attr(source)}" data-evidence="{_attr(evidence)}" data-search="{_attr(_feature_search_text(card))}">
               <td>{index}</td>
               <td>
                 <div class="feature-ref">
@@ -924,6 +979,7 @@ def _feature_detail_card(card, index: int) -> str:
     layer = _layer_value(card)
     source = str(card.source or "unknown")
     strong = float(card.causal_effects.get("strong_causal_score", 0.0))
+    evidence = _feature_evidence_key(card)
     direction = _direction_line(card)
     evidence = _evidence_line(card)
     interpretation = _html_card_interpretation(card)
@@ -946,7 +1002,7 @@ def _feature_detail_card(card, index: int) -> str:
         if item
     )
     return f"""
-        <article class="feature-card" data-feature="card" data-layer="{_attr(layer)}" data-source="{_attr(source)}" data-search="{_attr(_feature_search_text(card))}">
+        <article class="feature-card" data-feature="card" data-layer="{_attr(layer)}" data-source="{_attr(source)}" data-evidence="{_attr(evidence)}" data-search="{_attr(_feature_search_text(card))}">
           <h3>
             <span>{index}. <code>{_h(card.feature_id)}</code></span>
             <span class="pill blue">{_h(_display_label(card))}</span>
@@ -1047,7 +1103,10 @@ def _html_action(action: dict) -> str:
         requirement = f'<span class="label-line">Requires: {_h(", ".join(str(item) for item in requires))}</span>'
     return f"""
         <div class="action">
-          <strong>{_h(title)}</strong>
+          <div class="action-head">
+            <strong>{_h(title)}</strong>
+            <button type="button" class="copy-command" data-command="{_attr(command)}">Copy</button>
+          </div>
           <code class="command">{_h(command)}</code>
           {requirement}
         </div>
@@ -1065,13 +1124,35 @@ def _action_command(action: dict) -> str:
 
 
 def _feature_evidence_pill(card) -> str:
-    if _has_measured_intervention(card):
+    evidence = _feature_evidence_key(card)
+    if evidence == "causal_records":
         return '<span class="pill good">causal records</span>'
-    if card.source in {"activation-records", "hf-hidden-state"}:
+    if evidence == "activation_records":
         return '<span class="pill blue">activation records</span>'
-    if card.source in {"neuronpedia", "saelens", "goodfire", "gemma-scope", "qwen-scope"}:
+    if evidence == "ecosystem":
         return f'<span class="pill">{_h(card.source)}</span>'
     return '<span class="pill">feature evidence</span>'
+
+
+def _feature_evidence_key(card) -> str:
+    if _has_measured_intervention(card):
+        return "causal_records"
+    if card.source in {"activation-records", "hf-hidden-state"}:
+        return "activation_records"
+    if card.source in {"neuronpedia", "saelens", "goodfire", "gemma-scope", "qwen-scope"}:
+        return "ecosystem"
+    return "feature_evidence"
+
+
+def _evidence_filter_values(cards) -> list[tuple[str, str]]:
+    labels = {
+        "causal_records": "Causal records",
+        "activation_records": "Activation records",
+        "ecosystem": "External SAE/source",
+        "feature_evidence": "Feature evidence",
+    }
+    present = {_feature_evidence_key(card) for card in cards}
+    return [(key, label) for key, label in labels.items() if key in present]
 
 
 def _causal_strength_pill(strong: float) -> str:
