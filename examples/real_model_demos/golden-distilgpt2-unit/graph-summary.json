@@ -1,0 +1,36 @@
+{
+  "agent_next_actions": [
+    {
+      "command": "interp-lab export-hf-sae-paths --model <model> --dataset <heldout.jsonl> --source-sae <source-sae.json> --target-sae <target-sae.json> --out <paths.jsonl>",
+      "id": "measure_path_records",
+      "title": "Measure path-patching records before validating this graph"
+    }
+  ],
+  "candidate_paths": [],
+  "counts": {
+    "candidate_paths": 0,
+    "edges": 11,
+    "features": 3,
+    "nodes": 6,
+    "path_patch_edges": 0
+  },
+  "criterion": "the next token should be a physical measurement unit",
+  "model": "distilgpt2",
+  "schema_version": "interp-lab.attribution_graph_summary.v1",
+  "strongest_features": [
+    {
+      "feature_id": "SAE:L6:F10",
+      "label": "SAE:L6:F10",
+      "layer": 6,
+      "role": "criterion_promoter",
+      "signed_effect": 0.225775,
+      "strong_causal_score": 0.224412
+    }
+  ],
+  "validation": {
+    "claim_grade_counts": {},
+    "overall_claim_grade": null,
+    "recommended_next_action": null,
+    "status_counts": {}
+  }
+}

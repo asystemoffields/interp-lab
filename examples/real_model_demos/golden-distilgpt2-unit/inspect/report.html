@@ -1,0 +1,1237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>interp-lab Feature Report</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f4;
+      --ink: #1d2528;
+      --muted: #5d686e;
+      --line: #d9dedb;
+      --panel: #ffffff;
+      --accent: #0f766e;
+      --good: #147a3f;
+      --warn: #946200;
+      --quiet: #5f6670;
+      --blue: #285e9e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+    main {
+      width: min(1200px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+    header {
+      display: grid;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 30px; letter-spacing: 0; }
+    h2 { font-size: 18px; margin-bottom: 14px; }
+    h3 { font-size: 16px; }
+    code {
+      padding: 1px 5px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #f2f4f3;
+      font-size: 0.92em;
+    }
+    .subhead { color: var(--muted); max-width: 960px; }
+    .model-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: #fff;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 650;
+      color: var(--muted);
+    }
+    .pill.good { color: var(--good); border-color: #9fd3b5; background: #eef9f2; }
+    .pill.warn { color: var(--warn); border-color: #e5c06f; background: #fff7df; }
+    .pill.blue { color: var(--blue); border-color: #a9c7ed; background: #eef6ff; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      gap: 10px;
+    }
+    .metric, .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .metric { padding: 12px; }
+    .metric .label { color: var(--muted); font-size: 12px; }
+    .metric .value { font-size: 24px; font-weight: 750; }
+    .panel {
+      padding: 16px;
+      margin-top: 14px;
+    }
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(140px, 190px) minmax(140px, 190px) minmax(140px, 190px) auto;
+      gap: 10px;
+      align-items: center;
+    }
+    input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+    .visible-count { color: var(--muted); font-size: 13px; text-align: right; }
+    .notes {
+      display: grid;
+      gap: 10px;
+    }
+    .note {
+      border-left: 3px solid var(--accent);
+      padding-left: 10px;
+      color: var(--muted);
+    }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 920px;
+      font-size: 14px;
+    }
+    th {
+      text-align: left;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    td {
+      padding: 11px 8px;
+      border-bottom: 1px solid #ecefed;
+      vertical-align: top;
+    }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .feature-ref { display: grid; gap: 4px; }
+    .label-line { color: var(--muted); font-size: 12px; }
+    .details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+      gap: 12px;
+    }
+    .feature-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+    .feature-card h3 {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .meters { display: grid; gap: 7px; }
+    .meter {
+      display: grid;
+      grid-template-columns: 92px 1fr 54px;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .bar {
+      height: 7px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #e8ecea;
+    }
+    .fill { height: 100%; background: var(--accent); }
+    .examples {
+      display: grid;
+      gap: 6px;
+    }
+    .actions {
+      display: grid;
+      gap: 8px;
+    }
+    .action {
+      display: grid;
+      gap: 4px;
+      padding: 9px;
+      border-radius: 7px;
+      background: #f6f8f7;
+    }
+    .action-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .copy-command {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 5px 8px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .copy-command:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .command {
+      display: block;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .example {
+      padding: 8px;
+      border-radius: 7px;
+      background: #f6f8f7;
+      color: #334044;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+    }
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    [hidden] { display: none !important; }
+    @media (max-width: 760px) {
+      main { width: min(100vw - 20px, 1200px); padding-top: 20px; }
+      h1 { font-size: 24px; }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .toolbar { grid-template-columns: 1fr; }
+      .visible-count { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Feature Report</h1>
+        <p class="subhead">Criterion: the next token should be a physical measurement unit</p>
+      </div>
+      <div class="model-line">
+        <span>Model <code>distilgpt2</code></span>
+        <span class="pill">2026-05-20T19:53:39+00:00</span>
+      </div>
+      <div class="summary-grid">
+        <div class="metric">
+          <div class="label">Features</div>
+          <div class="value">8</div>
+        </div>
+
+
+        <div class="metric">
+          <div class="label">Strong Causal</div>
+          <div class="value">0</div>
+        </div>
+
+
+        <div class="metric">
+          <div class="label">With Interventions</div>
+          <div class="value">0</div>
+        </div>
+
+
+        <div class="metric">
+          <div class="label">Layers</div>
+          <div class="value">1</div>
+        </div>
+</div>
+    </header>
+    <section class="panel">
+      <h2>Run Context</h2>
+      <div class="notes">
+        <p class="note">Report scope: ranked 32 kept feature(s) from 32 candidate feature(s).</p>
+        <p class="note">Evidence summary: 8 activation rows; 32 candidate features; criterion score mean=0.500, range=[0.000, 1.000]; positive rows=4, non-positive rows=4.</p>
+        <p class="note">Metric notes: Association is activation/criterion correlation. Effect is mean causal change from interventions. Specificity subtracts measured side effects. Strong causal score is the specificity-adjusted causal signal.</p>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Mechanism Sketch</h2>
+      <div class="notes"><p class="note">Causal candidates: no tested feature crossed the current strong-effect threshold.</p>
+<p class="note">No intervention records were attached; causal claims are untested.</p>
+<p class="note">No feature currently meets the strong-effect threshold; broaden prompts, test more layers, or use graph attribution.</p></div>
+    </section>
+    
+    <section class="panel">
+      <h2>Agent Next Actions</h2>
+      <div class="actions">
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan causal tests for the top report features</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --report &#x27;&lt;report.json&gt;&#x27; --top-k 8 --mode suppress --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --report '&lt;report.json&gt;' --top-k 8 --mode suppress --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: inspection report JSON, scored causal prompt JSONL</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Rebuild the report with intervention evidence</strong>
+            <button type="button" class="copy-command" data-command="interp-lab inspect --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --backend records --records &#x27;&lt;activation-records.jsonl&gt;&#x27; --interventions &#x27;&lt;interventions.jsonl&gt;&#x27; --out &#x27;&lt;causal-report-dir&gt;&#x27; --html-out &#x27;&lt;causal-report-dir&gt;/report.html&#x27;">Copy</button>
+          </div>
+          <code class="command">interp-lab inspect --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --backend records --records '&lt;activation-records.jsonl&gt;' --interventions '&lt;interventions.jsonl&gt;' --out '&lt;causal-report-dir&gt;' --html-out '&lt;causal-report-dir&gt;/report.html'</code>
+          <span class="label-line">Requires: activation records, intervention records</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Build a graph from the causal report</strong>
+            <button type="button" class="copy-command" data-command="interp-lab export-attribution-graph --report &#x27;&lt;causal-report-dir&gt;/report.json&#x27; --out &#x27;&lt;graph.json&gt;&#x27; --markdown-out &#x27;&lt;graph.md&gt;&#x27; --html-out &#x27;&lt;graph.html&gt;&#x27;">Copy</button>
+          </div>
+          <code class="command">interp-lab export-attribution-graph --report '&lt;causal-report-dir&gt;/report.json' --out '&lt;graph.json&gt;' --markdown-out '&lt;graph.md&gt;' --html-out '&lt;graph.html&gt;'</code>
+          <span class="label-line">Requires: causal report JSON</span>
+        </div>
+</div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <input id="feature-search" type="search" placeholder="Filter by feature, label, examples, or evidence">
+        <select id="layer-filter" aria-label="Filter by layer">
+          <option value="">All layers</option>
+          <option value="6">6</option>
+        </select>
+        <select id="source-filter" aria-label="Filter by source">
+          <option value="">All sources</option>
+          <option value="trained-sae">trained-sae</option>
+        </select>
+        <select id="evidence-filter" aria-label="Filter by evidence">
+          <option value="">All evidence</option>
+          <option value="feature_evidence">Feature evidence</option>
+        </select>
+        <div id="visible-count" class="visible-count">8 visible</div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Ranked Features</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Feature</th>
+              <th>Evidence</th>
+              <th class="num">Importance</th>
+              <th class="num">Association</th>
+              <th class="num">Effect</th>
+              <th class="num">Specificity</th>
+              <th class="num">Strong Causal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-feature="row" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f30 trained sae latent 30 activation summary: trained sae latent 30. representative high-activation contexts include ordinary-prefix-4: activation=6.328, criterion_score=0.000 | a good onboarding message should; ordinary-prefix-1: activation=5.984, criterion_score=0.000 | please write a friendly. trained-sae trained sae latent 30 activation association: suppresses criterion (-0.962) ordinary-prefix-4: activation=6.328, criterion_score=0.000 | a good onboarding message should ordinary-prefix-1: activation=5.984, criterion_score=0.000 | please write a friendly ordinary-prefix-3: activation=4.661, criterion_score=0.000 | summarize the feedback into activation summary: trained sae latent 30. representative high-activation contexts include ordinary-prefix-4: activation=6.328, criterion_score=0.000 | a good onboarding message should; ordinary-prefix-1: activation=5.984, criterion_score=0.000 | please write a friendly. ">
+              <td>1</td>
+              <td>
+                <div class="feature-ref">
+                  <code>SAE:L6:F30</code>
+                  <span class="label-line">trained SAE latent 30</span>
+                </div>
+              </td>
+              <td><span class="pill">feature evidence</span></td>
+              <td class="num">0.944</td>
+              <td class="num">0.962</td>
+              <td class="num">0.962</td>
+              <td class="num">0.818</td>
+              <td class="num">0.000</td>
+            </tr>
+
+
+            <tr data-feature="row" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f13 trained sae latent 13 activation summary: trained sae latent 13. representative high-activation contexts include ordinary-prefix-4: activation=7.192, criterion_score=0.000 | a good onboarding message should; ordinary-prefix-1: activation=6.169, criterion_score=0.000 | please write a friendly. trained-sae trained sae latent 13 activation association: suppresses criterion (-0.924) ordinary-prefix-4: activation=7.192, criterion_score=0.000 | a good onboarding message should ordinary-prefix-1: activation=6.169, criterion_score=0.000 | please write a friendly ordinary-prefix-5: activation=4.528, criterion_score=0.000 | the assistant should answer activation summary: trained sae latent 13. representative high-activation contexts include ordinary-prefix-4: activation=7.192, criterion_score=0.000 | a good onboarding message should; ordinary-prefix-1: activation=6.169, criterion_score=0.000 | please write a friendly. ">
+              <td>2</td>
+              <td>
+                <div class="feature-ref">
+                  <code>SAE:L6:F13</code>
+                  <span class="label-line">trained SAE latent 13</span>
+                </div>
+              </td>
+              <td><span class="pill">feature evidence</span></td>
+              <td class="num">0.903</td>
+              <td class="num">0.924</td>
+              <td class="num">0.924</td>
+              <td class="num">0.732</td>
+              <td class="num">0.000</td>
+            </tr>
+
+
+            <tr data-feature="row" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f10 trained sae latent 10 activation summary: trained sae latent 10. representative high-activation contexts include unit-4: activation=3.139, criterion_score=1.000 | the room is 14; unit-6: activation=2.445, criterion_score=1.000 | the recipe calls for 250. trained-sae trained sae latent 10 activation association: promotes criterion (0.765) unit-4: activation=3.139, criterion_score=1.000 | the room is 14 unit-6: activation=2.445, criterion_score=1.000 | the recipe calls for 250 unit-3: activation=2.418, criterion_score=1.000 | the trail climbs 600 activation summary: trained sae latent 10. representative high-activation contexts include unit-4: activation=3.139, criterion_score=1.000 | the room is 14; unit-6: activation=2.445, criterion_score=1.000 | the recipe calls for 250. ">
+              <td>3</td>
+              <td>
+                <div class="feature-ref">
+                  <code>SAE:L6:F10</code>
+                  <span class="label-line">trained SAE latent 10</span>
+                </div>
+              </td>
+              <td><span class="pill">feature evidence</span></td>
+              <td class="num">0.769</td>
+              <td class="num">0.765</td>
+              <td class="num">0.765</td>
+              <td class="num">0.637</td>
+              <td class="num">0.000</td>
+            </tr>
+
+
+            <tr data-feature="row" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f16 trained sae latent 16 activation summary: trained sae latent 16. representative high-activation contexts include unit-3: activation=8.210, criterion_score=1.000 | the trail climbs 600; unit-4: activation=5.021, criterion_score=1.000 | the room is 14. trained-sae trained sae latent 16 activation association: promotes criterion (0.731) unit-3: activation=8.210, criterion_score=1.000 | the trail climbs 600 unit-4: activation=5.021, criterion_score=1.000 | the room is 14 unit-6: activation=4.498, criterion_score=1.000 | the recipe calls for 250 activation summary: trained sae latent 16. representative high-activation contexts include unit-3: activation=8.210, criterion_score=1.000 | the trail climbs 600; unit-4: activation=5.021, criterion_score=1.000 | the room is 14. ">
+              <td>4</td>
+              <td>
+                <div class="feature-ref">
+                  <code>SAE:L6:F16</code>
+                  <span class="label-line">trained SAE latent 16</span>
+                </div>
+              </td>
+              <td><span class="pill">feature evidence</span></td>
+              <td class="num">0.729</td>
+              <td class="num">0.731</td>
+              <td class="num">0.731</td>
+              <td class="num">0.540</td>
+              <td class="num">0.000</td>
+            </tr>
+
+
+            <tr data-feature="row" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f26 trained sae latent 26 activation summary: trained sae latent 26. representative high-activation contexts include unit-2: activation=9.252, criterion_score=1.000 | the package weighs 3.2; unit-6: activation=5.267, criterion_score=1.000 | the recipe calls for 250. trained-sae trained sae latent 26 activation association: promotes criterion (0.710) unit-2: activation=9.252, criterion_score=1.000 | the package weighs 3.2 unit-6: activation=5.267, criterion_score=1.000 | the recipe calls for 250 unit-4: activation=1.751, criterion_score=1.000 | the room is 14 activation summary: trained sae latent 26. representative high-activation contexts include unit-2: activation=9.252, criterion_score=1.000 | the package weighs 3.2; unit-6: activation=5.267, criterion_score=1.000 | the recipe calls for 250. ">
+              <td>5</td>
+              <td>
+                <div class="feature-ref">
+                  <code>SAE:L6:F26</code>
+                  <span class="label-line">trained SAE latent 26</span>
+                </div>
+              </td>
+              <td><span class="pill">feature evidence</span></td>
+              <td class="num">0.705</td>
+              <td class="num">0.710</td>
+              <td class="num">0.710</td>
+              <td class="num">0.483</td>
+              <td class="num">0.000</td>
+            </tr>
+
+
+            <tr data-feature="row" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f9 trained sae latent 9 activation summary: trained sae latent 9. representative high-activation contexts include unit-6: activation=8.127, criterion_score=1.000 | the recipe calls for 250; unit-3: activation=5.627, criterion_score=1.000 | the trail climbs 600. trained-sae trained sae latent 9 activation association: promotes criterion (0.689) unit-6: activation=8.127, criterion_score=1.000 | the recipe calls for 250 unit-3: activation=5.627, criterion_score=1.000 | the trail climbs 600 unit-4: activation=2.678, criterion_score=1.000 | the room is 14 activation summary: trained sae latent 9. representative high-activation contexts include unit-6: activation=8.127, criterion_score=1.000 | the recipe calls for 250; unit-3: activation=5.627, criterion_score=1.000 | the trail climbs 600. ">
+              <td>6</td>
+              <td>
+                <div class="feature-ref">
+                  <code>SAE:L6:F9</code>
+                  <span class="label-line">trained SAE latent 9</span>
+                </div>
+              </td>
+              <td><span class="pill">feature evidence</span></td>
+              <td class="num">0.692</td>
+              <td class="num">0.689</td>
+              <td class="num">0.689</td>
+              <td class="num">0.505</td>
+              <td class="num">0.000</td>
+            </tr>
+
+
+            <tr data-feature="row" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f0 trained sae latent 0 activation summary: trained sae latent 0. representative high-activation contexts include ordinary-prefix-1: activation=7.703, criterion_score=0.000 | please write a friendly; ordinary-prefix-5: activation=2.962, criterion_score=0.000 | the assistant should answer. trained-sae trained sae latent 0 activation association: suppresses criterion (-0.651) ordinary-prefix-1: activation=7.703, criterion_score=0.000 | please write a friendly ordinary-prefix-5: activation=2.962, criterion_score=0.000 | the assistant should answer ordinary-prefix-4: activation=2.761, criterion_score=0.000 | a good onboarding message should activation summary: trained sae latent 0. representative high-activation contexts include ordinary-prefix-1: activation=7.703, criterion_score=0.000 | please write a friendly; ordinary-prefix-5: activation=2.962, criterion_score=0.000 | the assistant should answer. ">
+              <td>7</td>
+              <td>
+                <div class="feature-ref">
+                  <code>SAE:L6:F0</code>
+                  <span class="label-line">trained SAE latent 0</span>
+                </div>
+              </td>
+              <td><span class="pill">feature evidence</span></td>
+              <td class="num">0.653</td>
+              <td class="num">0.651</td>
+              <td class="num">0.651</td>
+              <td class="num">0.436</td>
+              <td class="num">0.000</td>
+            </tr>
+
+
+            <tr data-feature="row" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f11 trained sae latent 11 activation summary: trained sae latent 11. representative high-activation contexts include unit-6: activation=8.391, criterion_score=1.000 | the recipe calls for 250; unit-3: activation=5.123, criterion_score=1.000 | the trail climbs 600. trained-sae trained sae latent 11 activation association: promotes criterion (0.639) unit-6: activation=8.391, criterion_score=1.000 | the recipe calls for 250 unit-3: activation=5.123, criterion_score=1.000 | the trail climbs 600 unit-4: activation=1.678, criterion_score=1.000 | the room is 14 activation summary: trained sae latent 11. representative high-activation contexts include unit-6: activation=8.391, criterion_score=1.000 | the recipe calls for 250; unit-3: activation=5.123, criterion_score=1.000 | the trail climbs 600. ">
+              <td>8</td>
+              <td>
+                <div class="feature-ref">
+                  <code>SAE:L6:F11</code>
+                  <span class="label-line">trained SAE latent 11</span>
+                </div>
+              </td>
+              <td><span class="pill">feature evidence</span></td>
+              <td class="num">0.647</td>
+              <td class="num">0.639</td>
+              <td class="num">0.639</td>
+              <td class="num">0.453</td>
+              <td class="num">0.000</td>
+            </tr>
+</tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Feature Details</h2>
+      <div class="details">
+        <article class="feature-card" data-feature="card" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f30 trained sae latent 30 activation summary: trained sae latent 30. representative high-activation contexts include ordinary-prefix-4: activation=6.328, criterion_score=0.000 | a good onboarding message should; ordinary-prefix-1: activation=5.984, criterion_score=0.000 | please write a friendly. trained-sae trained sae latent 30 activation association: suppresses criterion (-0.962) ordinary-prefix-4: activation=6.328, criterion_score=0.000 | a good onboarding message should ordinary-prefix-1: activation=5.984, criterion_score=0.000 | please write a friendly ordinary-prefix-3: activation=4.661, criterion_score=0.000 | summarize the feedback into activation summary: trained sae latent 30. representative high-activation contexts include ordinary-prefix-4: activation=6.328, criterion_score=0.000 | a good onboarding message should; ordinary-prefix-1: activation=5.984, criterion_score=0.000 | please write a friendly. ">
+          <h3>
+            <span>1. <code>SAE:L6:F30</code></span>
+            <span class="pill blue">trained SAE latent 30</span>
+          </h3>
+          <div class="chip-row"><span class="pill">feature evidence</span>
+<span class="pill">layer 6</span>
+<span class="pill">trained-sae</span>
+<span class="pill">causal 0.000</span></div>
+          <div class="meters">
+            
+            <div class="meter">
+              <span>importance</span>
+              <span class="bar"><span class="fill" style="width: 94.4%"></span></span>
+              <span>0.944</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>association</span>
+              <span class="bar"><span class="fill" style="width: 96.2%"></span></span>
+              <span>0.962</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>effect</span>
+              <span class="bar"><span class="fill" style="width: 96.2%"></span></span>
+              <span>0.962</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>specificity</span>
+              <span class="bar"><span class="fill" style="width: 81.8%"></span></span>
+              <span>0.818</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>stability</span>
+              <span class="bar"><span class="fill" style="width: 100.0%"></span></span>
+              <span>1.000</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>strong</span>
+              <span class="bar"><span class="fill" style="width: 0.0%"></span></span>
+              <span>0.000</span>
+            </div>
+
+          </div>
+          <p class="note">Activation association: suppresses criterion (-0.962)</p>
+          
+          <p class="note">Activation summary: trained SAE latent 30. Representative high-activation contexts include ordinary-prefix-4: activation=6.328, criterion_score=0.000 | A good onboarding message should; ordinary-prefix-1: activation=5.984, criterion_score=0.000 | Please write a friendly.</p>
+          <p class="note">SAE training: rows=8, latents=32, active=1.000, dead=0, val MSE=1.187</p>
+<p class="note">SAE training note: Training rows are fewer than latents; collect more activations or reduce latent_dim.</p>
+<p class="note">SAE training note: Validation reconstruction is much worse than train; broaden training prompts and keep a separate held-out eval set.</p>
+          
+          <div class="actions">
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan a suppression test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F30 --sae &#x27;&lt;sae.json&gt;&#x27; --mode suppress --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F30 --sae '&lt;sae.json&gt;' --mode suppress --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan an amplification test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F30 --sae &#x27;&lt;sae.json&gt;&#x27; --mode amplify --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F30 --sae '&lt;sae.json&gt;' --mode amplify --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+</div>
+          <div class="examples"><div class="example">ordinary-prefix-4: activation=6.328, criterion_score=0.000 | A good onboarding message should</div>
+<div class="example">ordinary-prefix-1: activation=5.984, criterion_score=0.000 | Please write a friendly</div>
+<div class="example">ordinary-prefix-3: activation=4.661, criterion_score=0.000 | Summarize the feedback into</div></div>
+        </article>
+
+
+        <article class="feature-card" data-feature="card" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f13 trained sae latent 13 activation summary: trained sae latent 13. representative high-activation contexts include ordinary-prefix-4: activation=7.192, criterion_score=0.000 | a good onboarding message should; ordinary-prefix-1: activation=6.169, criterion_score=0.000 | please write a friendly. trained-sae trained sae latent 13 activation association: suppresses criterion (-0.924) ordinary-prefix-4: activation=7.192, criterion_score=0.000 | a good onboarding message should ordinary-prefix-1: activation=6.169, criterion_score=0.000 | please write a friendly ordinary-prefix-5: activation=4.528, criterion_score=0.000 | the assistant should answer activation summary: trained sae latent 13. representative high-activation contexts include ordinary-prefix-4: activation=7.192, criterion_score=0.000 | a good onboarding message should; ordinary-prefix-1: activation=6.169, criterion_score=0.000 | please write a friendly. ">
+          <h3>
+            <span>2. <code>SAE:L6:F13</code></span>
+            <span class="pill blue">trained SAE latent 13</span>
+          </h3>
+          <div class="chip-row"><span class="pill">feature evidence</span>
+<span class="pill">layer 6</span>
+<span class="pill">trained-sae</span>
+<span class="pill">causal 0.000</span></div>
+          <div class="meters">
+            
+            <div class="meter">
+              <span>importance</span>
+              <span class="bar"><span class="fill" style="width: 90.3%"></span></span>
+              <span>0.903</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>association</span>
+              <span class="bar"><span class="fill" style="width: 92.4%"></span></span>
+              <span>0.924</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>effect</span>
+              <span class="bar"><span class="fill" style="width: 92.4%"></span></span>
+              <span>0.924</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>specificity</span>
+              <span class="bar"><span class="fill" style="width: 73.2%"></span></span>
+              <span>0.732</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>stability</span>
+              <span class="bar"><span class="fill" style="width: 100.0%"></span></span>
+              <span>1.000</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>strong</span>
+              <span class="bar"><span class="fill" style="width: 0.0%"></span></span>
+              <span>0.000</span>
+            </div>
+
+          </div>
+          <p class="note">Activation association: suppresses criterion (-0.924)</p>
+          
+          <p class="note">Activation summary: trained SAE latent 13. Representative high-activation contexts include ordinary-prefix-4: activation=7.192, criterion_score=0.000 | A good onboarding message should; ordinary-prefix-1: activation=6.169, criterion_score=0.000 | Please write a friendly.</p>
+          <p class="note">SAE training: rows=8, latents=32, active=1.000, dead=0, val MSE=1.187</p>
+<p class="note">SAE training note: Training rows are fewer than latents; collect more activations or reduce latent_dim.</p>
+<p class="note">SAE training note: Validation reconstruction is much worse than train; broaden training prompts and keep a separate held-out eval set.</p>
+          
+          <div class="actions">
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan a suppression test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F13 --sae &#x27;&lt;sae.json&gt;&#x27; --mode suppress --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F13 --sae '&lt;sae.json&gt;' --mode suppress --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan an amplification test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F13 --sae &#x27;&lt;sae.json&gt;&#x27; --mode amplify --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F13 --sae '&lt;sae.json&gt;' --mode amplify --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+</div>
+          <div class="examples"><div class="example">ordinary-prefix-4: activation=7.192, criterion_score=0.000 | A good onboarding message should</div>
+<div class="example">ordinary-prefix-1: activation=6.169, criterion_score=0.000 | Please write a friendly</div>
+<div class="example">ordinary-prefix-5: activation=4.528, criterion_score=0.000 | The assistant should answer</div></div>
+        </article>
+
+
+        <article class="feature-card" data-feature="card" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f10 trained sae latent 10 activation summary: trained sae latent 10. representative high-activation contexts include unit-4: activation=3.139, criterion_score=1.000 | the room is 14; unit-6: activation=2.445, criterion_score=1.000 | the recipe calls for 250. trained-sae trained sae latent 10 activation association: promotes criterion (0.765) unit-4: activation=3.139, criterion_score=1.000 | the room is 14 unit-6: activation=2.445, criterion_score=1.000 | the recipe calls for 250 unit-3: activation=2.418, criterion_score=1.000 | the trail climbs 600 activation summary: trained sae latent 10. representative high-activation contexts include unit-4: activation=3.139, criterion_score=1.000 | the room is 14; unit-6: activation=2.445, criterion_score=1.000 | the recipe calls for 250. ">
+          <h3>
+            <span>3. <code>SAE:L6:F10</code></span>
+            <span class="pill blue">trained SAE latent 10</span>
+          </h3>
+          <div class="chip-row"><span class="pill">feature evidence</span>
+<span class="pill">layer 6</span>
+<span class="pill">trained-sae</span>
+<span class="pill">causal 0.000</span></div>
+          <div class="meters">
+            
+            <div class="meter">
+              <span>importance</span>
+              <span class="bar"><span class="fill" style="width: 76.9%"></span></span>
+              <span>0.769</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>association</span>
+              <span class="bar"><span class="fill" style="width: 76.5%"></span></span>
+              <span>0.765</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>effect</span>
+              <span class="bar"><span class="fill" style="width: 76.5%"></span></span>
+              <span>0.765</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>specificity</span>
+              <span class="bar"><span class="fill" style="width: 63.7%"></span></span>
+              <span>0.637</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>stability</span>
+              <span class="bar"><span class="fill" style="width: 100.0%"></span></span>
+              <span>1.000</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>strong</span>
+              <span class="bar"><span class="fill" style="width: 0.0%"></span></span>
+              <span>0.000</span>
+            </div>
+
+          </div>
+          <p class="note">Activation association: promotes criterion (0.765)</p>
+          
+          <p class="note">Activation summary: trained SAE latent 10. Representative high-activation contexts include unit-4: activation=3.139, criterion_score=1.000 | The room is 14; unit-6: activation=2.445, criterion_score=1.000 | The recipe calls for 250.</p>
+          <p class="note">SAE training: rows=8, latents=32, active=1.000, dead=0, val MSE=1.187</p>
+<p class="note">SAE training note: Training rows are fewer than latents; collect more activations or reduce latent_dim.</p>
+<p class="note">SAE training note: Validation reconstruction is much worse than train; broaden training prompts and keep a separate held-out eval set.</p>
+          
+          <div class="actions">
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan a suppression test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F10 --sae &#x27;&lt;sae.json&gt;&#x27; --mode suppress --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F10 --sae '&lt;sae.json&gt;' --mode suppress --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan an amplification test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F10 --sae &#x27;&lt;sae.json&gt;&#x27; --mode amplify --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F10 --sae '&lt;sae.json&gt;' --mode amplify --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+</div>
+          <div class="examples"><div class="example">unit-4: activation=3.139, criterion_score=1.000 | The room is 14</div>
+<div class="example">unit-6: activation=2.445, criterion_score=1.000 | The recipe calls for 250</div>
+<div class="example">unit-3: activation=2.418, criterion_score=1.000 | The trail climbs 600</div></div>
+        </article>
+
+
+        <article class="feature-card" data-feature="card" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f16 trained sae latent 16 activation summary: trained sae latent 16. representative high-activation contexts include unit-3: activation=8.210, criterion_score=1.000 | the trail climbs 600; unit-4: activation=5.021, criterion_score=1.000 | the room is 14. trained-sae trained sae latent 16 activation association: promotes criterion (0.731) unit-3: activation=8.210, criterion_score=1.000 | the trail climbs 600 unit-4: activation=5.021, criterion_score=1.000 | the room is 14 unit-6: activation=4.498, criterion_score=1.000 | the recipe calls for 250 activation summary: trained sae latent 16. representative high-activation contexts include unit-3: activation=8.210, criterion_score=1.000 | the trail climbs 600; unit-4: activation=5.021, criterion_score=1.000 | the room is 14. ">
+          <h3>
+            <span>4. <code>SAE:L6:F16</code></span>
+            <span class="pill blue">trained SAE latent 16</span>
+          </h3>
+          <div class="chip-row"><span class="pill">feature evidence</span>
+<span class="pill">layer 6</span>
+<span class="pill">trained-sae</span>
+<span class="pill">causal 0.000</span></div>
+          <div class="meters">
+            
+            <div class="meter">
+              <span>importance</span>
+              <span class="bar"><span class="fill" style="width: 72.9%"></span></span>
+              <span>0.729</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>association</span>
+              <span class="bar"><span class="fill" style="width: 73.1%"></span></span>
+              <span>0.731</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>effect</span>
+              <span class="bar"><span class="fill" style="width: 73.1%"></span></span>
+              <span>0.731</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>specificity</span>
+              <span class="bar"><span class="fill" style="width: 54.0%"></span></span>
+              <span>0.540</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>stability</span>
+              <span class="bar"><span class="fill" style="width: 100.0%"></span></span>
+              <span>1.000</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>strong</span>
+              <span class="bar"><span class="fill" style="width: 0.0%"></span></span>
+              <span>0.000</span>
+            </div>
+
+          </div>
+          <p class="note">Activation association: promotes criterion (0.731)</p>
+          
+          <p class="note">Activation summary: trained SAE latent 16. Representative high-activation contexts include unit-3: activation=8.210, criterion_score=1.000 | The trail climbs 600; unit-4: activation=5.021, criterion_score=1.000 | The room is 14.</p>
+          <p class="note">SAE training: rows=8, latents=32, active=1.000, dead=0, val MSE=1.187</p>
+<p class="note">SAE training note: Training rows are fewer than latents; collect more activations or reduce latent_dim.</p>
+<p class="note">SAE training note: Validation reconstruction is much worse than train; broaden training prompts and keep a separate held-out eval set.</p>
+          
+          <div class="actions">
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan a suppression test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F16 --sae &#x27;&lt;sae.json&gt;&#x27; --mode suppress --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F16 --sae '&lt;sae.json&gt;' --mode suppress --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan an amplification test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F16 --sae &#x27;&lt;sae.json&gt;&#x27; --mode amplify --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F16 --sae '&lt;sae.json&gt;' --mode amplify --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+</div>
+          <div class="examples"><div class="example">unit-3: activation=8.210, criterion_score=1.000 | The trail climbs 600</div>
+<div class="example">unit-4: activation=5.021, criterion_score=1.000 | The room is 14</div>
+<div class="example">unit-6: activation=4.498, criterion_score=1.000 | The recipe calls for 250</div></div>
+        </article>
+
+
+        <article class="feature-card" data-feature="card" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f26 trained sae latent 26 activation summary: trained sae latent 26. representative high-activation contexts include unit-2: activation=9.252, criterion_score=1.000 | the package weighs 3.2; unit-6: activation=5.267, criterion_score=1.000 | the recipe calls for 250. trained-sae trained sae latent 26 activation association: promotes criterion (0.710) unit-2: activation=9.252, criterion_score=1.000 | the package weighs 3.2 unit-6: activation=5.267, criterion_score=1.000 | the recipe calls for 250 unit-4: activation=1.751, criterion_score=1.000 | the room is 14 activation summary: trained sae latent 26. representative high-activation contexts include unit-2: activation=9.252, criterion_score=1.000 | the package weighs 3.2; unit-6: activation=5.267, criterion_score=1.000 | the recipe calls for 250. ">
+          <h3>
+            <span>5. <code>SAE:L6:F26</code></span>
+            <span class="pill blue">trained SAE latent 26</span>
+          </h3>
+          <div class="chip-row"><span class="pill">feature evidence</span>
+<span class="pill">layer 6</span>
+<span class="pill">trained-sae</span>
+<span class="pill">causal 0.000</span></div>
+          <div class="meters">
+            
+            <div class="meter">
+              <span>importance</span>
+              <span class="bar"><span class="fill" style="width: 70.5%"></span></span>
+              <span>0.705</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>association</span>
+              <span class="bar"><span class="fill" style="width: 71.0%"></span></span>
+              <span>0.710</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>effect</span>
+              <span class="bar"><span class="fill" style="width: 71.0%"></span></span>
+              <span>0.710</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>specificity</span>
+              <span class="bar"><span class="fill" style="width: 48.3%"></span></span>
+              <span>0.483</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>stability</span>
+              <span class="bar"><span class="fill" style="width: 100.0%"></span></span>
+              <span>1.000</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>strong</span>
+              <span class="bar"><span class="fill" style="width: 0.0%"></span></span>
+              <span>0.000</span>
+            </div>
+
+          </div>
+          <p class="note">Activation association: promotes criterion (0.710)</p>
+          
+          <p class="note">Activation summary: trained SAE latent 26. Representative high-activation contexts include unit-2: activation=9.252, criterion_score=1.000 | The package weighs 3.2; unit-6: activation=5.267, criterion_score=1.000 | The recipe calls for 250.</p>
+          <p class="note">SAE training: rows=8, latents=32, active=1.000, dead=0, val MSE=1.187</p>
+<p class="note">SAE training note: Training rows are fewer than latents; collect more activations or reduce latent_dim.</p>
+<p class="note">SAE training note: Validation reconstruction is much worse than train; broaden training prompts and keep a separate held-out eval set.</p>
+          
+          <div class="actions">
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan a suppression test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F26 --sae &#x27;&lt;sae.json&gt;&#x27; --mode suppress --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F26 --sae '&lt;sae.json&gt;' --mode suppress --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan an amplification test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F26 --sae &#x27;&lt;sae.json&gt;&#x27; --mode amplify --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F26 --sae '&lt;sae.json&gt;' --mode amplify --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+</div>
+          <div class="examples"><div class="example">unit-2: activation=9.252, criterion_score=1.000 | The package weighs 3.2</div>
+<div class="example">unit-6: activation=5.267, criterion_score=1.000 | The recipe calls for 250</div>
+<div class="example">unit-4: activation=1.751, criterion_score=1.000 | The room is 14</div></div>
+        </article>
+
+
+        <article class="feature-card" data-feature="card" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f9 trained sae latent 9 activation summary: trained sae latent 9. representative high-activation contexts include unit-6: activation=8.127, criterion_score=1.000 | the recipe calls for 250; unit-3: activation=5.627, criterion_score=1.000 | the trail climbs 600. trained-sae trained sae latent 9 activation association: promotes criterion (0.689) unit-6: activation=8.127, criterion_score=1.000 | the recipe calls for 250 unit-3: activation=5.627, criterion_score=1.000 | the trail climbs 600 unit-4: activation=2.678, criterion_score=1.000 | the room is 14 activation summary: trained sae latent 9. representative high-activation contexts include unit-6: activation=8.127, criterion_score=1.000 | the recipe calls for 250; unit-3: activation=5.627, criterion_score=1.000 | the trail climbs 600. ">
+          <h3>
+            <span>6. <code>SAE:L6:F9</code></span>
+            <span class="pill blue">trained SAE latent 9</span>
+          </h3>
+          <div class="chip-row"><span class="pill">feature evidence</span>
+<span class="pill">layer 6</span>
+<span class="pill">trained-sae</span>
+<span class="pill">causal 0.000</span></div>
+          <div class="meters">
+            
+            <div class="meter">
+              <span>importance</span>
+              <span class="bar"><span class="fill" style="width: 69.2%"></span></span>
+              <span>0.692</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>association</span>
+              <span class="bar"><span class="fill" style="width: 68.9%"></span></span>
+              <span>0.689</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>effect</span>
+              <span class="bar"><span class="fill" style="width: 68.9%"></span></span>
+              <span>0.689</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>specificity</span>
+              <span class="bar"><span class="fill" style="width: 50.5%"></span></span>
+              <span>0.505</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>stability</span>
+              <span class="bar"><span class="fill" style="width: 100.0%"></span></span>
+              <span>1.000</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>strong</span>
+              <span class="bar"><span class="fill" style="width: 0.0%"></span></span>
+              <span>0.000</span>
+            </div>
+
+          </div>
+          <p class="note">Activation association: promotes criterion (0.689)</p>
+          
+          <p class="note">Activation summary: trained SAE latent 9. Representative high-activation contexts include unit-6: activation=8.127, criterion_score=1.000 | The recipe calls for 250; unit-3: activation=5.627, criterion_score=1.000 | The trail climbs 600.</p>
+          <p class="note">SAE training: rows=8, latents=32, active=1.000, dead=0, val MSE=1.187</p>
+<p class="note">SAE training note: Training rows are fewer than latents; collect more activations or reduce latent_dim.</p>
+<p class="note">SAE training note: Validation reconstruction is much worse than train; broaden training prompts and keep a separate held-out eval set.</p>
+          
+          <div class="actions">
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan a suppression test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F9 --sae &#x27;&lt;sae.json&gt;&#x27; --mode suppress --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F9 --sae '&lt;sae.json&gt;' --mode suppress --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan an amplification test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F9 --sae &#x27;&lt;sae.json&gt;&#x27; --mode amplify --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F9 --sae '&lt;sae.json&gt;' --mode amplify --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+</div>
+          <div class="examples"><div class="example">unit-6: activation=8.127, criterion_score=1.000 | The recipe calls for 250</div>
+<div class="example">unit-3: activation=5.627, criterion_score=1.000 | The trail climbs 600</div>
+<div class="example">unit-4: activation=2.678, criterion_score=1.000 | The room is 14</div></div>
+        </article>
+
+
+        <article class="feature-card" data-feature="card" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f0 trained sae latent 0 activation summary: trained sae latent 0. representative high-activation contexts include ordinary-prefix-1: activation=7.703, criterion_score=0.000 | please write a friendly; ordinary-prefix-5: activation=2.962, criterion_score=0.000 | the assistant should answer. trained-sae trained sae latent 0 activation association: suppresses criterion (-0.651) ordinary-prefix-1: activation=7.703, criterion_score=0.000 | please write a friendly ordinary-prefix-5: activation=2.962, criterion_score=0.000 | the assistant should answer ordinary-prefix-4: activation=2.761, criterion_score=0.000 | a good onboarding message should activation summary: trained sae latent 0. representative high-activation contexts include ordinary-prefix-1: activation=7.703, criterion_score=0.000 | please write a friendly; ordinary-prefix-5: activation=2.962, criterion_score=0.000 | the assistant should answer. ">
+          <h3>
+            <span>7. <code>SAE:L6:F0</code></span>
+            <span class="pill blue">trained SAE latent 0</span>
+          </h3>
+          <div class="chip-row"><span class="pill">feature evidence</span>
+<span class="pill">layer 6</span>
+<span class="pill">trained-sae</span>
+<span class="pill">causal 0.000</span></div>
+          <div class="meters">
+            
+            <div class="meter">
+              <span>importance</span>
+              <span class="bar"><span class="fill" style="width: 65.3%"></span></span>
+              <span>0.653</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>association</span>
+              <span class="bar"><span class="fill" style="width: 65.1%"></span></span>
+              <span>0.651</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>effect</span>
+              <span class="bar"><span class="fill" style="width: 65.1%"></span></span>
+              <span>0.651</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>specificity</span>
+              <span class="bar"><span class="fill" style="width: 43.6%"></span></span>
+              <span>0.436</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>stability</span>
+              <span class="bar"><span class="fill" style="width: 100.0%"></span></span>
+              <span>1.000</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>strong</span>
+              <span class="bar"><span class="fill" style="width: 0.0%"></span></span>
+              <span>0.000</span>
+            </div>
+
+          </div>
+          <p class="note">Activation association: suppresses criterion (-0.651)</p>
+          
+          <p class="note">Activation summary: trained SAE latent 0. Representative high-activation contexts include ordinary-prefix-1: activation=7.703, criterion_score=0.000 | Please write a friendly; ordinary-prefix-5: activation=2.962, criterion_score=0.000 | The assistant should answer.</p>
+          <p class="note">SAE training: rows=8, latents=32, active=1.000, dead=0, val MSE=1.187</p>
+<p class="note">SAE training note: Training rows are fewer than latents; collect more activations or reduce latent_dim.</p>
+<p class="note">SAE training note: Validation reconstruction is much worse than train; broaden training prompts and keep a separate held-out eval set.</p>
+          
+          <div class="actions">
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan a suppression test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F0 --sae &#x27;&lt;sae.json&gt;&#x27; --mode suppress --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F0 --sae '&lt;sae.json&gt;' --mode suppress --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan an amplification test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F0 --sae &#x27;&lt;sae.json&gt;&#x27; --mode amplify --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F0 --sae '&lt;sae.json&gt;' --mode amplify --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+</div>
+          <div class="examples"><div class="example">ordinary-prefix-1: activation=7.703, criterion_score=0.000 | Please write a friendly</div>
+<div class="example">ordinary-prefix-5: activation=2.962, criterion_score=0.000 | The assistant should answer</div>
+<div class="example">ordinary-prefix-4: activation=2.761, criterion_score=0.000 | A good onboarding message should</div></div>
+        </article>
+
+
+        <article class="feature-card" data-feature="card" data-layer="6" data-source="trained-sae" data-evidence="feature_evidence" data-search="sae:l6:f11 trained sae latent 11 activation summary: trained sae latent 11. representative high-activation contexts include unit-6: activation=8.391, criterion_score=1.000 | the recipe calls for 250; unit-3: activation=5.123, criterion_score=1.000 | the trail climbs 600. trained-sae trained sae latent 11 activation association: promotes criterion (0.639) unit-6: activation=8.391, criterion_score=1.000 | the recipe calls for 250 unit-3: activation=5.123, criterion_score=1.000 | the trail climbs 600 unit-4: activation=1.678, criterion_score=1.000 | the room is 14 activation summary: trained sae latent 11. representative high-activation contexts include unit-6: activation=8.391, criterion_score=1.000 | the recipe calls for 250; unit-3: activation=5.123, criterion_score=1.000 | the trail climbs 600. ">
+          <h3>
+            <span>8. <code>SAE:L6:F11</code></span>
+            <span class="pill blue">trained SAE latent 11</span>
+          </h3>
+          <div class="chip-row"><span class="pill">feature evidence</span>
+<span class="pill">layer 6</span>
+<span class="pill">trained-sae</span>
+<span class="pill">causal 0.000</span></div>
+          <div class="meters">
+            
+            <div class="meter">
+              <span>importance</span>
+              <span class="bar"><span class="fill" style="width: 64.7%"></span></span>
+              <span>0.647</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>association</span>
+              <span class="bar"><span class="fill" style="width: 63.9%"></span></span>
+              <span>0.639</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>effect</span>
+              <span class="bar"><span class="fill" style="width: 63.9%"></span></span>
+              <span>0.639</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>specificity</span>
+              <span class="bar"><span class="fill" style="width: 45.3%"></span></span>
+              <span>0.453</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>stability</span>
+              <span class="bar"><span class="fill" style="width: 100.0%"></span></span>
+              <span>1.000</span>
+            </div>
+
+            
+            <div class="meter">
+              <span>strong</span>
+              <span class="bar"><span class="fill" style="width: 0.0%"></span></span>
+              <span>0.000</span>
+            </div>
+
+          </div>
+          <p class="note">Activation association: promotes criterion (0.639)</p>
+          
+          <p class="note">Activation summary: trained SAE latent 11. Representative high-activation contexts include unit-6: activation=8.391, criterion_score=1.000 | The recipe calls for 250; unit-3: activation=5.123, criterion_score=1.000 | The trail climbs 600.</p>
+          <p class="note">SAE training: rows=8, latents=32, active=1.000, dead=0, val MSE=1.187</p>
+<p class="note">SAE training note: Training rows are fewer than latents; collect more activations or reduce latent_dim.</p>
+<p class="note">SAE training note: Validation reconstruction is much worse than train; broaden training prompts and keep a separate held-out eval set.</p>
+          
+          <div class="actions">
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan a suppression test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F11 --sae &#x27;&lt;sae.json&gt;&#x27; --mode suppress --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F11 --sae '&lt;sae.json&gt;' --mode suppress --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+
+
+        <div class="action">
+          <div class="action-head">
+            <strong>Plan an amplification test for this SAE latent</strong>
+            <button type="button" class="copy-command" data-command="interp-lab intervene --model distilgpt2 --criterion &#x27;the next token should be a physical measurement unit&#x27; --dataset &#x27;&lt;causal-prompts.jsonl&gt;&#x27; --feature SAE:L6:F11 --sae &#x27;&lt;sae.json&gt;&#x27; --mode amplify --target-token auto --out &#x27;&lt;interventions.jsonl&gt;&#x27; --plan-out &#x27;&lt;intervention-plan.json&gt;&#x27; --dry-run --json">Copy</button>
+          </div>
+          <code class="command">interp-lab intervene --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --dataset '&lt;causal-prompts.jsonl&gt;' --feature SAE:L6:F11 --sae '&lt;sae.json&gt;' --mode amplify --target-token auto --out '&lt;interventions.jsonl&gt;' --plan-out '&lt;intervention-plan.json&gt;' --dry-run --json</code>
+          <span class="label-line">Requires: scored causal prompt JSONL, matching interp-lab SAE artifact</span>
+        </div>
+</div>
+          <div class="examples"><div class="example">unit-6: activation=8.391, criterion_score=1.000 | The recipe calls for 250</div>
+<div class="example">unit-3: activation=5.123, criterion_score=1.000 | The trail climbs 600</div>
+<div class="example">unit-4: activation=1.678, criterion_score=1.000 | The room is 14</div></div>
+        </article>
+</div>
+    </section>
+  </main>
+  <script>
+    const search = document.getElementById("feature-search");
+    const layerFilter = document.getElementById("layer-filter");
+    const sourceFilter = document.getElementById("source-filter");
+    const evidenceFilter = document.getElementById("evidence-filter");
+    const visibleCount = document.getElementById("visible-count");
+    function applyFilters() {
+      const query = search.value.trim().toLowerCase();
+      const layer = layerFilter.value;
+      const source = sourceFilter.value;
+      const evidence = evidenceFilter.value;
+      let visibleRows = 0;
+      document.querySelectorAll("[data-feature]").forEach((node) => {
+        const layerMatch = !layer || node.dataset.layer === layer;
+        const sourceMatch = !source || node.dataset.source === source;
+        const evidenceMatch = !evidence || node.dataset.evidence === evidence;
+        const searchMatch = !query || (node.dataset.search || "").includes(query);
+        const show = layerMatch && sourceMatch && evidenceMatch && searchMatch;
+        node.hidden = !show;
+        if (show && node.dataset.feature === "row") visibleRows += 1;
+      });
+      visibleCount.textContent = `${visibleRows} visible`;
+    }
+    async function copyCommand(button) {
+      const command = button.dataset.command || "";
+      try {
+        await navigator.clipboard.writeText(command);
+      } catch (error) {
+        const area = document.createElement("textarea");
+        area.value = command;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.left = "-9999px";
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+      }
+      const original = button.textContent;
+      button.textContent = "Copied";
+      window.setTimeout(() => { button.textContent = original; }, 1200);
+    }
+    search.addEventListener("input", applyFilters);
+    layerFilter.addEventListener("change", applyFilters);
+    sourceFilter.addEventListener("change", applyFilters);
+    evidenceFilter.addEventListener("change", applyFilters);
+    document.querySelectorAll(".copy-command").forEach((button) => {
+      button.addEventListener("click", () => copyCommand(button));
+    });
+  </script>
+</body>
+</html>

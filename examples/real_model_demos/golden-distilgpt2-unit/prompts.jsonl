@@ -1,0 +1,12 @@
+{"prompt_id":"unit-1","text":"The bridge is 240","criterion_score":1.0}
+{"prompt_id":"unit-2","text":"The package weighs 3.2","criterion_score":1.0}
+{"prompt_id":"unit-3","text":"The trail climbs 600","criterion_score":1.0}
+{"prompt_id":"unit-4","text":"The room is 14","criterion_score":1.0}
+{"prompt_id":"unit-5","text":"The telescope has a 70","criterion_score":1.0}
+{"prompt_id":"unit-6","text":"The recipe calls for 250","criterion_score":1.0}
+{"prompt_id":"ordinary-prefix-1","text":"Please write a friendly","criterion_score":0.0}
+{"prompt_id":"ordinary-prefix-2","text":"The meeting moved to","criterion_score":0.0}
+{"prompt_id":"ordinary-prefix-3","text":"Summarize the feedback into","criterion_score":0.0}
+{"prompt_id":"ordinary-prefix-4","text":"A good onboarding message should","criterion_score":0.0}
+{"prompt_id":"ordinary-prefix-5","text":"The assistant should answer","criterion_score":0.0}
+{"prompt_id":"ordinary-prefix-6","text":"The article compares several","criterion_score":0.0}

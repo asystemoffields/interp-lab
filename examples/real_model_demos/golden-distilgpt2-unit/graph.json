@@ -1,0 +1,270 @@
+{
+  "criterion": {
+    "negative_examples": [
+      "The context is unrelated to next token should physical measurement unit.",
+      "The model can answer without representing next token should physical measurement unit.",
+      "Amplifying unrelated details leaves next token should physical measurement unit unchanged."
+    ],
+    "positive_examples": [
+      "The context clearly expresses next token should physical measurement unit.",
+      "The model is internally tracking next token should physical measurement unit.",
+      "A response would change if next token should physical measurement unit were amplified."
+    ],
+    "scoring_notes": [
+      "Prefer features with replicated behavior across paraphrases.",
+      "Prioritize causal effects over text-label similarity.",
+      "Treat natural-language explanations as hypotheses to validate."
+    ],
+    "text": "the next token should be a physical measurement unit"
+  },
+  "edges": [
+    {
+      "confidence_interval": {
+        "high": 0.225775,
+        "low": 0.225775
+      },
+      "effect": 0.225775,
+      "evidence": "measured_intervention",
+      "record_count": 1.0,
+      "side_effect": 0.001362,
+      "signed_effect": 0.225775,
+      "source": "feature:distilgpt2:SAE:L6:F10",
+      "source_feature_id": "SAE:L6:F10",
+      "specificity": 0.224412,
+      "strong_causal_score": 0.224412,
+      "target": "criterion",
+      "type": "causal_effect"
+    },
+    {
+      "confidence_interval": {
+        "high": -0.01601,
+        "low": -0.01601
+      },
+      "effect": 0.01601,
+      "evidence": "measured_intervention",
+      "record_count": 1.0,
+      "side_effect": 0.000376,
+      "signed_effect": -0.01601,
+      "source": "feature:distilgpt2:SAE:L6:F30",
+      "source_feature_id": "SAE:L6:F30",
+      "specificity": 0.015634,
+      "strong_causal_score": 0.015634,
+      "target": "criterion",
+      "type": "causal_effect"
+    },
+    {
+      "confidence_interval": {
+        "high": -0.023158,
+        "low": -0.023158
+      },
+      "effect": 0.023158,
+      "evidence": "measured_intervention",
+      "record_count": 1.0,
+      "side_effect": 0.000287,
+      "signed_effect": -0.023158,
+      "source": "feature:distilgpt2:SAE:L6:F13",
+      "source_feature_id": "SAE:L6:F13",
+      "specificity": 0.022871,
+      "strong_causal_score": 0.022871,
+      "target": "criterion",
+      "type": "causal_effect"
+    },
+    {
+      "evidence": "automatic_role_or_theme_grouping",
+      "source": "feature:distilgpt2:SAE:L6:F30",
+      "source_feature_id": "SAE:L6:F30",
+      "target": "supernode:layer-6:associated_detector",
+      "type": "member_of"
+    },
+    {
+      "evidence": "automatic_role_or_theme_grouping",
+      "source": "feature:distilgpt2:SAE:L6:F13",
+      "source_feature_id": "SAE:L6:F13",
+      "target": "supernode:layer-6:associated_detector",
+      "type": "member_of"
+    },
+    {
+      "member_count": 2,
+      "signed_effect": -0.019584,
+      "source": "supernode:layer-6:associated_detector",
+      "strong_causal_score": 0.019252,
+      "target": "criterion",
+      "type": "aggregate_causal_effect"
+    },
+    {
+      "evidence": "automatic_role_or_theme_grouping",
+      "source": "feature:distilgpt2:SAE:L6:F10",
+      "source_feature_id": "SAE:L6:F10",
+      "target": "supernode:layer-6:criterion_promoter",
+      "type": "member_of"
+    },
+    {
+      "member_count": 1,
+      "signed_effect": 0.225775,
+      "source": "supernode:layer-6:criterion_promoter",
+      "strong_causal_score": 0.224412,
+      "target": "criterion",
+      "type": "aggregate_causal_effect"
+    },
+    {
+      "abs_correlation": 0.971824,
+      "candidate_path": false,
+      "correlation": 0.971824,
+      "evidence": "activation_signature_correlation",
+      "source": "feature:distilgpt2:SAE:L6:F13",
+      "source_feature_id": "SAE:L6:F13",
+      "target": "feature:distilgpt2:SAE:L6:F30",
+      "target_feature_id": "SAE:L6:F30",
+      "type": "coactivation"
+    },
+    {
+      "abs_correlation": 0.735723,
+      "candidate_path": false,
+      "correlation": -0.735723,
+      "evidence": "activation_signature_correlation",
+      "source": "feature:distilgpt2:SAE:L6:F10",
+      "source_feature_id": "SAE:L6:F10",
+      "target": "feature:distilgpt2:SAE:L6:F30",
+      "target_feature_id": "SAE:L6:F30",
+      "type": "coactivation"
+    },
+    {
+      "abs_correlation": 0.706917,
+      "candidate_path": false,
+      "correlation": -0.706917,
+      "evidence": "activation_signature_correlation",
+      "source": "feature:distilgpt2:SAE:L6:F10",
+      "source_feature_id": "SAE:L6:F10",
+      "target": "feature:distilgpt2:SAE:L6:F13",
+      "target_feature_id": "SAE:L6:F13",
+      "type": "coactivation"
+    }
+  ],
+  "mechanism_summary": {
+    "candidate_feature_groups": [
+      {
+        "id": "supernode:layer-6:criterion_promoter",
+        "label": "layer 6 criterion promoter: SAE:L6:F10",
+        "mean_strong_causal_score": 0.224412,
+        "member_count": 1
+      },
+      {
+        "id": "supernode:layer-6:associated_detector",
+        "label": "layer 6 associated detector: SAE:L6:F30",
+        "mean_strong_causal_score": 0.019252,
+        "member_count": 2
+      }
+    ],
+    "candidate_paths": [],
+    "strong_causal_features": [
+      {
+        "feature_id": "SAE:L6:F10",
+        "label": "SAE:L6:F10",
+        "layer": 6,
+        "role": "criterion_promoter",
+        "signed_effect": 0.225775,
+        "strong_causal_score": 0.224412
+      }
+    ],
+    "validation_plan": [
+      "Sweep steering strengths for SAE:L6:F10; it currently promotes the criterion with strong causal score 0.224."
+    ]
+  },
+  "metadata": {
+    "coactivation_threshold": 0.65,
+    "feature_count": 3,
+    "path_patch_record_count": 0,
+    "source_report_created_at": "2026-05-20T19:54:16+00:00",
+    "strong_causal_threshold": 0.05
+  },
+  "model": "distilgpt2",
+  "nodes": [
+    {
+      "id": "criterion",
+      "label": "the next token should be a physical measurement unit",
+      "model": "distilgpt2",
+      "type": "criterion"
+    },
+    {
+      "association": 0.765071,
+      "causal_effect": 0.225775,
+      "feature_id": "SAE:L6:F10",
+      "id": "feature:distilgpt2:SAE:L6:F10",
+      "importance": 0.437272,
+      "label": "trained SAE latent 10",
+      "layer": 6,
+      "model": "distilgpt2",
+      "role": "criterion_promoter",
+      "source": "trained-sae",
+      "specificity": 0.224412,
+      "stability": 1.0,
+      "top_tokens": [],
+      "type": "feature"
+    },
+    {
+      "association": 0.961641,
+      "causal_effect": 0.01601,
+      "feature_id": "SAE:L6:F30",
+      "id": "feature:distilgpt2:SAE:L6:F30",
+      "importance": 0.35061,
+      "label": "trained SAE latent 30",
+      "layer": 6,
+      "model": "distilgpt2",
+      "role": "associated_detector",
+      "source": "trained-sae",
+      "specificity": 0.015634,
+      "stability": 1.0,
+      "top_tokens": [],
+      "type": "feature"
+    },
+    {
+      "association": 0.923989,
+      "causal_effect": 0.023158,
+      "feature_id": "SAE:L6:F13",
+      "id": "feature:distilgpt2:SAE:L6:F13",
+      "importance": 0.345892,
+      "label": "trained SAE latent 13",
+      "layer": 6,
+      "model": "distilgpt2",
+      "role": "associated_detector",
+      "source": "trained-sae",
+      "specificity": 0.022871,
+      "stability": 1.0,
+      "top_tokens": [],
+      "type": "feature"
+    },
+    {
+      "id": "supernode:layer-6:associated_detector",
+      "label": "layer 6 associated detector: SAE:L6:F30",
+      "mean_signed_effect": -0.019584,
+      "mean_strong_causal_score": 0.019252,
+      "member_count": 2,
+      "member_feature_ids": [
+        "SAE:L6:F30",
+        "SAE:L6:F13"
+      ],
+      "members": [
+        "feature:distilgpt2:SAE:L6:F30",
+        "feature:distilgpt2:SAE:L6:F13"
+      ],
+      "role": "associated_detector",
+      "type": "supernode"
+    },
+    {
+      "id": "supernode:layer-6:criterion_promoter",
+      "label": "layer 6 criterion promoter: SAE:L6:F10",
+      "mean_signed_effect": 0.225775,
+      "mean_strong_causal_score": 0.224412,
+      "member_count": 1,
+      "member_feature_ids": [
+        "SAE:L6:F10"
+      ],
+      "members": [
+        "feature:distilgpt2:SAE:L6:F10"
+      ],
+      "role": "criterion_promoter",
+      "type": "supernode"
+    }
+  ],
+  "schema_version": "interp-lab.attribution_graph.v1"
+}

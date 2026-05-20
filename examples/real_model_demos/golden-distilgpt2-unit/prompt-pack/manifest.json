@@ -1,0 +1,54 @@
+{
+  "advisories": [
+    "Estimated training rows per latent are low; add prompts, increase max_length, or reduce latent_dim.",
+    "Prompt pack is small; treat SAE labels as early hypotheses until held-out validation passes."
+  ],
+  "agent_next_actions": [
+    "Use train.jsonl as train-sae --dataset.",
+    "Use causal.jsonl as train-sae --causal-dataset when writing --causal-out.",
+    "Use validation.jsonl for held-out path validation or repeated causal checks."
+  ],
+  "counts": {
+    "splits": {
+      "causal": {
+        "estimated_rows_per_latent": 0.25,
+        "estimated_token_rows": 8,
+        "negative_count": 1,
+        "positive_count": 1,
+        "record_count": 2
+      },
+      "train": {
+        "estimated_rows_per_latent": 1.0625,
+        "estimated_token_rows": 34,
+        "negative_count": 4,
+        "positive_count": 4,
+        "record_count": 8
+      },
+      "validation": {
+        "estimated_rows_per_latent": 0.28125,
+        "estimated_token_rows": 9,
+        "negative_count": 1,
+        "positive_count": 1,
+        "record_count": 2
+      }
+    },
+    "total": {
+      "negative_count": 6,
+      "positive_count": 6,
+      "record_count": 12
+    }
+  },
+  "format": "interp-lab.sae_prompt_pack.v1",
+  "outputs": {
+    "causal": "/app/out/distilgpt2-unit/prompt-pack/causal.jsonl",
+    "train": "/app/out/distilgpt2-unit/prompt-pack/train.jsonl",
+    "validation": "/app/out/distilgpt2-unit/prompt-pack/validation.jsonl"
+  },
+  "ratios": {
+    "causal": 0.15,
+    "train": 0.7,
+    "validation": 0.15
+  },
+  "seed": "0",
+  "source_dataset": "/app/out/distilgpt2-unit/prompts.jsonl"
+}

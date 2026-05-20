@@ -1,0 +1,98 @@
+{
+  "ablate_value": 0.0,
+  "activation_records": "/app/out/distilgpt2-unit/sae/records.jsonl",
+  "advisories": [
+    "SAE suppression is decoder-direction steering, not an exact latent clamp."
+  ],
+  "agent_actions": [
+    {
+      "argv": [
+        "interp-lab",
+        "inspect",
+        "--model",
+        "distilgpt2",
+        "--criterion",
+        "the next token should be a physical measurement unit",
+        "--backend",
+        "records",
+        "--records",
+        "/app/out/distilgpt2-unit/sae/records.jsonl",
+        "--interventions",
+        "/app/out/distilgpt2-unit/interventions.jsonl",
+        "--out",
+        "/app/out/distilgpt2-unit/interventions"
+      ],
+      "command": "interp-lab inspect --model distilgpt2 --criterion 'the next token should be a physical measurement unit' --backend records --records /app/out/distilgpt2-unit/sae/records.jsonl --interventions /app/out/distilgpt2-unit/interventions.jsonl --out /app/out/distilgpt2-unit/interventions",
+      "id": "inspect_with_interventions",
+      "inputs": {
+        "activation_records": "/app/out/distilgpt2-unit/sae/records.jsonl",
+        "source_report": "/app/out/distilgpt2-unit/inspect/report.json"
+      },
+      "title": "Re-rank the feature report with causal evidence"
+    },
+    {
+      "argv": [
+        "interp-lab",
+        "export-attribution-graph",
+        "--report",
+        "<report.json>",
+        "--out",
+        "/app/out/distilgpt2-unit/interventions.graph.json",
+        "--html-out",
+        "/app/out/distilgpt2-unit/interventions.graph.html"
+      ],
+      "command": "interp-lab export-attribution-graph --report '<report.json>' --out /app/out/distilgpt2-unit/interventions.graph.json --html-out /app/out/distilgpt2-unit/interventions.graph.html",
+      "id": "export_graph",
+      "title": "Build an attribution graph after re-inspection"
+    }
+  ],
+  "criterion": "the next token should be a physical measurement unit",
+  "dataset": "/app/out/distilgpt2-unit/prompt-pack/causal.jsonl",
+  "device": "cpu",
+  "dry_run": false,
+  "estimated_forward_passes": 20,
+  "features": [
+    {
+      "feature_id": "SAE:L6:F30",
+      "label": "trained SAE latent 30",
+      "latent_index": 30,
+      "layer": 6,
+      "type": "sae"
+    },
+    {
+      "feature_id": "SAE:L6:F13",
+      "label": "trained SAE latent 13",
+      "latent_index": 13,
+      "layer": 6,
+      "type": "sae"
+    },
+    {
+      "feature_id": "SAE:L6:F10",
+      "label": "trained SAE latent 10",
+      "latent_index": 10,
+      "layer": 6,
+      "type": "sae"
+    }
+  ],
+  "max_length": 64,
+  "mode": "suppress",
+  "model": "distilgpt2",
+  "out": "/app/out/distilgpt2-unit/interventions.jsonl",
+  "prompt_counts": {
+    "negative": 1,
+    "positive": 1,
+    "total": 2
+  },
+  "report": "/app/out/distilgpt2-unit/inspect/report.json",
+  "sae": "/app/out/distilgpt2-unit/sae/sae.json",
+  "schema_version": "interp-lab.intervention_plan.v1",
+  "strengths": [
+    1.0,
+    3.0,
+    10.0
+  ],
+  "target_token_strategy": "auto",
+  "target_tokens": [
+    "auto"
+  ]
+}

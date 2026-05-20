@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>interp-lab attribution graph - the next token should be a physical measurement unit</title>
+<style>
+
+:root {
+  color-scheme: light;
+  --bg: #f7f8fb;
+  --panel: #ffffff;
+  --ink: #152033;
+  --muted: #5c6b80;
+  --line: #dbe2ea;
+  --blue: #2563eb;
+  --green: #15803d;
+  --amber: #b45309;
+  --violet: #7c3aed;
+  --red: #b91c1c;
+  --shadow: 0 10px 30px rgba(21, 32, 51, 0.08);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+header, main { max-width: 1240px; margin: 0 auto; padding: 24px; }
+header { padding-top: 32px; padding-bottom: 12px; }
+.kicker {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+h1 { margin: 6px 0 4px; font-size: 30px; line-height: 1.15; letter-spacing: 0; }
+h2 { margin: 0 0 14px; font-size: 16px; letter-spacing: 0; }
+code { background: #eef2f7; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.lede, .muted { color: var(--muted); }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.toolbar label { font-weight: 700; }
+.toolbar input {
+  min-width: min(420px, 100%);
+  flex: 1;
+}
+.toolbar select {
+  min-width: 160px;
+}
+.toolbar input, .toolbar select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font: inherit;
+  background: #fff;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.metric, .panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+.metric { padding: 14px; }
+.metric .value { display: block; font-size: 24px; font-weight: 800; }
+.metric .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+.panel { padding: 16px; margin-bottom: 16px; }
+.brief-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.brief-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfe;
+}
+.brief-item strong { display: block; margin-bottom: 4px; }
+.graph-panel { overflow-x: auto; }
+#graph-svg { width: 100%; min-width: 900px; height: 560px; border: 1px solid var(--line); border-radius: 6px; background: #fbfcfe; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr); gap: 16px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }
+th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+tr:last-child td { border-bottom: 0; }
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 2px 7px;
+  font-size: 12px;
+  background: #f8fafc;
+  white-space: nowrap;
+}
+.pill.robust, .pill.validated, .pill.criterion_promoter { color: var(--green); border-color: #bbf7d0; background: #f0fdf4; }
+.pill.failed_control, .pill.control_failed, .pill.criterion_suppressor { color: var(--red); border-color: #fecaca; background: #fef2f2; }
+.pill.path_patch { color: var(--amber); border-color: #fed7aa; background: #fff7ed; }
+.pill.coactivation { color: var(--violet); border-color: #ddd6fe; background: #f5f3ff; }
+.node-label { font-size: 11px; fill: #1f2937; pointer-events: none; }
+.node.dimmed, .edge.dimmed { opacity: 0.12; }
+.feature-row.hidden { display: none; }
+.path-row.hidden { display: none; }
+.command-cell {
+  display: grid;
+  gap: 6px;
+}
+.copy-command {
+  justify-self: start;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.copy-command:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.empty { color: var(--muted); font-style: italic; }
+@media (max-width: 760px) {
+  header, main { padding: 18px; }
+  h1 { font-size: 24px; }
+  .grid { grid-template-columns: 1fr; }
+  #graph-svg { min-width: 720px; height: 520px; }
+}
+
+</style>
+</head>
+<body>
+<header>
+<div class="kicker">interp-lab attribution graph</div>
+<h1>the next token should be a physical measurement unit</h1>
+<p class="lede">Model: <code>distilgpt2</code></p>
+</header>
+<main>
+<section class="toolbar" aria-label="Graph controls">
+<label for="feature-search">Filter features</label>
+<input id="feature-search" type="search" placeholder="Search labels, IDs, roles, tokens">
+<label for="role-filter">Role</label>
+<select id="role-filter"><option value="">All roles</option></select>
+<label for="status-filter">Path status</label>
+<select id="status-filter"><option value="">All path statuses</option></select>
+<span id="filter-count" class="muted"></span>
+</section>
+<section id="metrics" class="metrics" aria-label="Summary metrics"></section>
+<section id="graph-brief" class="panel" aria-label="Evidence summary"></section>
+<section class="panel graph-panel">
+<h2>Graph</h2>
+<svg id="graph-svg" role="img" aria-label="Attribution graph visualization"></svg>
+</section>
+<section class="grid">
+<article class="panel">
+<h2>Candidate Paths</h2>
+<div id="candidate-paths"></div>
+</article>
+<article class="panel">
+<h2>Strong Features</h2>
+<div id="strong-features"></div>
+</article>
+</section>
+<section class="grid">
+<article class="panel">
+<h2>Feature Cards</h2>
+<div id="feature-cards"></div>
+</article>
+<article class="panel">
+<h2>Agent Next Actions</h2>
+<div id="agent-actions"></div>
+</article>
+</section>
+</main>
+<script id="graph-data" type="application/json">{"criterion": {"negative_examples": ["The context is unrelated to next token should physical measurement unit.", "The model can answer without representing next token should physical measurement unit.", "Amplifying unrelated details leaves next token should physical measurement unit unchanged."], "positive_examples": ["The context clearly expresses next token should physical measurement unit.", "The model is internally tracking next token should physical measurement unit.", "A response would change if next token should physical measurement unit were amplified."], "scoring_notes": ["Prefer features with replicated behavior across paraphrases.", "Prioritize causal effects over text-label similarity.", "Treat natural-language explanations as hypotheses to validate."], "text": "the next token should be a physical measurement unit"}, "edges": [{"confidence_interval": {"high": 0.225775, "low": 0.225775}, "effect": 0.225775, "evidence": "measured_intervention", "record_count": 1.0, "side_effect": 0.001362, "signed_effect": 0.225775, "source": "feature:distilgpt2:SAE:L6:F10", "source_feature_id": "SAE:L6:F10", "specificity": 0.224412, "strong_causal_score": 0.224412, "target": "criterion", "type": "causal_effect"}, {"confidence_interval": {"high": -0.01601, "low": -0.01601}, "effect": 0.01601, "evidence": "measured_intervention", "record_count": 1.0, "side_effect": 0.000376, "signed_effect": -0.01601, "source": "feature:distilgpt2:SAE:L6:F30", "source_feature_id": "SAE:L6:F30", "specificity": 0.015634, "strong_causal_score": 0.015634, "target": "criterion", "type": "causal_effect"}, {"confidence_interval": {"high": -0.023158, "low": -0.023158}, "effect": 0.023158, "evidence": "measured_intervention", "record_count": 1.0, "side_effect": 0.000287, "signed_effect": -0.023158, "source": "feature:distilgpt2:SAE:L6:F13", "source_feature_id": "SAE:L6:F13", "specificity": 0.022871, "strong_causal_score": 0.022871, "target": "criterion", "type": "causal_effect"}, {"evidence": "automatic_role_or_theme_grouping", "source": "feature:distilgpt2:SAE:L6:F30", "source_feature_id": "SAE:L6:F30", "target": "supernode:layer-6:associated_detector", "type": "member_of"}, {"evidence": "automatic_role_or_theme_grouping", "source": "feature:distilgpt2:SAE:L6:F13", "source_feature_id": "SAE:L6:F13", "target": "supernode:layer-6:associated_detector", "type": "member_of"}, {"member_count": 2, "signed_effect": -0.019584, "source": "supernode:layer-6:associated_detector", "strong_causal_score": 0.019252, "target": "criterion", "type": "aggregate_causal_effect"}, {"evidence": "automatic_role_or_theme_grouping", "source": "feature:distilgpt2:SAE:L6:F10", "source_feature_id": "SAE:L6:F10", "target": "supernode:layer-6:criterion_promoter", "type": "member_of"}, {"member_count": 1, "signed_effect": 0.225775, "source": "supernode:layer-6:criterion_promoter", "strong_causal_score": 0.224412, "target": "criterion", "type": "aggregate_causal_effect"}, {"abs_correlation": 0.971824, "candidate_path": false, "correlation": 0.971824, "evidence": "activation_signature_correlation", "source": "feature:distilgpt2:SAE:L6:F13", "source_feature_id": "SAE:L6:F13", "target": "feature:distilgpt2:SAE:L6:F30", "target_feature_id": "SAE:L6:F30", "type": "coactivation"}, {"abs_correlation": 0.735723, "candidate_path": false, "correlation": -0.735723, "evidence": "activation_signature_correlation", "source": "feature:distilgpt2:SAE:L6:F10", "source_feature_id": "SAE:L6:F10", "target": "feature:distilgpt2:SAE:L6:F30", "target_feature_id": "SAE:L6:F30", "type": "coactivation"}, {"abs_correlation": 0.706917, "candidate_path": false, "correlation": -0.706917, "evidence": "activation_signature_correlation", "source": "feature:distilgpt2:SAE:L6:F10", "source_feature_id": "SAE:L6:F10", "target": "feature:distilgpt2:SAE:L6:F13", "target_feature_id": "SAE:L6:F13", "type": "coactivation"}], "mechanism_summary": {"candidate_feature_groups": [{"id": "supernode:layer-6:criterion_promoter", "label": "layer 6 criterion promoter: SAE:L6:F10", "mean_strong_causal_score": 0.224412, "member_count": 1}, {"id": "supernode:layer-6:associated_detector", "label": "layer 6 associated detector: SAE:L6:F30", "mean_strong_causal_score": 0.019252, "member_count": 2}], "candidate_paths": [], "strong_causal_features": [{"feature_id": "SAE:L6:F10", "label": "SAE:L6:F10", "layer": 6, "role": "criterion_promoter", "signed_effect": 0.225775, "strong_causal_score": 0.224412}], "validation_plan": ["Sweep steering strengths for SAE:L6:F10; it currently promotes the criterion with strong causal score 0.224."]}, "metadata": {"coactivation_threshold": 0.65, "feature_count": 3, "path_patch_record_count": 0, "source_report_created_at": "2026-05-20T19:54:16+00:00", "strong_causal_threshold": 0.05}, "model": "distilgpt2", "nodes": [{"id": "criterion", "label": "the next token should be a physical measurement unit", "model": "distilgpt2", "type": "criterion"}, {"association": 0.765071, "causal_effect": 0.225775, "feature_id": "SAE:L6:F10", "id": "feature:distilgpt2:SAE:L6:F10", "importance": 0.437272, "label": "trained SAE latent 10", "layer": 6, "model": "distilgpt2", "role": "criterion_promoter", "source": "trained-sae", "specificity": 0.224412, "stability": 1.0, "top_tokens": [], "type": "feature"}, {"association": 0.961641, "causal_effect": 0.01601, "feature_id": "SAE:L6:F30", "id": "feature:distilgpt2:SAE:L6:F30", "importance": 0.35061, "label": "trained SAE latent 30", "layer": 6, "model": "distilgpt2", "role": "associated_detector", "source": "trained-sae", "specificity": 0.015634, "stability": 1.0, "top_tokens": [], "type": "feature"}, {"association": 0.923989, "causal_effect": 0.023158, "feature_id": "SAE:L6:F13", "id": "feature:distilgpt2:SAE:L6:F13", "importance": 0.345892, "label": "trained SAE latent 13", "layer": 6, "model": "distilgpt2", "role": "associated_detector", "source": "trained-sae", "specificity": 0.022871, "stability": 1.0, "top_tokens": [], "type": "feature"}, {"id": "supernode:layer-6:associated_detector", "label": "layer 6 associated detector: SAE:L6:F30", "mean_signed_effect": -0.019584, "mean_strong_causal_score": 0.019252, "member_count": 2, "member_feature_ids": ["SAE:L6:F30", "SAE:L6:F13"], "members": ["feature:distilgpt2:SAE:L6:F30", "feature:distilgpt2:SAE:L6:F13"], "role": "associated_detector", "type": "supernode"}, {"id": "supernode:layer-6:criterion_promoter", "label": "layer 6 criterion promoter: SAE:L6:F10", "mean_signed_effect": 0.225775, "mean_strong_causal_score": 0.224412, "member_count": 1, "member_feature_ids": ["SAE:L6:F10"], "members": ["feature:distilgpt2:SAE:L6:F10"], "role": "criterion_promoter", "type": "supernode"}], "schema_version": "interp-lab.attribution_graph.v1"}</script>
+<script id="summary-data" type="application/json">{"agent_next_actions": [{"command": "interp-lab export-hf-sae-paths --model <model> --dataset <heldout.jsonl> --source-sae <source-sae.json> --target-sae <target-sae.json> --out <paths.jsonl>", "id": "measure_path_records", "title": "Measure path-patching records before validating this graph"}], "candidate_paths": [], "counts": {"candidate_paths": 0, "edges": 11, "features": 3, "nodes": 6, "path_patch_edges": 0}, "criterion": "the next token should be a physical measurement unit", "model": "distilgpt2", "schema_version": "interp-lab.attribution_graph_summary.v1", "strongest_features": [{"feature_id": "SAE:L6:F10", "label": "SAE:L6:F10", "layer": 6, "role": "criterion_promoter", "signed_effect": 0.225775, "strong_causal_score": 0.224412}], "validation": {"claim_grade_counts": {}, "overall_claim_grade": null, "recommended_next_action": null, "status_counts": {}}}</script>
+<script>
+
+const graph = JSON.parse(document.getElementById("graph-data").textContent);
+const summary = JSON.parse(document.getElementById("summary-data").textContent);
+const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+const edges = Array.isArray(graph.edges) ? graph.edges : [];
+const positions = new Map();
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function number(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toFixed(4) : escapeHtml(value);
+}
+
+function pill(value) {
+  if (!value) return "";
+  const css = String(value).replaceAll(/[^a-zA-Z0-9_-]/g, "_");
+  return `<span class="pill ${css}">${escapeHtml(value)}</span>`;
+}
+
+function compactText(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function copyButton(command) {
+  if (!command) return "";
+  return `<button type="button" class="copy-command" data-command="${escapeHtml(command)}">Copy</button>`;
+}
+
+function cssEscape(value) {
+  if (globalThis.CSS && typeof CSS.escape === "function") return CSS.escape(value);
+  return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+function nodeLabel(node) {
+  return node.label || node.id || "";
+}
+
+function searchableText(node) {
+  return [
+    node.id,
+    node.label,
+    node.role,
+    node.type,
+    node.layer,
+    Array.isArray(node.top_tokens) ? node.top_tokens.join(" ") : "",
+  ].join(" ").toLowerCase();
+}
+
+function edgeColor(typeOrRole) {
+  if (typeOrRole === "path_patch") return "#b45309";
+  if (typeOrRole === "causal_effect" || typeOrRole === "aggregate_causal_effect") return "#2563eb";
+  if (typeOrRole === "coactivation") return "#7c3aed";
+  if (typeOrRole === "fingerprint_similarity") return "#15803d";
+  if (typeOrRole === "criterion_promoter") return "#15803d";
+  if (typeOrRole === "criterion_suppressor") return "#b91c1c";
+  return "#94a3b8";
+}
+
+function renderMetrics() {
+  const counts = summary.counts || {};
+  const validation = summary.validation || {};
+  const items = [
+    ["Features", counts.features],
+    ["Edges", counts.edges],
+    ["Path edges", counts.path_patch_edges],
+    ["Candidate paths", counts.candidate_paths],
+    ["Claim grade", validation.overall_claim_grade || "unvalidated"],
+  ];
+  document.getElementById("metrics").innerHTML = items.map(([label, value]) => `
+    <div class="metric"><span class="value">${escapeHtml(value ?? 0)}</span><span class="label">${escapeHtml(label)}</span></div>
+  `).join("");
+}
+
+function renderBrief() {
+  const validation = summary.validation || {};
+  const strongest = Array.isArray(summary.strongest_features) ? summary.strongest_features[0] : null;
+  const paths = Array.isArray(summary.candidate_paths) ? summary.candidate_paths : [];
+  const bestPath = paths[0] || null;
+  const nextAction = Array.isArray(summary.agent_next_actions) ? summary.agent_next_actions[0] : null;
+  const items = [
+    ["Evidence grade", compactText(validation.overall_claim_grade, "unvalidated")],
+    ["Strongest feature", strongest ? `${compactText(strongest.feature_id)} ${number(strongest.strong_causal_score)}` : "none"],
+    ["Top path", bestPath ? `${compactText(bestPath.source_feature_id)} -> ${compactText(bestPath.target_feature_id)}` : "none measured"],
+    ["Next action", compactText(validation.recommended_next_action || (nextAction && nextAction.title), "measure or validate candidate paths")],
+  ];
+  document.getElementById("graph-brief").innerHTML = `
+    <h2>Evidence Summary</h2>
+    <div class="brief-grid">
+      ${items.map(([label, value]) => `<div class="brief-item"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`).join("")}
+    </div>
+  `;
+}
+
+function populateFilters() {
+  const roleFilter = document.getElementById("role-filter");
+  const statusFilter = document.getElementById("status-filter");
+  const roles = [...new Set(nodes.map((node) => node.role).filter(Boolean))].sort();
+  const statuses = [...new Set((Array.isArray(summary.candidate_paths) ? summary.candidate_paths : [])
+    .map((row) => row.status || row.claim_grade || row.evidence)
+    .filter(Boolean))].sort();
+  roleFilter.innerHTML = '<option value="">All roles</option>' + roles.map((role) => `<option value="${escapeHtml(role)}">${escapeHtml(role)}</option>`).join("");
+  statusFilter.innerHTML = '<option value="">All path statuses</option>' + statuses.map((status) => `<option value="${escapeHtml(status)}">${escapeHtml(status)}</option>`).join("");
+}
+
+function renderGraph() {
+  const svg = document.getElementById("graph-svg");
+  const width = 1180;
+  const featureNodes = nodes.filter((node) => node.type === "feature");
+  const layers = [...new Set(featureNodes.map((node) => node.layer ?? "unknown"))].sort((a, b) => Number(a) - Number(b));
+  const columns = new Map();
+  for (const node of nodes) {
+    let column = "features";
+    if (node.type === "criterion") column = "criterion";
+    else if (node.type === "supernode") column = "groups";
+    else column = `layer:${node.layer ?? "unknown"}`;
+    if (!columns.has(column)) columns.set(column, []);
+    columns.get(column).push(node);
+  }
+  const orderedColumns = layers.map((layer) => `layer:${layer}`).filter((key) => columns.has(key));
+  if (columns.has("groups")) orderedColumns.push("groups");
+  if (columns.has("criterion")) orderedColumns.push("criterion");
+  if (!orderedColumns.length) orderedColumns.push("features");
+  const height = Math.max(520, Math.max(...[...columns.values()].map((items) => items.length), 1) * 76 + 90);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.innerHTML = `
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L6,3 z" fill="#64748b"></path>
+      </marker>
+    </defs>
+  `;
+  orderedColumns.forEach((column, columnIndex) => {
+    const items = columns.get(column) || [];
+    const x = 58 + columnIndex * ((width - 116) / Math.max(1, orderedColumns.length - 1));
+    items.forEach((node, rowIndex) => {
+      const y = 60 + rowIndex * ((height - 120) / Math.max(1, items.length - 1));
+      positions.set(String(node.id), {x, y});
+    });
+  });
+  for (const edge of edges) {
+    const source = positions.get(String(edge.source));
+    const target = positions.get(String(edge.target));
+    if (!source || !target) continue;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const dx = Math.max(30, Math.abs(target.x - source.x) * 0.45);
+    line.setAttribute("d", `M ${source.x} ${source.y} C ${source.x + dx} ${source.y}, ${target.x - dx} ${target.y}, ${target.x} ${target.y}`);
+    line.setAttribute("fill", "none");
+    line.setAttribute("stroke", edgeColor(edge.type));
+    line.setAttribute("stroke-width", edge.type === "path_patch" ? "2.7" : "1.6");
+    line.setAttribute("opacity", edge.type === "member_of" ? "0.32" : "0.72");
+    line.setAttribute("marker-end", "url(#arrow)");
+    line.classList.add("edge");
+    line.dataset.source = String(edge.source);
+    line.dataset.target = String(edge.target);
+    svg.appendChild(line);
+  }
+  for (const node of nodes) {
+    const pos = positions.get(String(node.id));
+    if (!pos) continue;
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.classList.add("node");
+    group.dataset.nodeId = String(node.id);
+    group.dataset.search = searchableText(node);
+    group.dataset.role = String(node.role || "");
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", pos.x);
+    circle.setAttribute("cy", pos.y);
+    circle.setAttribute("r", node.type === "criterion" ? "19" : node.type === "supernode" ? "15" : "12");
+    circle.setAttribute("fill", node.type === "criterion" ? "#2563eb" : node.type === "supernode" ? "#0f766e" : "#ffffff");
+    circle.setAttribute("stroke", node.type === "feature" ? edgeColor(node.role) : "#1f2937");
+    circle.setAttribute("stroke-width", "2");
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = `${node.id}\n${nodeLabel(node)}\n${node.role || node.type || ""}`;
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", pos.x + 18);
+    label.setAttribute("y", pos.y + 4);
+    label.setAttribute("class", "node-label");
+    label.textContent = String(nodeLabel(node)).slice(0, 42);
+    group.appendChild(title);
+    group.appendChild(circle);
+    group.appendChild(label);
+    svg.appendChild(group);
+  }
+}
+
+function renderTable(targetId, rows, columns) {
+  const target = document.getElementById(targetId);
+  if (!rows.length) {
+    target.innerHTML = '<p class="empty">No rows in this graph.</p>';
+    return;
+  }
+  target.innerHTML = `
+    <table>
+      <thead><tr>${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr></thead>
+      <tbody>
+        ${rows.map((row) => `<tr class="${row._class || ""}" data-search="${escapeHtml(row._search || "")}" data-role="${escapeHtml(row._role || row.role || "")}" data-status="${escapeHtml(row._status || row.status || row.claim_grade || row.evidence || "")}">
+          ${columns.map((column) => `<td>${column.render(row)}</td>`).join("")}
+        </tr>`).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderDetails() {
+  const paths = (Array.isArray(summary.candidate_paths) ? summary.candidate_paths : []).map((row) => ({
+    ...row,
+    _class: "path-row",
+    _status: row.status || row.claim_grade || row.evidence || "",
+    _search: [row.source_feature_id, row.target_feature_id, row.status, row.claim_grade, row.evidence, row.next_action].join(" ").toLowerCase(),
+  }));
+  renderTable("candidate-paths", paths, [
+    {label: "Status", render: (row) => pill(row.status || row.claim_grade || row.evidence)},
+    {label: "Path", render: (row) => `<code>${escapeHtml(row.source_feature_id)} -> ${escapeHtml(row.target_feature_id)}</code>`},
+    {label: "Effect", render: (row) => number(row.mean_abs_target_activation_delta)},
+    {label: "Specificity", render: (row) => number(row.path_specificity_score)},
+    {label: "Records", render: (row) => escapeHtml(row.record_count ?? "")},
+  ]);
+  const strong = Array.isArray(summary.strongest_features) ? summary.strongest_features : [];
+  renderTable("strong-features", strong, [
+    {label: "Feature", render: (row) => `<code>${escapeHtml(row.feature_id)}</code>`},
+    {label: "Label", render: (row) => escapeHtml(row.label || "")},
+    {label: "Role", render: (row) => pill(row.role)},
+    {label: "Strong", render: (row) => number(row.strong_causal_score)},
+  ]);
+  const featureRows = nodes.filter((node) => node.type === "feature").map((node) => ({
+    ...node,
+    _class: "feature-row",
+    _role: node.role || "",
+    _search: searchableText(node),
+  }));
+  renderTable("feature-cards", featureRows, [
+    {label: "Feature", render: (row) => `<code>${escapeHtml(row.id)}</code>`},
+    {label: "Label", render: (row) => escapeHtml(row.label || "")},
+    {label: "Role", render: (row) => pill(row.role)},
+    {label: "Layer", render: (row) => escapeHtml(row.layer ?? "")},
+    {label: "Tokens", render: (row) => escapeHtml(Array.isArray(row.top_tokens) ? row.top_tokens.join(", ") : "")},
+  ]);
+  const actions = Array.isArray(summary.agent_next_actions) ? summary.agent_next_actions : [];
+  renderTable("agent-actions", actions, [
+    {label: "Action", render: (row) => `<code>${escapeHtml(row.id || "")}</code>`},
+    {label: "Title", render: (row) => escapeHtml(row.title || "")},
+    {label: "Command", render: (row) => `<span class="command-cell"><code>${escapeHtml(row.command || "")}</code>${copyButton(row.command || "")}</span>`},
+  ]);
+}
+
+function applyFilter() {
+  const query = document.getElementById("feature-search").value.trim().toLowerCase();
+  const role = document.getElementById("role-filter").value;
+  const status = document.getElementById("status-filter").value;
+  const filteredRows = [...document.querySelectorAll(".feature-row, .path-row")];
+  let visible = 0;
+  filteredRows.forEach((row) => {
+    const isPath = row.classList.contains("path-row");
+    const queryMatch = !query || row.dataset.search.includes(query);
+    const roleMatch = !role || row.dataset.role === role;
+    const statusMatch = !status || (isPath ? row.dataset.status === status : true);
+    const match = queryMatch && roleMatch && statusMatch;
+    row.classList.toggle("hidden", !match);
+    if (match && row.classList.contains("feature-row")) visible += 1;
+  });
+  document.querySelectorAll(".node").forEach((node) => {
+    const queryMatch = !query || node.dataset.search.includes(query) || !node.dataset.search;
+    const roleMatch = !role || node.dataset.role === role;
+    const match = queryMatch && roleMatch;
+    node.classList.toggle("dimmed", !match);
+  });
+  document.querySelectorAll(".edge").forEach((edge) => {
+    if (!query && !role) {
+      edge.classList.remove("dimmed");
+      return;
+    }
+    const source = document.querySelector(`.node[data-node-id="${cssEscape(edge.dataset.source)}"]`);
+    const target = document.querySelector(`.node[data-node-id="${cssEscape(edge.dataset.target)}"]`);
+    const match = (source && !source.classList.contains("dimmed")) || (target && !target.classList.contains("dimmed"));
+    edge.classList.toggle("dimmed", !match);
+  });
+  document.getElementById("filter-count").textContent = (query || role || status) ? `${visible} matching feature rows` : "";
+}
+
+async function copyCommand(button) {
+  const command = button.dataset.command || "";
+  try {
+    await navigator.clipboard.writeText(command);
+  } catch (error) {
+    const area = document.createElement("textarea");
+    area.value = command;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  const original = button.textContent;
+  button.textContent = "Copied";
+  window.setTimeout(() => { button.textContent = original; }, 1200);
+}
+
+renderMetrics();
+renderBrief();
+populateFilters();
+renderGraph();
+renderDetails();
+document.getElementById("feature-search").addEventListener("input", applyFilter);
+document.getElementById("role-filter").addEventListener("change", applyFilter);
+document.getElementById("status-filter").addEventListener("change", applyFilter);
+document.addEventListener("click", (event) => {
+  const button = event.target.closest(".copy-command");
+  if (button) copyCommand(button);
+});
+
+</script>
+</body>
+</html>
