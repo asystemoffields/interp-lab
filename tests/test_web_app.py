@@ -23,6 +23,7 @@ def test_command_specs_cover_cli_subcommands():
         "check-explanation-consistency",
         "search-features",
         "compare-model-families",
+        "match-text-pivot",
         "export-attribution-graph",
         "validate-attribution-graph",
         "validate-assay",
@@ -48,6 +49,7 @@ def test_render_web_app_contains_required_surfaces():
     assert "check-explanation-consistency" in html
     assert "search-features" in html
     assert "compare-model-families" in html
+    assert "match-text-pivot" in html
     assert "--nla-explanations" in html
     assert "Discovery-first Criterion Lab" in html
     assert "Validate an assay" in html

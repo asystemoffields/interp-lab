@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from oracle_sae.matching import match_feature_cards
-from oracle_sae.math_utils import cosine
+from oracle_sae.math_utils import clamp, cosine
 from oracle_sae.reporting import load_inspection_report
 from oracle_sae.schema import FeatureCard, InspectionReport, utc_now_iso
 from oracle_sae.text_vectors import content_tokens, hash_text_vector
@@ -18,6 +18,7 @@ from oracle_sae.text_vectors import content_tokens, hash_text_vector
 EXPLANATION_CONSISTENCY_SCHEMA = "interp-lab.explanation_consistency.v1"
 FEATURE_SEARCH_SCHEMA = "interp-lab.feature_search.v1"
 MODEL_FAMILY_COMPARISON_SCHEMA = "interp-lab.model_family_comparison.v1"
+TEXT_PIVOT_MATCH_SCHEMA = "interp-lab.text_pivot_match.v1"
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,20 @@ def build_model_family_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_text_pivot_match_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--left", action="append", required=True, help="Left inspection report JSON or report directory. Repeat to merge reports.")
+    parser.add_argument("--right", action="append", required=True, help="Right inspection report JSON or report directory. Repeat to merge reports.")
+    parser.add_argument("--out", default="reports/text-pivot-matches.json", help="Output JSON path.")
+    parser.add_argument("--markdown-out", help="Output Markdown path. Defaults to --out with .md suffix.")
+    parser.add_argument("--html-out", help="Optional self-contained HTML report path.")
+    parser.add_argument("--top-k", type=int, default=20, help="Total number of candidate matches to keep.")
+    parser.add_argument("--per-left", type=int, default=3, help="Candidate matches to keep for each left feature.")
+    parser.add_argument("--min-score", type=float, default=0.0, help="Minimum combined match score.")
+    parser.add_argument("--min-text-score", type=float, default=0.55, help="Minimum text-pivot score before a match is considered text-supported.")
+    return parser
+
+
 def run_explanation_consistency_from_args(args: argparse.Namespace) -> WrittenJsonMarkdown:
     return export_explanation_consistency_report(
         reports=args.report,
@@ -100,6 +115,20 @@ def run_model_family_from_args(args: argparse.Namespace) -> WrittenJsonMarkdown:
         html_out=args.html_out,
         top_k=args.top_k,
         min_score=args.min_score,
+    )
+
+
+def run_text_pivot_match_from_args(args: argparse.Namespace) -> WrittenJsonMarkdown:
+    return export_text_pivot_match_report(
+        left_reports=args.left,
+        right_reports=args.right,
+        out=args.out,
+        markdown_out=args.markdown_out,
+        html_out=args.html_out,
+        top_k=args.top_k,
+        per_left=args.per_left,
+        min_score=args.min_score,
+        min_text_score=args.min_text_score,
     )
 
 
@@ -321,6 +350,101 @@ def export_model_family_comparison_report(
     )
 
 
+def export_text_pivot_match_report(
+    *,
+    left_reports: list[str | Path],
+    right_reports: list[str | Path],
+    out: str | Path,
+    markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
+    top_k: int = 20,
+    per_left: int = 3,
+    min_score: float = 0.0,
+    min_text_score: float = 0.55,
+) -> WrittenJsonMarkdown:
+    report = build_text_pivot_match_report(
+        left_reports=left_reports,
+        right_reports=right_reports,
+        top_k=top_k,
+        per_left=per_left,
+        min_score=min_score,
+        min_text_score=min_text_score,
+    )
+    return _write_json_markdown(
+        report,
+        out,
+        markdown_out,
+        render_text_pivot_match_markdown(report),
+        html_out=html_out,
+        html=render_text_pivot_match_html(report),
+    )
+
+
+def build_text_pivot_match_report(
+    *,
+    left_reports: list[str | Path],
+    right_reports: list[str | Path],
+    top_k: int = 20,
+    per_left: int = 3,
+    min_score: float = 0.0,
+    min_text_score: float = 0.55,
+) -> dict[str, Any]:
+    left_loaded = _load_reports(left_reports)
+    right_loaded = _load_reports(right_reports)
+    left_cards = _ranked_cards(left_loaded)
+    right_cards = _ranked_cards(right_loaded)
+    grouped: list[dict[str, Any]] = []
+    all_matches: list[dict[str, Any]] = []
+    for left_item in left_cards:
+        candidates = []
+        for right_item in right_cards:
+            match = _text_pivot_match(left_item, right_item, min_text_score=min_text_score)
+            if match["score"] >= min_score:
+                candidates.append(match)
+        candidates.sort(key=lambda item: item["score"], reverse=True)
+        kept = candidates[: max(1, per_left)]
+        all_matches.extend(kept)
+        if kept:
+            grouped.append(
+                {
+                    "left_feature_id": left_item["card"].feature_id,
+                    "left_model": left_item["report"].model,
+                    "left_report": left_item["path"],
+                    "left_rank": left_item["rank"],
+                    "left_label": left_item["card"].label,
+                    "candidates": kept,
+                }
+            )
+    all_matches.sort(key=lambda item: item["score"], reverse=True)
+    top_matches = all_matches[:top_k]
+    summary = {
+        "left_report_count": len(left_loaded),
+        "right_report_count": len(right_loaded),
+        "left_feature_count": len(left_cards),
+        "right_feature_count": len(right_cards),
+        "candidate_count": len(top_matches),
+        "text_supported_count": sum(1 for item in top_matches if item["components"]["text_pivot"] >= min_text_score),
+        "causal_supported_count": sum(1 for item in top_matches if item["evidence_grade"] == "text_pivot_with_causal_support"),
+        "strongest_score": top_matches[0]["score"] if top_matches else 0.0,
+    }
+    return {
+        "schema_version": TEXT_PIVOT_MATCH_SCHEMA,
+        "created_at": utc_now_iso(),
+        "summary": summary,
+        "thresholds": {
+            "top_k": top_k,
+            "per_left": per_left,
+            "min_score": min_score,
+            "min_text_score": min_text_score,
+        },
+        "left_reports": _report_descriptors(left_loaded),
+        "right_reports": _report_descriptors(right_loaded),
+        "matches": top_matches,
+        "by_left_feature": grouped,
+        "agent_next_actions": _text_pivot_actions(top_matches),
+    }
+
+
 def build_model_family_comparison_report(
     *,
     members: list[dict[str, str]],
@@ -490,6 +614,35 @@ def render_model_family_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_text_pivot_match_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Text-Pivot Matches",
+        "",
+        f"Left reports: {report['summary']['left_report_count']}",
+        f"Right reports: {report['summary']['right_report_count']}",
+        f"Candidates: {report['summary']['candidate_count']}",
+        f"Text-supported: {report['summary']['text_supported_count']}",
+        f"Causal-supported: {report['summary']['causal_supported_count']}",
+        "",
+        "## Matches",
+    ]
+    for item in report["matches"]:
+        lines.extend(
+            [
+                "",
+                f"### {item['left_feature_id']} -> {item['right_feature_id']}",
+                f"Score: {item['score']:.3f}",
+                f"Evidence grade: {item['evidence_grade']}",
+                f"Models: {item['left_model']} -> {item['right_model']}",
+                f"Labels: {item['left_label']} -> {item['right_label']}",
+                "Components: "
+                + ", ".join(f"{key}={value:.3f}" for key, value in sorted(item["components"].items())),
+            ]
+        )
+    lines.extend(_actions_markdown(report.get("agent_next_actions", [])))
+    return "\n".join(lines) + "\n"
+
+
 def render_explanation_consistency_html(report: dict[str, Any]) -> str:
     summary = report["summary"]
     rows = "".join(
@@ -588,12 +741,57 @@ def render_model_family_html(report: dict[str, Any]) -> str:
     return _analysis_html("Model-Family Comparison", body, report)
 
 
+def render_text_pivot_match_html(report: dict[str, Any]) -> str:
+    summary = report["summary"]
+    rows = "".join(
+        "<tr>"
+        f"<td>{_h(item['left_feature_id'])}<br><span>{_h(item['left_model'])}</span></td>"
+        f"<td>{_h(item['right_feature_id'])}<br><span>{_h(item['right_model'])}</span></td>"
+        f"<td>{item['score']:.3f}</td>"
+        f"<td>{item['components']['text_pivot']:.3f}</td>"
+        f"<td>{item['components']['causal']:.3f}</td>"
+        f"<td><span class=\"pill {item['evidence_grade']}\">{_h(item['evidence_grade'])}</span></td>"
+        f"<td>{_h(item['left_label'])} -> {_h(item['right_label'])}</td>"
+        "</tr>"
+        for item in report["matches"]
+    )
+    body = f"""
+      <section class="metrics">
+        {_metric('Candidates', summary['candidate_count'])}
+        {_metric('Text Supported', summary['text_supported_count'])}
+        {_metric('Causal Supported', summary['causal_supported_count'])}
+        {_metric('Strongest Score', f"{summary['strongest_score']:.3f}")}
+      </section>
+      <table>
+        <thead><tr><th>Left</th><th>Right</th><th>Score</th><th>Text</th><th>Causal</th><th>Grade</th><th>Labels</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    """
+    return _analysis_html("Text-Pivot Matches", body, report)
+
+
 def _load_reports(paths: list[str | Path]) -> list[dict[str, Any]]:
     loaded = []
     for path in paths:
         report_path = _resolve_report_path(path)
         loaded.append({"path": str(report_path), "report": load_inspection_report(report_path)})
     return loaded
+
+
+def _report_descriptors(loaded: list[dict[str, Any]]) -> list[dict[str, str]]:
+    return [
+        {"path": item["path"], "model": item["report"].model, "criterion": item["report"].criterion.text}
+        for item in loaded
+    ]
+
+
+def _ranked_cards(loaded: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ranked = []
+    for item in loaded:
+        total = len(item["report"].cards)
+        for rank, card in enumerate(item["report"].cards, start=1):
+            ranked.append({"path": item["path"], "report": item["report"], "card": card, "rank": rank, "total": total})
+    return ranked
 
 
 def _occurrences_with_report_indexes(
@@ -618,6 +816,64 @@ def _search_components(query: str, query_vector: list[float], card: FeatureCard)
     }
 
 
+def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, min_text_score: float) -> dict[str, Any]:
+    left = left_item["card"]
+    right = right_item["card"]
+    explanation = _text_similarity(_explanation_text(left), _explanation_text(right))
+    label = _text_similarity(left.label, right.label)
+    examples = _text_similarity(" ".join(left.examples[:5]), " ".join(right.examples[:5]))
+    fingerprint_text = _unit_cosine(left.fingerprint.text_vector, right.fingerprint.text_vector)
+    activation = _unit_cosine(left.fingerprint.activation_signature, right.fingerprint.activation_signature, neutral=0.5)
+    decoder = _unit_cosine(left.fingerprint.decoder_signature, right.fingerprint.decoder_signature, neutral=0.5)
+    causal = _causal_component(left, right)
+    rank = _rank_component(left_item["rank"], right_item["rank"], left_item["total"], right_item["total"])
+    signed = _signed_component(left, right)
+    text_pivot = max(explanation, label, examples, fingerprint_text)
+    score = clamp(
+        0.38 * text_pivot
+        + 0.17 * explanation
+        + 0.13 * causal
+        + 0.10 * activation
+        + 0.07 * decoder
+        + 0.10 * rank
+        + 0.05 * signed
+    )
+    if _opposite_signed_effects(left, right):
+        score = min(score, 0.49)
+    components = {
+        "text_pivot": round(text_pivot, 6),
+        "explanation": round(explanation, 6),
+        "label": round(label, 6),
+        "examples": round(examples, 6),
+        "fingerprint_text": round(fingerprint_text, 6),
+        "activation": round(activation, 6),
+        "decoder": round(decoder, 6),
+        "causal": round(causal, 6),
+        "rank": round(rank, 6),
+        "signed_effect": round(signed, 6),
+    }
+    return {
+        "left_feature_id": left.feature_id,
+        "right_feature_id": right.feature_id,
+        "left_model": left.model,
+        "right_model": right.model,
+        "left_report": left_item["path"],
+        "right_report": right_item["path"],
+        "left_rank": left_item["rank"],
+        "right_rank": right_item["rank"],
+        "left_label": left.label,
+        "right_label": right.label,
+        "score": round(score, 6),
+        "components": components,
+        "evidence_grade": _text_pivot_grade(components, min_text_score=min_text_score),
+        "matched_terms": sorted(set(content_tokens(_card_search_text(left))) & set(content_tokens(_card_search_text(right)))),
+        "agent_next_action": (
+            f"Validate with interp-lab match --left {left_item['path']} --right {right_item['path']} "
+            "followed by interp-lab validate-matches."
+        ),
+    }
+
+
 def _card_search_text(card: FeatureCard) -> str:
     return " ".join([card.label, card.explanation, " ".join(card.examples), card.fingerprint.text])
 
@@ -632,6 +888,63 @@ def _text_similarity(left: str, right: str) -> float:
     if not left.strip() or not right.strip():
         return 0.0
     return (cosine(hash_text_vector(left), hash_text_vector(right)) + 1.0) / 2.0
+
+
+def _unit_cosine(left: list[float], right: list[float], *, neutral: float = 0.0) -> float:
+    if not left or not right:
+        return neutral
+    return clamp((cosine(left, right) + 1.0) / 2.0)
+
+
+def _causal_component(left: FeatureCard, right: FeatureCard) -> float:
+    if not left.fingerprint.causal_vector or not right.fingerprint.causal_vector:
+        return 0.5
+    direction = _unit_cosine(left.fingerprint.causal_vector, right.fingerprint.causal_vector, neutral=0.5)
+    strength = min(1.0, _norm(left.fingerprint.causal_vector)) * min(1.0, _norm(right.fingerprint.causal_vector))
+    return clamp(direction * strength)
+
+
+def _rank_component(left_rank: int, right_rank: int, left_total: int, right_total: int) -> float:
+    left_position = (left_rank - 1) / max(1, left_total - 1)
+    right_position = (right_rank - 1) / max(1, right_total - 1)
+    return clamp(1.0 - abs(left_position - right_position))
+
+
+def _signed_component(left: FeatureCard, right: FeatureCard) -> float:
+    left_signed = _signed_effect(left)
+    right_signed = _signed_effect(right)
+    if left_signed is None or right_signed is None:
+        return 0.5
+    return clamp(1.0 - abs(left_signed - right_signed) / 2.0)
+
+
+def _opposite_signed_effects(left: FeatureCard, right: FeatureCard) -> bool:
+    left_signed = _signed_effect(left)
+    right_signed = _signed_effect(right)
+    if left_signed is None or right_signed is None:
+        return False
+    return left_signed * right_signed < 0 and min(abs(left_signed), abs(right_signed)) >= 0.05
+
+
+def _signed_effect(card: FeatureCard) -> float | None:
+    for key in ("signed_causal_effect", "signed_association"):
+        if key in card.causal_effects:
+            return float(card.causal_effects[key])
+    return None
+
+
+def _norm(values: list[float]) -> float:
+    return sum(value * value for value in values) ** 0.5
+
+
+def _text_pivot_grade(components: dict[str, float], *, min_text_score: float) -> str:
+    if components["text_pivot"] >= min_text_score and components["causal"] >= 0.65 and components["signed_effect"] >= 0.65:
+        return "text_pivot_with_causal_support"
+    if components["text_pivot"] >= min_text_score and components["activation"] >= 0.65:
+        return "text_pivot_with_activation_support"
+    if components["text_pivot"] >= min_text_score:
+        return "text_pivot_candidate"
+    return "weak_text_pivot"
 
 
 def _status_sort_key(status: str) -> int:
@@ -702,6 +1015,29 @@ def _family_actions(pairwise: list[dict[str, Any]]) -> list[dict[str, str]]:
         {
             "id": "collect_more_family_evidence",
             "description": "Add intervention-backed reports or aligned criteria before claiming model-family transfer.",
+        }
+    ]
+
+
+def _text_pivot_actions(matches: list[dict[str, Any]]) -> list[dict[str, str]]:
+    if any(item["evidence_grade"] == "text_pivot_with_causal_support" for item in matches):
+        return [
+            {
+                "id": "validate_text_pivot_matches",
+                "description": "Run match validation and targeted interventions for the strongest text-pivot pairs before treating them as equivalent features.",
+            }
+        ]
+    if matches:
+        return [
+            {
+                "id": "collect_causal_support_for_text_matches",
+                "description": "Use text-pivot candidates to choose features for intervention records, then rerun the report with causal evidence.",
+            }
+        ]
+    return [
+        {
+            "id": "broaden_text_pivot_inputs",
+            "description": "Add richer NLA explanations, activation records, or related reports before repeating text-pivot matching.",
         }
     ]
 

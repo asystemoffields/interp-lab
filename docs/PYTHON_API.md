@@ -81,6 +81,7 @@ Check paraphrase consistency, search explanations, and compare model families:
 from interp_lab import (
     check_explanation_consistency,
     compare_model_families,
+    match_text_pivot,
     search_features,
 )
 
@@ -95,6 +96,13 @@ hits = search_features(
     "reports/tool-calls/report.json",
     out="reports/feature-search.json",
     html_out="reports/feature-search.html",
+)
+
+text_matches = match_text_pivot(
+    "reports/gemma/report.json",
+    "reports/qwen/report.json",
+    out="reports/text-pivot-matches.json",
+    html_out="reports/text-pivot-matches.html",
 )
 
 families = compare_model_families(

@@ -17,6 +17,7 @@ from oracle_sae.explanation_reports import (
     EXPLANATION_CONSISTENCY_SCHEMA,
     FEATURE_SEARCH_SCHEMA,
     MODEL_FAMILY_COMPARISON_SCHEMA,
+    TEXT_PIVOT_MATCH_SCHEMA,
 )
 from oracle_sae.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
 from oracle_sae.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA
@@ -489,6 +490,7 @@ def _check_schema_contracts(root: Path) -> dict[str, str]:
         "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
         "real_model_demo_sweep": "interp-lab.real_model_demo_sweep.v1",
         "model_family_comparison": MODEL_FAMILY_COMPARISON_SCHEMA,
+        "text_pivot_match": TEXT_PIVOT_MATCH_SCHEMA,
     }
     contract_tests = (root / "tests/test_contracts.py").exists()
     missing = [key for key, value in required.items() if not value.endswith(".v1")]

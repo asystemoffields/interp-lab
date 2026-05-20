@@ -40,9 +40,11 @@ from oracle_sae.explanation_reports import (
     build_explanation_consistency_parser,
     build_feature_search_parser,
     build_model_family_parser,
+    build_text_pivot_match_parser,
     run_explanation_consistency_from_args,
     run_feature_search_from_args,
     run_model_family_from_args,
+    run_text_pivot_match_from_args,
 )
 from oracle_sae.feature_interventions import build_intervene_parser, run_intervene_from_args
 from oracle_sae.graphs import (
@@ -267,6 +269,14 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     family_report.set_defaults(func=run_compare_model_families)
+
+    text_pivot = subparsers.add_parser(
+        "match-text-pivot",
+        help="Match features across reports using explanations as the cross-model bridge.",
+        parents=[build_text_pivot_match_parser()],
+        add_help=False,
+    )
+    text_pivot.set_defaults(func=run_match_text_pivot)
 
     demo = subparsers.add_parser("demo", help="Run two toy inspections and match their features.")
     demo.add_argument("--out", default="reports/demo", help="Output directory.")
@@ -535,6 +545,15 @@ def run_search_features(args: argparse.Namespace) -> int:
 
 def run_compare_model_families(args: argparse.Namespace) -> int:
     result = run_model_family_from_args(args)
+    print(f"Wrote {result.json_path}")
+    print(f"Wrote {result.markdown_path}")
+    if result.html_path is not None:
+        print(f"Wrote {result.html_path}")
+    return 0
+
+
+def run_match_text_pivot(args: argparse.Namespace) -> int:
+    result = run_text_pivot_match_from_args(args)
     print(f"Wrote {result.json_path}")
     print(f"Wrote {result.markdown_path}")
     if result.html_path is not None:

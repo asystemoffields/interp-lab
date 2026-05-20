@@ -8,6 +8,7 @@ from oracle_sae.explanation_reports import (
     build_explanation_consistency_report,
     build_feature_search_report,
     build_model_family_comparison_report,
+    build_text_pivot_match_report,
 )
 from oracle_sae.fingerprints import build_fingerprint
 from oracle_sae.pipeline import inspect_model
@@ -104,6 +105,35 @@ def test_model_family_comparison_report_summarizes_cross_family_matches(tmp_path
     assert report["pairwise"][0]["strong_match_count"] >= 1
 
 
+def test_text_pivot_match_report_uses_explanations_as_bridge(tmp_path: Path):
+    left = _write_report(
+        tmp_path / "left",
+        model="gemma-small",
+        criterion="successful tool calls",
+        cards=[
+            _card("L1:F1", "tool call syntax", "Represents valid tool-call argument construction.", 0.9, model="gemma-small"),
+            _card("L1:F2", "friendly tone", "Represents warm social greeting style.", 0.8, model="gemma-small"),
+        ],
+    )
+    right = _write_report(
+        tmp_path / "right",
+        model="qwen-small",
+        criterion="successful tool calls",
+        cards=[
+            _card("L4:F9", "tool argument schema", "Represents valid tool-call argument construction.", 0.85, model="qwen-small"),
+            _card("L4:F3", "poetry style", "Represents rhymed verse completions.", 0.7, model="qwen-small"),
+        ],
+    )
+
+    report = build_text_pivot_match_report(left_reports=[left], right_reports=[right], top_k=2, per_left=1)
+
+    assert report["schema_version"] == "interp-lab.text_pivot_match.v1"
+    assert report["matches"][0]["left_feature_id"] == "L1:F1"
+    assert report["matches"][0]["right_feature_id"] == "L4:F9"
+    assert report["matches"][0]["components"]["text_pivot"] >= 0.9
+    assert report["matches"][0]["evidence_grade"] == "text_pivot_with_causal_support"
+
+
 def test_new_report_commands_write_json_and_markdown(tmp_path: Path):
     left = _write_report(
         tmp_path / "left",
@@ -121,6 +151,7 @@ def test_new_report_commands_write_json_and_markdown(tmp_path: Path):
     consistency = tmp_path / "consistency.json"
     search = tmp_path / "search.json"
     family = tmp_path / "family.json"
+    text_pivot = tmp_path / "text-pivot.json"
 
     assert (
         main(
@@ -170,12 +201,30 @@ def test_new_report_commands_write_json_and_markdown(tmp_path: Path):
         )
         == 0
     )
+    assert (
+        main(
+            [
+                "match-text-pivot",
+                "--left",
+                str(left.parent),
+                "--right",
+                str(right.parent),
+                "--out",
+                str(text_pivot),
+                "--html-out",
+                str(tmp_path / "text-pivot.html"),
+            ]
+        )
+        == 0
+    )
 
     assert json.loads(consistency.read_text(encoding="utf-8"))["schema_version"] == "interp-lab.explanation_consistency.v1"
+    assert json.loads(text_pivot.read_text(encoding="utf-8"))["schema_version"] == "interp-lab.text_pivot_match.v1"
     assert search.with_suffix(".md").exists()
     assert family.with_suffix(".md").exists()
     assert "Feature Search" in (tmp_path / "search.html").read_text(encoding="utf-8")
     assert "Model-Family Comparison" in (tmp_path / "family.html").read_text(encoding="utf-8")
+    assert "Text-Pivot Matches" in (tmp_path / "text-pivot.html").read_text(encoding="utf-8")
 
 
 def test_inspect_cli_uses_nla_verbalizer_records(tmp_path: Path):

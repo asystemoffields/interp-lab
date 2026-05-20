@@ -263,6 +263,23 @@ COMMAND_SPECS: list[dict[str, Any]] = [
         ],
     },
     {
+        "id": "match-text-pivot",
+        "group": "Cross-Model",
+        "label": "Text-Pivot Match",
+        "description": "Match features across reports using explanations as the bridge.",
+        "fields": [
+            {"key": "left", "flag": "--left", "label": "Left reports", "type": "repeat", "required": True, "placeholder": "reports/gemma/report.json"},
+            {"key": "right", "flag": "--right", "label": "Right reports", "type": "repeat", "required": True, "placeholder": "reports/qwen/report.json"},
+            {"key": "out", "flag": "--out", "label": "Output JSON", "default": "reports/text-pivot-matches.json"},
+            {"key": "markdown_out", "flag": "--markdown-out", "label": "Markdown report", "default": "reports/text-pivot-matches.md"},
+            {"key": "html_out", "flag": "--html-out", "label": "HTML report", "default": "reports/text-pivot-matches.html"},
+            {"key": "top_k", "flag": "--top-k", "label": "Top K", "type": "number", "default": "20"},
+            {"key": "per_left", "flag": "--per-left", "label": "Matches per left feature", "type": "number", "default": "3"},
+            {"key": "min_score", "flag": "--min-score", "label": "Min score", "type": "number", "default": "0"},
+            {"key": "min_text_score", "flag": "--min-text-score", "label": "Min text score", "type": "number", "default": "0.55"},
+        ],
+    },
+    {
         "id": "export-attribution-graph",
         "group": "Graphs",
         "label": "Export Attribution Graph",

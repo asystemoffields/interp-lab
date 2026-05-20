@@ -44,11 +44,11 @@ The north star:
 - Natural Language Autoencoder verbalizer adapter.
 - Explanation consistency checks across paraphrases.
 - Explanation-to-feature search.
+- Text-pivot cross-model matching.
 - Model-family comparison reports.
 
 ## Next Research And Engineering Milestones
 
-- Text-pivot cross-model matching.
 - Match calibration against held-out intervention transfer.
 - Distributed SAE training manifests.
 - Remote causal validation workers.

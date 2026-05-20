@@ -39,9 +39,11 @@ from oracle_sae.explanation_reports import (
     build_explanation_consistency_report,
     build_feature_search_report,
     build_model_family_comparison_report,
+    build_text_pivot_match_report,
     export_explanation_consistency_report,
     export_feature_search_report,
     export_model_family_comparison_report,
+    export_text_pivot_match_report,
     parse_family_member,
 )
 from oracle_sae.feature_interventions import (
@@ -608,6 +610,43 @@ def compare_model_families(
         html_out=html_out,
         top_k=top_k,
         min_score=min_score,
+    )
+
+
+def match_text_pivot(
+    left: str | Path | list[str | Path],
+    right: str | Path | list[str | Path],
+    *,
+    out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
+    top_k: int = 20,
+    per_left: int = 3,
+    min_score: float = 0.0,
+    min_text_score: float = 0.55,
+) -> dict[str, Any] | WrittenAnalysis:
+    """Match features across reports using explanations as the cross-model bridge."""
+    left_reports = _as_path_list(left)
+    right_reports = _as_path_list(right)
+    if out is None:
+        return build_text_pivot_match_report(
+            left_reports=left_reports,
+            right_reports=right_reports,
+            top_k=top_k,
+            per_left=per_left,
+            min_score=min_score,
+            min_text_score=min_text_score,
+        )
+    return export_text_pivot_match_report(
+        left_reports=left_reports,
+        right_reports=right_reports,
+        out=out,
+        markdown_out=markdown_out,
+        html_out=html_out,
+        top_k=top_k,
+        per_left=per_left,
+        min_score=min_score,
+        min_text_score=min_text_score,
     )
 
 

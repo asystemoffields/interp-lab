@@ -13,6 +13,7 @@ from oracle_sae.explanation_reports import (
     EXPLANATION_CONSISTENCY_SCHEMA,
     FEATURE_SEARCH_SCHEMA,
     MODEL_FAMILY_COMPARISON_SCHEMA,
+    TEXT_PIVOT_MATCH_SCHEMA,
 )
 from oracle_sae.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
 from oracle_sae.release_check import REAL_MODEL_DEMO_SCHEMA, RELEASE_CHECK_SCHEMA
@@ -58,6 +59,7 @@ PUBLIC_API_EXPORTS = [
     "doctor",
     "inspect",
     "intervene",
+    "match_text_pivot",
     "path_patch",
     "prepare_sae_prompts",
     "public_api_contract",
@@ -102,6 +104,7 @@ SCHEMA_CONTRACTS = {
     "sae_prompt_pack": "interp-lab.sae_prompt_pack.v1",
     "scale_plan": "interp-lab.scale_plan.v2",
     "studio_history": STUDIO_HISTORY_SCHEMA,
+    "text_pivot_match": TEXT_PIVOT_MATCH_SCHEMA,
 }
 
 PUBLIC_API_SIGNATURES = {
@@ -115,6 +118,7 @@ PUBLIC_API_SIGNATURES = {
     "demo_sweep": ["repo_root", "manifest_dir", "demos", "out", "run", "allow_external"],
     "inspect": ["model", "criterion", "backend", "records", "interventions", "out", "html_out", "top_k"],
     "intervene": ["model", "dataset", "criterion", "features", "report", "records", "out", "plan_out", "dry_run"],
+    "match_text_pivot": ["left", "right", "out", "markdown_out", "html_out", "top_k", "per_left"],
     "path_patch": ["model", "dataset", "source_sae", "target_sae", "out", "criterion"],
     "prepare_sae_prompts": ["dataset", "out_dir", "train_ratio", "causal_ratio", "validation_ratio"],
     "publish_hf_artifact": ["repo_id", "paths", "repo_type", "private", "dry_run"],

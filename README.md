@@ -153,6 +153,16 @@ interp-lab search-features \
   --html-out reports/feature-search.html
 ```
 
+Match features across models with explanations as the bridge:
+
+```bash
+interp-lab match-text-pivot \
+  --left reports/gemma/report.json \
+  --right reports/qwen/report.json \
+  --out reports/text-pivot-matches.json \
+  --html-out reports/text-pivot-matches.html
+```
+
 Compare feature patterns across model families:
 
 ```bash
@@ -163,7 +173,7 @@ interp-lab compare-model-families \
   --html-out reports/model-family-comparison.html
 ```
 
-For these report-analysis commands, `--report` and `--member family=...` accept either a `report.json` path or a report directory containing `report.json`.
+For these report-analysis commands, `--report`, `--left`, `--right`, and `--member family=...` accept either a `report.json` path or a report directory containing `report.json`.
 
 Create a demo run:
 

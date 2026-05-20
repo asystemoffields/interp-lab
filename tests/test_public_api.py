@@ -13,6 +13,7 @@ from interp_lab import (
     doctor,
     inspect,
     intervene,
+    match_text_pivot,
     prepare_sae_prompts,
     profile_environment,
     publish_hf_artifact,
@@ -97,13 +98,21 @@ def test_explanation_report_public_apis_accept_paths(tmp_path: Path):
         out=tmp_path / "families.json",
         html_out=tmp_path / "families.html",
     )
+    text_pivot = match_text_pivot(
+        left.json_path,
+        right.json_path,
+        out=tmp_path / "text-pivot.json",
+        html_out=tmp_path / "text-pivot.html",
+    )
 
     assert consistency.report["schema_version"] == "interp-lab.explanation_consistency.v1"
     assert hits.report["schema_version"] == "interp-lab.feature_search.v1"
     assert families.report["schema_version"] == "interp-lab.model_family_comparison.v1"
+    assert text_pivot.report["schema_version"] == "interp-lab.text_pivot_match.v1"
     assert consistency.html_path == tmp_path / "consistency.html"
     assert hits.html_path == tmp_path / "search.html"
     assert families.html_path == tmp_path / "families.html"
+    assert text_pivot.html_path == tmp_path / "text-pivot.html"
 
 
 def test_validate_matches_public_api_accepts_report_and_path(tmp_path: Path):

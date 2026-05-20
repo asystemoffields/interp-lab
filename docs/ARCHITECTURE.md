@@ -68,6 +68,7 @@ Explanation reports operate on existing inspection artifacts:
 
 - `check-explanation-consistency` compares shared feature explanations and ranks across paraphrased criteria.
 - `search-features` ranks report features against a natural-language explanation query.
+- `match-text-pivot` uses explanations as the cross-model bridge while preserving activation, decoder, causal, signed-effect, and rank components.
 - `compare-model-families` groups inspection reports by model family and summarizes within-family and cross-family feature matches.
 
 Each explanation report writes JSON and Markdown, with optional self-contained HTML for review. Report inputs can be exact `report.json` paths or report directories.
