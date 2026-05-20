@@ -117,6 +117,8 @@ interp-lab demo --out reports/demo
 
 The demo writes a complete tour: feature reports for two toy models, cross-model matches, match validation, an attribution graph, HTML viewers, a compact graph summary, and a local Studio page.
 
+For a compact real-model release check, follow `docs/GOLDEN_REAL_MODEL_DEMO.md`. It trains a small DistilGPT-2 SAE, suppresses selected SAE latents, re-inspects with intervention evidence, and exports an HTML attribution graph.
+
 Open the browser Studio command builder:
 
 ```bash
@@ -271,6 +273,7 @@ interp-lab intervene \
   --dataset prompts/unit-sae-pack/causal.jsonl \
   --criterion "the next token should be a physical measurement unit" \
   --feature SAE:L6:F30 \
+  --records reports/production-sae/records.jsonl \
   --sae reports/production-sae/sae.json \
   --mode suppress \
   --strength-sweep "1,3,10" \
@@ -279,7 +282,7 @@ interp-lab intervene \
   --plan-out reports/production-sae/intervention-plan.json
 ```
 
-Use `--dry-run --json` first when an agent should inspect the plan before spending model time. The plan includes selected features, expected forward passes, exact next-action commands, and advisories. The output JSONL can be passed back into `interp-lab inspect --interventions ...` so causal evidence updates the feature report.
+Use `--dry-run --json` first when an agent should inspect the plan before spending model time. The plan includes selected features, expected forward passes, exact next-action commands, and advisories. Pass `--records` when the intervention comes from an existing activation-record inspection so the plan can emit a complete `inspect --backend records --records ... --interventions ...` follow-up command. The output JSONL can be passed back into `interp-lab inspect --interventions ...` so causal evidence updates the feature report.
 
 Export a contrast-direction feature and calibrate a causal steering strength:
 

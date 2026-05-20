@@ -130,6 +130,7 @@ plan = intervene(
     dataset="prompts/unit-sae-pack/causal.jsonl",
     criterion="the next token should be a physical measurement unit",
     features=["SAE:L6:F30"],
+    records="reports/distilgpt2-sae/records.jsonl",
     sae="reports/distilgpt2-sae/sae.json",
     mode="suppress",
     strength_sweep=[1.0, 3.0, 10.0],

@@ -164,6 +164,7 @@ COMMAND_SPECS: list[dict[str, Any]] = [
             {"key": "out", "flag": "--out", "label": "Intervention records", "required": True, "default": "reports/interventions.jsonl"},
             {"key": "feature", "flag": "--feature", "label": "Feature ids", "type": "repeat", "placeholder": "SAE:L6:F30"},
             {"key": "report", "flag": "--report", "label": "Inspection report"},
+            {"key": "records", "flag": "--records", "label": "Activation records", "placeholder": "records.jsonl"},
             {"key": "top_k", "flag": "--top-k", "label": "Top report features", "type": "number", "default": "8"},
             {"key": "sae", "flag": "--sae", "label": "SAE artifact"},
             {"key": "mode", "flag": "--mode", "label": "Mode", "type": "select", "default": "suppress", "options": ["amplify", "suppress", "ablate"]},

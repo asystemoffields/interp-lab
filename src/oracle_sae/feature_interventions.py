@@ -71,6 +71,10 @@ def build_intervene_parser() -> argparse.ArgumentParser:
         "--report",
         help="Optional inspection report JSON. Top report features are used when --feature is omitted.",
     )
+    parser.add_argument(
+        "--records",
+        help="Optional activation-record JSONL used to generate a directly runnable inspect next-action command.",
+    )
     parser.add_argument("--top-k", type=int, default=8, help="Top report features to use when --report is set.")
     parser.add_argument(
         "--sae",
@@ -120,6 +124,7 @@ def run_intervene_from_args(args: argparse.Namespace) -> FeatureInterventionResu
         out_path=args.out,
         features=args.feature,
         report_path=args.report,
+        activation_records_path=args.records,
         top_k=args.top_k,
         sae_path=args.sae,
         mode=args.mode,
@@ -142,6 +147,7 @@ def intervene_on_features(
     out_path: str | Path,
     features: list[str] | None = None,
     report_path: str | Path | None = None,
+    activation_records_path: str | Path | None = None,
     top_k: int = 8,
     sae_path: str | Path | None = None,
     mode: str = "suppress",
@@ -188,6 +194,7 @@ def intervene_on_features(
         ablate_value=ablate_value,
         target_tokens=target_tokens,
         report_path=report_path,
+        activation_records_path=activation_records_path,
         sae_path=sae_path,
         prompt_count=len(prompts),
         positive_count=len(positive_indexes),
@@ -262,6 +269,7 @@ def build_intervention_plan(
     ablate_value: float,
     target_tokens: list[str] | None,
     report_path: str | Path | None,
+    activation_records_path: str | Path | None,
     sae_path: str | Path | None,
     prompt_count: int,
     positive_count: int,
@@ -278,6 +286,7 @@ def build_intervention_plan(
         "criterion": criterion,
         "dataset": str(dataset_path),
         "report": str(report_path) if report_path is not None else None,
+        "activation_records": str(activation_records_path) if activation_records_path is not None else None,
         "sae": str(sae_path) if sae_path is not None else None,
         "out": str(out_path),
         "mode": mode,
@@ -300,7 +309,7 @@ def build_intervention_plan(
             mode=mode,
             strength_count=len(strengths),
         ),
-        "agent_actions": _agent_actions(model_name, criterion, out_path, report_path),
+        "agent_actions": _agent_actions(model_name, criterion, out_path, report_path, activation_records_path),
         "advisories": _plan_advisories(specs, mode, negative_count, target_tokens),
     }
     return plan
@@ -872,7 +881,9 @@ def _agent_actions(
     criterion: str,
     out_path: str | Path,
     report_path: str | Path | None,
+    activation_records_path: str | Path | None,
 ) -> list[dict[str, Any]]:
+    records_arg = str(activation_records_path) if activation_records_path is not None else "<activation-records.jsonl>"
     actions = [
         {
             "id": "inspect_with_interventions",
@@ -884,6 +895,10 @@ def _agent_actions(
                 model_name,
                 "--criterion",
                 criterion,
+                "--backend",
+                "records",
+                "--records",
+                records_arg,
                 "--interventions",
                 str(out_path),
                 "--out",
@@ -907,6 +922,10 @@ def _agent_actions(
     ]
     if report_path is not None:
         actions[0]["inputs"] = {"source_report": str(report_path)}
+    if activation_records_path is not None:
+        actions[0].setdefault("inputs", {})["activation_records"] = str(activation_records_path)
+    else:
+        actions[0]["requires"] = ["activation records JSONL from the original inspection run"]
     for action in actions:
         action["command"] = _format_command(action["argv"])
     return actions
@@ -931,7 +950,7 @@ def _plan_advisories(
 
 
 def _format_command(argv: list[str]) -> str:
-    return " ".join(shlex.quote(str(item)) for item in argv)
+    return " ".join(shlex.quote(str(item).replace("\\", "/")) for item in argv)
 
 
 def _optional_import(name: str, message: str):

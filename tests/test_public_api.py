@@ -158,6 +158,7 @@ def test_intervene_public_api_can_plan_without_model_load(tmp_path: Path):
         dataset=dataset,
         criterion="successful tool calls",
         features=["L6:D12"],
+        records=tmp_path / "records.jsonl",
         mode="suppress",
         strength_sweep=[1.0, 2.0],
         out=tmp_path / "interventions.jsonl",
@@ -168,6 +169,7 @@ def test_intervene_public_api_can_plan_without_model_load(tmp_path: Path):
     assert result.dry_run is True
     assert result.records_path is None
     assert result.plan_path == tmp_path / "plan.json"
+    assert result.plan["activation_records"] == str(tmp_path / "records.jsonl")
     assert result.plan["features"][0]["feature_id"] == "L6:D12"
     assert result.plan["estimated_forward_passes"] == 6
 
