@@ -1,15 +1,20 @@
-# Open-Source Launch Checklist
+# Post-1.0 Outreach Checklist
 
-This checklist is for publishing interp-lab as a useful public tool.
+This checklist is for sharing interp-lab with researchers, builders, and interpretability teams.
 
-## Repository
+## Current Public Assets
 
-- Initialize git and set the remote to `https://github.com/asystemoffields/interp-lab`.
+- Repository: `https://github.com/asystemoffields/interp-lab`.
+- Stable release: `v1.0.0`.
+- PyPI package: `interp-lab==1.0.0`.
+- Keep the release-check report, demo-sweep report, CI matrix, and built distributions attached to the release packet.
+
+## Repository Hygiene
+
 - Keep source, tests, examples, docs, and small fixtures in git.
 - Keep generated reports, model caches, and large SAE artifacts out of git.
-- Add a release tag after CI is green.
-- Run `interp-lab demo-sweep --run --out reports/real-model-demo-sweep.json` and archive the sweep packet.
-- Run `interp-lab release-check --strict --out reports/release-check.json` before any stable release tag.
+- Run `interp-lab demo-sweep --run --out reports/real-model-demo-sweep.json` and archive the sweep packet before major outreach.
+- Run `interp-lab release-check --strict --out reports/release-check.json` before each stable release tag.
 
 ## Quality Bar
 
@@ -42,10 +47,8 @@ For outreach, send:
 - generated attribution graph, validation report, and compact graph summary;
 - short description of the feedback or collaboration wanted.
 
-## First Issues To File
+## Good First Follow-Ups
 
-- Add HTML feature-card report.
-- Add criterion dataset generator.
 - Add held-out transfer calibration datasets for cross-model validation.
 - Add distributed SAE training manifests.
 - Add remote causal validation workers.

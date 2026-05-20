@@ -4,7 +4,7 @@ The north star:
 
 > Give interp-lab a model and a criterion in natural language. It returns the internal features most responsible for that criterion, explains them, tests them causally, and, when desired, searches for equivalent features across other models.
 
-## Milestone 1: Useful Local Skeleton
+## Shipped In 1.0
 
 - CLI for `inspect`, `match`, `validate-matches`, and `demo`.
 - Typed feature evidence, feature cards, reports, and match reports.
@@ -17,9 +17,6 @@ The north star:
 - Self-contained HTML match-validation viewer.
 - Self-contained Studio frontend for CLI command and run-config generation.
 - Markdown and JSON reports.
-
-## Milestone 2: Real Feature Sources
-
 - `SAELens` provider for public sparse autoencoders.
 - Neuronpedia feature import.
 - Goodfire feature import.
@@ -27,9 +24,6 @@ The north star:
 - TransformerLens activation export.
 - NNsight activation export.
 - Crosscoder feature import.
-
-## Milestone 3: Causal Testing
-
 - Intervention records import.
 - Hidden-dimension ablation export.
 - Contrast-direction steering export.
@@ -38,23 +32,21 @@ The north star:
 - Side-effect suite with unrelated criteria.
 - Control rows and confidence intervals.
 - Attribution graph export with candidate feature groups, coactivation paths, and validation next steps.
-
-## Milestone 4: Natural-Language Oracles
-
-- NLA verbalizer adapter.
-- Explanation consistency checks across paraphrases.
-- Explanation-to-feature search.
-- Text-pivot cross-model matching.
-
-## Milestone 5: Research-Grade Robustness
-
 - Config files for repeatable runs.
 - Dataset manifests and anchor prompt sets.
 - Streaming activation-record ranking.
 - Scale planning for large model runs.
 - Hugging Face artifact publishing.
 - HTML feature cards.
+
+## Next Research And Engineering Milestones
+
+- Natural Language Autoencoder verbalizer adapter.
+- Explanation consistency checks across paraphrases.
+- Explanation-to-feature search.
+- Text-pivot cross-model matching.
 - Match calibration against held-out intervention transfer.
 - Model-family comparison reports.
 - Distributed SAE training manifests.
 - Remote causal validation workers.
+- Public example gallery with archived real-model reports.

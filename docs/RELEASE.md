@@ -2,7 +2,15 @@
 
 interp-lab publishes to PyPI with trusted publishing. The package name is `interp-lab`, and the import package is `interp_lab`.
 
+## Current Stable Release
+
+- GitHub release: `v1.0.0`
+- PyPI package: `interp-lab==1.0.0`
+- Verification: install from PyPI in a clean environment, run `interp-lab doctor`, and confirm `interp_lab.__version__ == "1.0.0"`.
+
 ## One-Time PyPI Setup
+
+The PyPI trusted-publisher setup is complete for this repository. These steps are for maintainers recreating the project setup or moving ownership.
 
 Create the PyPI project and trusted publisher:
 
@@ -54,13 +62,13 @@ git push origin v1.0.0
 
 Manual publish is also available from GitHub Actions through the `Publish` workflow dispatch.
 
-## Verify
+## Post-Release Verification
 
-After PyPI publishes:
+After PyPI publishes a new version:
 
 ```bash
 python -m pipx run --spec interp-lab interp-lab doctor
-python -m pip install interp-lab
+python -m pip install interp-lab==1.0.0
 python -c "from interp_lab import inspect; print(inspect('toy/a', 'benchmark awareness').cards[0].feature_id)"
 ```
 

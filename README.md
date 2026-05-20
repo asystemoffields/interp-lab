@@ -1,10 +1,15 @@
 # interp-lab
 
-interp-lab is an open-source starter kit for criterion-driven mechanistic interpretability.
+interp-lab is an open-source toolkit for criterion-driven mechanistic interpretability.
 
 Give it a model, a criterion, and feature evidence. It ranks internal features, explains them, tests causal impact, and searches for equivalent features in other models.
 
 Quick start:
+
+```bash
+python -m pip install interp-lab
+interp-lab doctor
+```
 
 ```bash
 interp-lab inspect \
@@ -730,11 +735,10 @@ Adapters are intentionally small:
 
 - Natural Language Autoencoder adapter.
 - Crosscoder training and import.
-- Rich HTML feature cards.
-- Studio workflows that prepare local or remote runs from the browser.
 - Distributed SAE training manifests.
 - Remote causal validation workers.
 - Feature transfer tests across model families.
+- Public example gallery with archived real-model reports.
 
 ## Development
 
