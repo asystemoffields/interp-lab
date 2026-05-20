@@ -9,6 +9,7 @@ from oracle_sae.hf_records import (
     build_prompt_records,
     load_prompt_records,
     parse_layers,
+    prepare_sae_prompt_datasets,
     split_prompt_record_indexes,
 )
 from oracle_sae.hf_contrast import (
@@ -94,6 +95,61 @@ def test_build_prompt_records_supports_delimited_multiline_prompts(tmp_path: Pat
     )
 
     assert [record.text for record in records] == ["User: A\nAssistant:", "User: B\nAssistant:"]
+
+
+def test_prepare_sae_prompt_datasets_stratifies_and_keeps_duplicates_together(tmp_path: Path):
+    dataset = tmp_path / "prompts.jsonl"
+    rows = []
+    for index in range(1, 7):
+        rows.append(
+            {
+                "prompt_id": f"pos-{index}",
+                "text": "duplicate tool call prompt" if index in {1, 2} else f"tool call prompt {index}",
+                "criterion_score": 1.0,
+            }
+        )
+    for index in range(1, 7):
+        rows.append(
+            {
+                "prompt_id": f"neg-{index}",
+                "text": f"ordinary answer prompt {index}",
+                "criterion_score": 0.0,
+            }
+        )
+    dataset.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    summary = prepare_sae_prompt_datasets(
+        dataset_path=dataset,
+        out_dir=tmp_path / "pack",
+        train_ratio=0.5,
+        causal_ratio=0.25,
+        validation_ratio=0.25,
+        seed="unit",
+        latent_dim=64,
+        max_length=8,
+    )
+
+    assert summary.train_path.exists()
+    assert summary.causal_path.exists()
+    assert summary.validation_path.exists()
+    manifest = json.loads(summary.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["format"] == "interp-lab.sae_prompt_pack.v1"
+    assert manifest["counts"]["total"]["record_count"] == 12
+    assert manifest["counts"]["splits"]["causal"]["positive_count"] > 0
+    assert manifest["counts"]["splits"]["causal"]["negative_count"] > 0
+    assert any("Duplicate prompt text" in advisory for advisory in manifest["advisories"])
+
+    split_texts = {
+        split: {record.text for record in load_prompt_records(path)}
+        for split, path in {
+            "train": summary.train_path,
+            "causal": summary.causal_path,
+            "validation": summary.validation_path,
+        }.items()
+    }
+    assert split_texts["train"].isdisjoint(split_texts["causal"])
+    assert split_texts["train"].isdisjoint(split_texts["validation"])
+    assert split_texts["causal"].isdisjoint(split_texts["validation"])
 
 
 def test_parse_target_tokens_adds_leading_spaces():

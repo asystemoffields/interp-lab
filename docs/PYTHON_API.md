@@ -74,6 +74,21 @@ dataset = build_prompts(
 print(dataset.record_count)
 ```
 
+Prepare train, causal, and held-out splits for SAE training:
+
+```python
+from interp_lab import prepare_sae_prompts
+
+pack = prepare_sae_prompts(
+    dataset="prompts/code-criterion.jsonl",
+    out_dir="prompts/code-sae-pack",
+    latent_dim=1024,
+    max_length=128,
+)
+
+print(pack.manifest_path)
+```
+
 ## Train An SAE
 
 ```python

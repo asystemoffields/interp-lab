@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +41,24 @@ class PromptDatasetSummary:
     record_count: int
     positive_count: int
     negative_count: int
+
+
+@dataclass(frozen=True)
+class PromptDatasetSplitSummary:
+    out_dir: Path
+    train_path: Path
+    causal_path: Path
+    validation_path: Path
+    manifest_path: Path
+    counts: dict[str, Any]
+    advisories: list[str]
+
+
+@dataclass(frozen=True)
+class _PromptGroup:
+    key: str
+    records: list[PromptRecord]
+    score: float
 
 
 def export_hf_activation_records(
@@ -215,6 +235,121 @@ def build_prompt_dataset(
     )
 
 
+def prepare_sae_prompt_datasets(
+    *,
+    dataset_path: str | Path,
+    out_dir: str | Path,
+    train_ratio: float = 0.7,
+    causal_ratio: float = 0.15,
+    validation_ratio: float = 0.15,
+    seed: str = "0",
+    latent_dim: int | None = None,
+    max_length: int | None = None,
+    min_rows_per_latent: float = 4.0,
+) -> PromptDatasetSplitSummary:
+    records = load_prompt_records(dataset_path)
+    if not records:
+        raise ValueError(f"{dataset_path}: no prompt records found")
+    _validate_split_ratios(train_ratio, causal_ratio, validation_ratio)
+
+    groups, duplicate_count, conflicting_duplicates = _prompt_groups_by_text(records)
+    labels = [_label_for_score(group.score, groups) for group in groups]
+    positive_groups = [group for group, label in zip(groups, labels) if label == "positive"]
+    negative_groups = [group for group, label in zip(groups, labels) if label == "negative"]
+    advisories: list[str] = []
+    if duplicate_count:
+        advisories.append("Duplicate prompt text was kept in one split to avoid train/eval leakage.")
+    if conflicting_duplicates:
+        advisories.append("Some duplicate prompt text has conflicting scores; review the source dataset.")
+    if not positive_groups or not negative_groups:
+        advisories.append("Prompt pack has only one score side; causal and held-out validation will be weaker.")
+
+    split_groups: dict[str, list[_PromptGroup]] = {"train": [], "causal": [], "validation": []}
+    for label, label_groups in (("positive", positive_groups), ("negative", negative_groups)):
+        ordered = _stable_prompt_group_order(label_groups, seed=f"{seed}:{label}")
+        allocation = _allocate_split_counts(
+            len(ordered),
+            train_ratio=train_ratio,
+            causal_ratio=causal_ratio,
+            validation_ratio=validation_ratio,
+        )
+        start = 0
+        for split_name in ("train", "causal", "validation"):
+            count = allocation[split_name]
+            split_groups[split_name].extend(ordered[start : start + count])
+            start += count
+
+    split_records = {
+        split_name: _flatten_groups(_stable_prompt_group_order(groups_for_split, seed=f"{seed}:{split_name}"))
+        for split_name, groups_for_split in split_groups.items()
+    }
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    train_path = out / "train.jsonl"
+    causal_path = out / "causal.jsonl"
+    validation_path = out / "validation.jsonl"
+    manifest_path = out / "manifest.json"
+    _write_prompt_records_jsonl(train_path, split_records["train"])
+    _write_prompt_records_jsonl(causal_path, split_records["causal"])
+    _write_prompt_records_jsonl(validation_path, split_records["validation"])
+
+    counts = _prompt_split_counts(
+        records_by_split=split_records,
+        all_groups=groups,
+        latent_dim=latent_dim,
+        max_length=max_length,
+    )
+    for split_name in ("causal", "validation"):
+        split_counts = counts["splits"][split_name]
+        if split_counts["record_count"] and (
+            split_counts["positive_count"] == 0 or split_counts["negative_count"] == 0
+        ):
+            advisories.append(f"{split_name} split lacks both positive and negative prompts.")
+    estimated_rows_per_latent = counts["splits"]["train"].get("estimated_rows_per_latent")
+    if (
+        estimated_rows_per_latent is not None
+        and estimated_rows_per_latent < min_rows_per_latent
+    ):
+        advisories.append(
+            "Estimated training rows per latent are low; add prompts, increase max_length, or reduce latent_dim."
+        )
+    if counts["total"]["record_count"] < 30:
+        advisories.append("Prompt pack is small; treat SAE labels as early hypotheses until held-out validation passes.")
+
+    manifest = {
+        "format": "interp-lab.sae_prompt_pack.v1",
+        "source_dataset": str(dataset_path),
+        "seed": seed,
+        "ratios": {
+            "train": train_ratio,
+            "causal": causal_ratio,
+            "validation": validation_ratio,
+        },
+        "outputs": {
+            "train": str(train_path),
+            "causal": str(causal_path),
+            "validation": str(validation_path),
+        },
+        "counts": counts,
+        "advisories": advisories,
+        "agent_next_actions": [
+            "Use train.jsonl as train-sae --dataset.",
+            "Use causal.jsonl as train-sae --causal-dataset when writing --causal-out.",
+            "Use validation.jsonl for held-out path validation or repeated causal checks.",
+        ],
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return PromptDatasetSplitSummary(
+        out_dir=out,
+        train_path=train_path,
+        causal_path=causal_path,
+        validation_path=validation_path,
+        manifest_path=manifest_path,
+        counts=counts,
+        advisories=advisories,
+    )
+
+
 def build_prompt_records(
     *,
     positive_paths: list[str | Path] | None = None,
@@ -363,6 +498,22 @@ def build_prompt_dataset_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_prepare_sae_prompt_datasets_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Split scored prompts into train, causal, and held-out SAE datasets."
+    )
+    parser.add_argument("--dataset", required=True, help="Scored prompt JSONL with text and criterion_score.")
+    parser.add_argument("--out-dir", required=True, help="Output directory for train/causal/validation JSONL.")
+    parser.add_argument("--train-ratio", type=float, default=0.7)
+    parser.add_argument("--causal-ratio", type=float, default=0.15)
+    parser.add_argument("--validation-ratio", type=float, default=0.15)
+    parser.add_argument("--seed", default="0", help="Deterministic split seed.")
+    parser.add_argument("--latent-dim", type=int, help="Optional SAE latent count for data-volume advisories.")
+    parser.add_argument("--max-length", type=int, help="Optional max prompt length for token-row estimates.")
+    parser.add_argument("--min-rows-per-latent", type=float, default=4.0)
+    return parser
+
+
 def run_export_from_args(args: argparse.Namespace) -> Path:
     try:
         layers = parse_layers(args.layers)
@@ -398,6 +549,23 @@ def run_build_prompt_dataset_from_args(args: argparse.Namespace) -> PromptDatase
             positive_score=args.positive_score,
             negative_score=args.negative_score,
             id_prefix=args.id_prefix,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
+def run_prepare_sae_prompt_datasets_from_args(args: argparse.Namespace) -> PromptDatasetSplitSummary:
+    try:
+        return prepare_sae_prompt_datasets(
+            dataset_path=args.dataset,
+            out_dir=args.out_dir,
+            train_ratio=args.train_ratio,
+            causal_ratio=args.causal_ratio,
+            validation_ratio=args.validation_ratio,
+            seed=args.seed,
+            latent_dim=args.latent_dim,
+            max_length=args.max_length,
+            min_rows_per_latent=args.min_rows_per_latent,
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
@@ -498,3 +666,154 @@ def _extend_prompt_records(
 
 def _clean_prompt_text(value: str) -> str:
     return value.strip("\ufeff \t\r\n")
+
+
+def _validate_split_ratios(train_ratio: float, causal_ratio: float, validation_ratio: float) -> None:
+    ratios = [train_ratio, causal_ratio, validation_ratio]
+    if any(ratio < 0 for ratio in ratios):
+        raise ValueError("Split ratios must be non-negative")
+    if sum(ratios) <= 0:
+        raise ValueError("At least one split ratio must be positive")
+
+
+def _prompt_groups_by_text(records: list[PromptRecord]) -> tuple[list[_PromptGroup], int, bool]:
+    grouped: dict[str, list[PromptRecord]] = {}
+    for record in records:
+        key = _canonical_prompt_text(record.text)
+        grouped.setdefault(key, []).append(record)
+    groups: list[_PromptGroup] = []
+    duplicate_count = 0
+    conflicting_duplicates = False
+    for key, group_records in grouped.items():
+        if len(group_records) > 1:
+            duplicate_count += len(group_records) - 1
+            if len({record.criterion_score for record in group_records}) > 1:
+                conflicting_duplicates = True
+        score = sum(record.criterion_score for record in group_records) / len(group_records)
+        groups.append(_PromptGroup(key=key, records=group_records, score=score))
+    return groups, duplicate_count, conflicting_duplicates
+
+
+def _canonical_prompt_text(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def _label_for_score(score: float, groups: list[_PromptGroup]) -> str:
+    scores = [group.score for group in groups]
+    if min(scores) == max(scores):
+        return "positive" if score > 0 else "negative"
+    threshold = sum(scores) / len(scores)
+    return "positive" if score >= threshold else "negative"
+
+
+def _stable_prompt_group_order(groups: list[_PromptGroup], *, seed: str) -> list[_PromptGroup]:
+    return sorted(
+        groups,
+        key=lambda group: hashlib.sha256(f"{seed}:{group.key}".encode("utf-8")).hexdigest(),
+    )
+
+
+def _allocate_split_counts(
+    count: int,
+    *,
+    train_ratio: float,
+    causal_ratio: float,
+    validation_ratio: float,
+) -> dict[str, int]:
+    ratios = {
+        "train": train_ratio,
+        "causal": causal_ratio,
+        "validation": validation_ratio,
+    }
+    total_ratio = sum(ratios.values())
+    if count <= 0:
+        return {name: 0 for name in ratios}
+    raw = {name: count * ratio / total_ratio for name, ratio in ratios.items()}
+    allocated = {name: int(math.floor(value)) for name, value in raw.items()}
+    remaining = count - sum(allocated.values())
+    for name, _ in sorted(
+        raw.items(),
+        key=lambda item: (item[1] - math.floor(item[1]), item[0] == "train"),
+        reverse=True,
+    ):
+        if remaining <= 0:
+            break
+        allocated[name] += 1
+        remaining -= 1
+    positive_splits = [name for name, ratio in ratios.items() if ratio > 0]
+    if count >= len(positive_splits):
+        for name in positive_splits:
+            if allocated[name] == 0:
+                donor = max(positive_splits, key=lambda split_name: allocated[split_name])
+                if allocated[donor] > 1:
+                    allocated[donor] -= 1
+                    allocated[name] = 1
+    return allocated
+
+
+def _flatten_groups(groups: list[_PromptGroup]) -> list[PromptRecord]:
+    records: list[PromptRecord] = []
+    for group in groups:
+        records.extend(group.records)
+    return records
+
+
+def _write_prompt_records_jsonl(path: Path, records: list[PromptRecord]) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        for index, record in enumerate(records, start=1):
+            prompt_id = record.prompt_id or f"{path.stem}-{index:03d}"
+            handle.write(
+                json.dumps(
+                    {
+                        "prompt_id": prompt_id,
+                        "text": record.text,
+                        "criterion_score": record.criterion_score,
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+
+
+def _prompt_split_counts(
+    *,
+    records_by_split: dict[str, list[PromptRecord]],
+    all_groups: list[_PromptGroup],
+    latent_dim: int | None,
+    max_length: int | None,
+) -> dict[str, Any]:
+    counts: dict[str, Any] = {
+        "total": _count_prompt_records(_flatten_groups(all_groups), all_groups=all_groups),
+        "splits": {},
+    }
+    for split_name, records in records_by_split.items():
+        split_counts = _count_prompt_records(records, all_groups=all_groups)
+        estimated_token_rows = sum(_estimated_token_rows(record.text, max_length=max_length) for record in records)
+        split_counts["estimated_token_rows"] = estimated_token_rows
+        if latent_dim:
+            split_counts["estimated_rows_per_latent"] = round(estimated_token_rows / latent_dim, 6)
+        counts["splits"][split_name] = split_counts
+    return counts
+
+
+def _count_prompt_records(records: list[PromptRecord], *, all_groups: list[_PromptGroup]) -> dict[str, int]:
+    positive_count = 0
+    negative_count = 0
+    for record in records:
+        label = _label_for_score(record.criterion_score, all_groups)
+        if label == "positive":
+            positive_count += 1
+        else:
+            negative_count += 1
+    return {
+        "record_count": len(records),
+        "positive_count": positive_count,
+        "negative_count": negative_count,
+    }
+
+
+def _estimated_token_rows(text: str, *, max_length: int | None) -> int:
+    estimate = max(1, len(re.findall(r"\S+", text)))
+    if max_length is not None:
+        return min(estimate, max_length)
+    return estimate

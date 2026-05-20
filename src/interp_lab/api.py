@@ -49,7 +49,12 @@ from oracle_sae.graph_validation import (
     render_graph_validation_markdown,
 )
 from oracle_sae.hf_publish import PublishResult, publish_hf_artifact as _publish_hf_artifact
-from oracle_sae.hf_records import PromptDatasetSummary, build_prompt_dataset
+from oracle_sae.hf_records import (
+    PromptDatasetSplitSummary,
+    PromptDatasetSummary,
+    build_prompt_dataset,
+    prepare_sae_prompt_datasets,
+)
 from oracle_sae.hf_sae_paths import export_hf_sae_path_records
 from oracle_sae.hf_sae_validation import export_hf_sae_path_validation
 from oracle_sae.match_validation import (
@@ -178,6 +183,32 @@ def build_prompts(
         positive_score=positive_score,
         negative_score=negative_score,
         id_prefix=id_prefix,
+    )
+
+
+def prepare_sae_prompts(
+    *,
+    dataset: str | Path,
+    out_dir: str | Path,
+    train_ratio: float = 0.7,
+    causal_ratio: float = 0.15,
+    validation_ratio: float = 0.15,
+    seed: str = "0",
+    latent_dim: int | None = None,
+    max_length: int | None = None,
+    min_rows_per_latent: float = 4.0,
+) -> PromptDatasetSplitSummary:
+    """Split scored prompts into train, causal, and held-out SAE datasets."""
+    return prepare_sae_prompt_datasets(
+        dataset_path=dataset,
+        out_dir=out_dir,
+        train_ratio=train_ratio,
+        causal_ratio=causal_ratio,
+        validation_ratio=validation_ratio,
+        seed=seed,
+        latent_dim=latent_dim,
+        max_length=max_length,
+        min_rows_per_latent=min_rows_per_latent,
     )
 
 

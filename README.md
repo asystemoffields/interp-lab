@@ -275,13 +275,25 @@ interp-lab export-hf-contrast \
 
 `export-hf-contrast` learns a positive-minus-negative hidden-state direction from scored prompts. When `--strength-sweep` is set, it tests each steering strength on positive prompts, uses negative prompts as side-effect checks, and writes intervention rows for the most specific setting.
 
+Prepare train, causal, and held-out prompt splits for behavior SAE runs:
+
+```bash
+interp-lab prepare-sae-prompts \
+  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --out-dir prompts/unit-sae-pack \
+  --latent-dim 1024 \
+  --max-length 128
+```
+
+This writes `train.jsonl`, `causal.jsonl`, `validation.jsonl`, and `manifest.json`. The split is deterministic, stratified by criterion score, keeps duplicate prompt text in one split, and adds advisories when the pack looks too small for the requested SAE width.
+
 Train an SAE when no public SAE exists:
 
 ```bash
 interp-lab train-sae \
   --preset minimal \
   --hf-model distilgpt2 \
-  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --dataset prompts/unit-sae-pack/train.jsonl \
   --layer 6 \
   --latent-dim 64 \
   --epochs 50 \
@@ -297,7 +309,8 @@ Use `--preset production` when you want a stronger artifact:
 interp-lab train-sae \
   --preset production \
   --hf-model distilgpt2 \
-  --dataset examples/hf_prompts_unit_prediction.jsonl \
+  --dataset prompts/unit-sae-pack/train.jsonl \
+  --causal-dataset prompts/unit-sae-pack/causal.jsonl \
   --layer 6 \
   --latent-dim 1024 \
   --out reports/production-sae/sae.json \

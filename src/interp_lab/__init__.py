@@ -9,7 +9,7 @@ from oracle_sae.schema import (
     InspectionReport,
     MatchReport,
 )
-from oracle_sae.hf_records import PromptDatasetSummary
+from oracle_sae.hf_records import PromptDatasetSplitSummary, PromptDatasetSummary
 from oracle_sae.criterion_lab import (
     CriterionAssayValidationResult,
     CriterionLabPresetInfo,
@@ -36,6 +36,7 @@ from interp_lab.api import (
     doctor,
     inspect,
     path_patch,
+    prepare_sae_prompts,
     publish_hf_artifact,
     profile_environment,
     run,
@@ -61,6 +62,7 @@ __all__ = [
     "MatchReport",
     "PathPatchResult",
     "HfSaePathValidation",
+    "PromptDatasetSplitSummary",
     "PromptDatasetSummary",
     "RunTemplateWriteResult",
     "SaeTrainingResult",
@@ -79,6 +81,7 @@ __all__ = [
     "doctor",
     "inspect",
     "path_patch",
+    "prepare_sae_prompts",
     "publish_hf_artifact",
     "profile_environment",
     "run",

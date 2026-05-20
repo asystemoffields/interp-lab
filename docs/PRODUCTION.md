@@ -41,6 +41,14 @@ interp-lab criterion-lab --model distilgpt2 --preset overconfidence --out report
 
 Criterion Lab presets are prompt assays. Validate authored assays with `interp-lab validate-assay --preset-file path/to/preset.json` before launch. The generated config first scans activation records across all hidden-state layers, ranks the features and layers that actually track the criterion, and exports reports plus graph artifacts for review. Researchers can then train SAEs or run path validation on discovered layers. Use `--preset-file path/to/preset.json` or `--preset-dir presets` for project-specific assays, and `--workflow sae --layer <N>` when discovery has identified a layer worth testing causally.
 
+Before training a behavior SAE, split scored prompts into a prompt pack:
+
+```bash
+interp-lab prepare-sae-prompts --dataset prompts/criterion.jsonl --out-dir prompts/sae-pack --latent-dim 4096
+```
+
+Use `train.jsonl` for activation collection, `causal.jsonl` for intervention scoring, and `validation.jsonl` for held-out path validation. The manifest records split counts, duplicate handling, row estimates, and next actions for agents.
+
 ## Supported Platforms
 
 CI runs on:

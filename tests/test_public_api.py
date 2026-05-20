@@ -10,6 +10,7 @@ from interp_lab import (
     criterion_lab_presets,
     doctor,
     inspect,
+    prepare_sae_prompts,
     profile_environment,
     publish_hf_artifact,
     run,
@@ -116,6 +117,31 @@ def test_build_prompts_public_api_accepts_files_and_inline_prompts(tmp_path: Pat
     assert result.negative_count == 1
     assert rows[0]["prompt_id"] == "unit-positive-001"
     assert rows[-1]["criterion_score"] == 0.0
+
+
+def test_prepare_sae_prompts_public_api_writes_manifest(tmp_path: Path):
+    dataset = tmp_path / "prompts.jsonl"
+    rows = [
+        {"prompt_id": "p1", "text": "Return a JSON tool call", "criterion_score": 1.0},
+        {"prompt_id": "p2", "text": "Call the search tool", "criterion_score": 1.0},
+        {"prompt_id": "p3", "text": "Explain the concept in prose", "criterion_score": 0.0},
+        {"prompt_id": "p4", "text": "No tool is available", "criterion_score": 0.0},
+    ]
+    dataset.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    result = prepare_sae_prompts(
+        dataset=dataset,
+        out_dir=tmp_path / "pack",
+        seed="api",
+        latent_dim=128,
+        max_length=16,
+    )
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert result.train_path.exists()
+    assert result.causal_path.exists()
+    assert result.validation_path.exists()
+    assert manifest["agent_next_actions"][0].startswith("Use train.jsonl")
 
 
 def test_scaffold_run_public_api_writes_records_workflow(tmp_path: Path):

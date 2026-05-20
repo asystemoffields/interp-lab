@@ -45,8 +45,10 @@ from oracle_sae.hf_publish import build_hf_publish_parser, run_hf_publish_from_a
 from oracle_sae.hf_records import (
     build_export_parser,
     build_prompt_dataset_parser,
+    build_prepare_sae_prompt_datasets_parser,
     run_build_prompt_dataset_from_args,
     run_export_from_args,
+    run_prepare_sae_prompt_datasets_from_args,
 )
 from oracle_sae.hf_sae_paths import build_hf_sae_paths_parser, run_hf_sae_paths_from_args
 from oracle_sae.hf_sae_validation import build_hf_sae_validation_parser, run_hf_sae_validation_from_args
@@ -277,6 +279,14 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     build_prompts.set_defaults(func=run_build_prompts)
+
+    prepare_sae_prompts = subparsers.add_parser(
+        "prepare-sae-prompts",
+        help="Split scored prompts into train, causal, and held-out SAE datasets.",
+        parents=[build_prepare_sae_prompt_datasets_parser()],
+        add_help=False,
+    )
+    prepare_sae_prompts.set_defaults(func=run_prepare_sae_prompts)
 
     export_tl = subparsers.add_parser(
         "export-transformerlens-records",
@@ -573,6 +583,24 @@ def run_build_prompts(args: argparse.Namespace) -> int:
         f"Prompts: {summary.record_count} total, "
         f"{summary.positive_count} positive, {summary.negative_count} negative"
     )
+    return 0
+
+
+def run_prepare_sae_prompts(args: argparse.Namespace) -> int:
+    summary = run_prepare_sae_prompt_datasets_from_args(args)
+    print(f"Wrote {summary.train_path}")
+    print(f"Wrote {summary.causal_path}")
+    print(f"Wrote {summary.validation_path}")
+    print(f"Wrote {summary.manifest_path}")
+    counts = summary.counts["splits"]
+    print(
+        "Prompts: "
+        f"train={counts['train']['record_count']}, "
+        f"causal={counts['causal']['record_count']}, "
+        f"validation={counts['validation']['record_count']}"
+    )
+    for advisory in summary.advisories:
+        print(f"Advisory: {advisory}")
     return 0
 
 

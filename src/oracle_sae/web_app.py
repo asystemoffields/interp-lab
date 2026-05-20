@@ -40,6 +40,22 @@ COMMAND_SPECS: list[dict[str, Any]] = [
         ],
     },
     {
+        "id": "prepare-sae-prompts",
+        "group": "Data",
+        "label": "Prepare SAE Prompts",
+        "description": "Split scored prompts into train, causal, and held-out datasets for SAE runs.",
+        "fields": [
+            {"key": "dataset", "flag": "--dataset", "label": "Prompt dataset", "required": True, "default": "prompts/criterion.jsonl"},
+            {"key": "out_dir", "flag": "--out-dir", "label": "Output directory", "required": True, "default": "prompts/sae-pack"},
+            {"key": "train_ratio", "flag": "--train-ratio", "label": "Train ratio", "type": "number", "default": "0.7"},
+            {"key": "causal_ratio", "flag": "--causal-ratio", "label": "Causal ratio", "type": "number", "default": "0.15"},
+            {"key": "validation_ratio", "flag": "--validation-ratio", "label": "Validation ratio", "type": "number", "default": "0.15"},
+            {"key": "seed", "flag": "--seed", "label": "Seed", "default": "0"},
+            {"key": "latent_dim", "flag": "--latent-dim", "label": "Latent dim", "type": "number"},
+            {"key": "max_length", "flag": "--max-length", "label": "Max length", "type": "number"},
+        ],
+    },
+    {
         "id": "criterion-lab",
         "group": "Guided Labs",
         "label": "Criterion Lab",
@@ -1321,6 +1337,7 @@ def _default_group(command: str) -> str:
         return "Discovery"
     if command in {
         "build-prompts",
+        "prepare-sae-prompts",
         "export-hf-records",
         "export-transformerlens-records",
         "export-nnsight-records",

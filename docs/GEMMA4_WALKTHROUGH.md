@@ -122,9 +122,15 @@ interp-lab summarize-attribution-graph \
 Train a behavior SAE on the discovered layer:
 
 ```bash
-modal run examples/modal_train_sae.py \
+interp-lab prepare-sae-prompts \
   --dataset prompts/broader-tool-call-training.jsonl \
-  --causal-dataset examples/gemma4_tool_call_prompts.jsonl \
+  --out-dir prompts/gemma4-tool-call-sae-pack \
+  --latent-dim 128 \
+  --max-length 96
+
+modal run examples/modal_train_sae.py \
+  --dataset prompts/gemma4-tool-call-sae-pack/train.jsonl \
+  --causal-dataset prompts/gemma4-tool-call-sae-pack/causal.jsonl \
   --out-dir reports/gemma4-tool-calls/modal-sae-layer35 \
   --model google/gemma-4-E2B-it \
   --model-class gemma4-conditional \
@@ -138,7 +144,7 @@ modal run examples/modal_train_sae.py \
   --max-length 96
 ```
 
-For behavior-specific SAEs, use a broader training corpus than the causal assay and keep the smaller assay as `--causal-dataset`. Review `rows_per_latent`, `validation_train_mse_ratio`, active-latent fraction, dead-latent count, and behavior-score diagnostics before treating labels as stable. In the tool-call pilot, a 128-latent layer-35 SAE surfaced `SAE:L35:F88` with association `0.236`, causal effect `+0.0495`, and specificity `0.0475`; the report also flagged validation reconstruction drift, so the next production run should add a broader held-out corpus.
+For behavior-specific SAEs, use a broader prompt pack than the first causal assay, keep `causal.jsonl` for intervention scoring, and reserve `validation.jsonl` for held-out path validation or repeated causal checks. Review `rows_per_latent`, `validation_train_mse_ratio`, active-latent fraction, dead-latent count, and behavior-score diagnostics before treating labels as stable. In the tool-call pilot, a 128-latent layer-35 SAE surfaced `SAE:L35:F88` with association `0.236`, causal effect `+0.0495`, and specificity `0.0475`; the report also flagged validation reconstruction drift, so the next production run should add a broader held-out corpus.
 
 Set `INTERP_LAB_MODAL_GPU=L40S` or another Modal GPU name before `modal run` when you want a larger accelerator. The default is `A10G`.
 

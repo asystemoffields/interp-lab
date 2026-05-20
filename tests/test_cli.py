@@ -198,6 +198,44 @@ def test_build_prompts_command_writes_prompt_jsonl(tmp_path: Path, capsys):
     assert rows[-1]["criterion_score"] == 0.0
 
 
+def test_prepare_sae_prompts_command_writes_split_pack(tmp_path: Path, capsys):
+    dataset = tmp_path / "prompts.jsonl"
+    rows = [
+        {"prompt_id": f"pos-{index}", "text": f"positive prompt {index}", "criterion_score": 1.0}
+        for index in range(1, 5)
+    ] + [
+        {"prompt_id": f"neg-{index}", "text": f"negative prompt {index}", "criterion_score": 0.0}
+        for index in range(1, 5)
+    ]
+    dataset.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    out_dir = tmp_path / "pack"
+
+    exit_code = main(
+        [
+            "prepare-sae-prompts",
+            "--dataset",
+            str(dataset),
+            "--out-dir",
+            str(out_dir),
+            "--seed",
+            "cli",
+            "--latent-dim",
+            "128",
+            "--max-length",
+            "8",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert "Prompts: train=" in output
+    assert (out_dir / "train.jsonl").exists()
+    assert (out_dir / "causal.jsonl").exists()
+    assert (out_dir / "validation.jsonl").exists()
+    assert manifest["counts"]["total"]["record_count"] == 8
+
+
 def test_publish_hf_artifact_dry_run_command(tmp_path: Path, capsys):
     artifact = tmp_path / "report.json"
     artifact.write_text("{}", encoding="utf-8")
