@@ -64,7 +64,7 @@ def build_release_readiness_report(root: str | Path = ".") -> dict[str, Any]:
         _check_browser_app(repo_root),
         _check_ci_matrix(repo_root),
         _check_publish_workflow(repo_root),
-        _check_schema_contracts(),
+        _check_schema_contracts(repo_root),
         _check_worktree_clean(repo_root),
     ]
     counts = {
@@ -409,7 +409,7 @@ def _check_publish_workflow(root: Path) -> dict[str, str]:
     )
 
 
-def _check_schema_contracts() -> dict[str, str]:
+def _check_schema_contracts(root: Path) -> dict[str, str]:
     required = {
         "inspection_report": INSPECTION_REPORT_SCHEMA,
         "match_report": MATCH_REPORT_SCHEMA,
@@ -422,15 +422,19 @@ def _check_schema_contracts() -> dict[str, str]:
         "match_validation": "interp-lab.match_validation.v1",
         "graph_validation": "interp-lab.graph_validation.v1",
         "environment_profile": "interp-lab.env_profile.v1",
+        "public_api_contract": "interp-lab.public_api_contract.v1",
         "release_check": RELEASE_CHECK_SCHEMA,
         "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
     }
+    contract_tests = (root / "tests/test_contracts.py").exists()
     missing = [key for key, value in required.items() if not value.endswith(".v1")]
+    if not contract_tests:
+        missing.append("contract_tests")
     return _check(
         "schema_contracts",
         "Core machine-readable schemas are versioned",
         "pass" if not missing else "blocker",
-        "Inspection reports, match reports, graph summaries, intervention plans, run manifests, and release checks use versioned schemas."
+        "Inspection reports, match reports, graph summaries, intervention plans, run manifests, public API contracts, and release checks use versioned schemas."
         if not missing
         else f"Missing v1 schema constants: {', '.join(missing)}",
         "Add explicit schema_version fields and contract tests for stable machine-readable outputs.",

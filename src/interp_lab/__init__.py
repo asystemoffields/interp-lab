@@ -16,6 +16,7 @@ from oracle_sae.criterion_lab import (
     CriterionLabWriteResult,
 )
 from oracle_sae.workflows import RunTemplateWriteResult
+from interp_lab.contracts import public_api_contract
 
 from interp_lab.api import (
     FeatureInterventionResult,
@@ -87,6 +88,7 @@ __all__ = [
     "intervene",
     "path_patch",
     "prepare_sae_prompts",
+    "public_api_contract",
     "publish_hf_artifact",
     "profile_environment",
     "release_check",

@@ -27,6 +27,4 @@ The command must report no blockers before changing the PyPI classifier to `Deve
 ## Current Known Blockers
 
 - Keep the package classifier as alpha until the release gate passes.
-- Expand the real-model demo suite beyond smoke tests into reproducible walkthroughs with expected artifacts and interpretation notes.
-- Continue hardening the browser app until the guided path feels complete for a new user.
-- Keep adding schema and API compatibility tests as public surfaces settle.
+- Run one final clean-install sweep of the real-model demo suite and archive the produced manifests, reports, graphs, and interpretation notes before tagging stable.

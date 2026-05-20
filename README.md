@@ -141,6 +141,8 @@ interp-lab studio --serve --reports-dir reports
 
 The served app keeps persistent job history under `reports/.studio/jobs.json`, launches known interp-lab commands, imports pasted run-config JSON, and exposes generated HTML, JSON, Markdown, and graph artifacts under the current workspace. The static file remains useful for sharing commands and configs; served mode adds the local runner.
 
+For agent integrations and downstream wrappers, `interp_lab.public_api_contract()` returns the current stable exports, schema ids, and core callable parameters as JSON-serializable data.
+
 Start Criterion Lab from a prompt assay. The default path is discovery-first: it writes prompt pairs, exports activation records across every hidden-state layer, ranks the features that actually track the criterion, and builds a graph/report you can use to choose SAE and causal follow-up runs.
 
 ```bash

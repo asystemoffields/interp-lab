@@ -1,0 +1,124 @@
+"""Machine-readable public API and schema contracts."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from typing import Any
+
+from oracle_sae import __version__
+from oracle_sae.criterion_lab import PRESET_SCHEMA_VERSION
+from oracle_sae.env_profile import SCHEMA_VERSION as ENV_PROFILE_SCHEMA
+from oracle_sae.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
+from oracle_sae.release_check import REAL_MODEL_DEMO_SCHEMA, RELEASE_CHECK_SCHEMA
+from oracle_sae.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA
+from oracle_sae.web_server import STUDIO_HISTORY_SCHEMA
+
+PUBLIC_API_CONTRACT_SCHEMA = "interp-lab.public_api_contract.v1"
+
+PUBLIC_API_EXPORTS = [
+    "CandidateMatch",
+    "CriterionAssayValidationResult",
+    "CriterionLabPresetInfo",
+    "CriterionLabWriteResult",
+    "Criterion",
+    "FeatureCard",
+    "FeatureEvidence",
+    "FeatureFingerprint",
+    "FeatureInterventionResult",
+    "InspectionReport",
+    "MatchReport",
+    "PathPatchResult",
+    "HfSaePathValidation",
+    "PromptDatasetSplitSummary",
+    "PromptDatasetSummary",
+    "RunTemplateWriteResult",
+    "SaeTrainingResult",
+    "WrittenGraph",
+    "WrittenGraphSummary",
+    "WrittenGraphValidation",
+    "WrittenInspection",
+    "WrittenMatch",
+    "WrittenMatchValidation",
+    "attribution_graph",
+    "attribution_graph_summary",
+    "build_prompts",
+    "compare",
+    "criterion_lab",
+    "criterion_lab_presets",
+    "doctor",
+    "inspect",
+    "intervene",
+    "path_patch",
+    "prepare_sae_prompts",
+    "public_api_contract",
+    "publish_hf_artifact",
+    "profile_environment",
+    "release_check",
+    "run",
+    "scale_plan",
+    "scaffold_run",
+    "train_sae",
+    "validate_attribution_graph",
+    "validate_criterion_assay",
+    "validate_hf_sae_paths",
+    "validate_matches",
+]
+
+SCHEMA_CONTRACTS = {
+    "attribution_graph": "interp-lab.attribution_graph.v1",
+    "attribution_graph_summary": "interp-lab.attribution_graph_summary.v1",
+    "criterion_assay_validation": "interp-lab.criterion_assay_validation.v1",
+    "criterion_lab": "interp-lab.criterion_lab.v1",
+    "criterion_lab_preset": PRESET_SCHEMA_VERSION,
+    "environment_profile": ENV_PROFILE_SCHEMA,
+    "graph_validation": "interp-lab.graph_validation.v1",
+    "inspection_report": INSPECTION_REPORT_SCHEMA,
+    "intervention_plan": PLAN_SCHEMA,
+    "intervention_record": "interp-lab.intervention_record.v1",
+    "intervention_result": INTERVENTION_SCHEMA,
+    "match_report": MATCH_REPORT_SCHEMA,
+    "match_validation": "interp-lab.match_validation.v1",
+    "path_patch": "interp-lab.path_patch.v1",
+    "public_api_contract": PUBLIC_API_CONTRACT_SCHEMA,
+    "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
+    "release_check": RELEASE_CHECK_SCHEMA,
+    "run_manifest": "interp-lab.run.v1",
+    "sae": "interp-lab.sae.v1",
+    "sae_prompt_pack": "interp-lab.sae_prompt_pack.v1",
+    "scale_plan": "interp-lab.scale_plan.v2",
+    "studio_history": STUDIO_HISTORY_SCHEMA,
+}
+
+PUBLIC_API_SIGNATURES = {
+    "attribution_graph": ["report", "out", "markdown_out", "html_out", "path_records"],
+    "attribution_graph_summary": ["graph", "out"],
+    "build_prompts": ["out", "positive", "negative", "positive_prompt", "negative_prompt"],
+    "compare": ["left", "right", "out", "top_k"],
+    "criterion_lab": ["out", "model", "preset", "preset_file", "criterion", "workflow", "run_dir"],
+    "inspect": ["model", "criterion", "backend", "records", "interventions", "out", "html_out", "top_k"],
+    "intervene": ["model", "dataset", "criterion", "features", "report", "records", "out", "plan_out", "dry_run"],
+    "path_patch": ["model", "dataset", "source_sae", "target_sae", "out", "criterion"],
+    "prepare_sae_prompts": ["dataset", "out_dir", "train_ratio", "causal_ratio", "validation_ratio"],
+    "publish_hf_artifact": ["repo_id", "paths", "repo_type", "private", "dry_run"],
+    "release_check": ["repo_root"],
+    "run": ["config", "dry_run"],
+    "scale_plan": ["model_params", "tokens", "d_model", "selected_layers", "latent_dim", "profile"],
+    "scaffold_run": ["out", "workflow", "model", "criterion", "run_dir"],
+    "train_sae": ["out", "records", "model", "hf_model", "dataset", "preset", "layer", "records_out"],
+    "validate_attribution_graph": ["graph", "path_records", "out", "graph_out", "require_controls"],
+    "validate_criterion_assay": ["preset", "preset_file", "preset_dir", "out"],
+    "validate_hf_sae_paths": ["graph", "model", "dataset", "source_sae", "target_sae", "out"],
+    "validate_matches": ["matches", "out", "html_out", "top_k"],
+}
+
+
+def public_api_contract() -> dict[str, Any]:
+    """Return the stable public API and schema contract for agents and tests."""
+    return {
+        "schema_version": PUBLIC_API_CONTRACT_SCHEMA,
+        "package": "interp-lab",
+        "package_version": __version__,
+        "exports": list(PUBLIC_API_EXPORTS),
+        "schemas": deepcopy(SCHEMA_CONTRACTS),
+        "signatures": deepcopy(PUBLIC_API_SIGNATURES),
+    }

@@ -254,12 +254,19 @@ Use `env_profile="reports/env-profile.json"` to plan against a saved profile fro
 ## Release Readiness
 
 ```python
-from interp_lab import release_check
+from interp_lab import public_api_contract, release_check
 
 report = release_check(".")
 print(report["ready_for_stable_release"])
 print(report["agent_next_actions"])
+
+contract = public_api_contract()
+print(contract["schema_version"])
+print(contract["exports"])
+print(contract["schemas"])
 ```
+
+`public_api_contract()` returns a JSON-serializable contract for agents, integration tests, and downstream wrappers. It lists the stable exports, schema ids, and core callable parameters that should be changed intentionally.
 
 ## Graphs, Publishing, And Scale Plans
 
