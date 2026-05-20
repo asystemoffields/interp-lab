@@ -35,6 +35,7 @@ def build_run_template(
     features_per_layer: int = 16,
     layers: str | None = None,
     preset: str = "minimal",
+    latent_dim: int | None = None,
     layer: int | None = None,
     source_layer: int | None = None,
     target_layer: int | None = None,
@@ -47,6 +48,7 @@ def build_run_template(
     device: str = "cpu",
     max_length: int | None = None,
     include_causal: bool = False,
+    prepare_sae_prompts: bool = True,
     target_token: list[str] | None = None,
     model_class: str = "auto-causal-lm",
     trust_remote_code: bool = False,
@@ -139,10 +141,22 @@ def build_run_template(
     if workflow == "sae":
         if dataset_ref is None:
             raise ValueError("dataset or prompt inputs are required for the sae workflow")
+        sae_dataset_ref = dataset_ref
+        causal_dataset_ref = None
+        if prepare_sae_prompts:
+            prompt_pack = _add_prepare_sae_prompt_step(
+                config,
+                dataset=dataset_ref,
+                out_dir="{run_dir}/sae-prompts",
+                latent_dim=latent_dim,
+                max_length=max_length,
+            )
+            sae_dataset_ref = prompt_pack["train"]
+            causal_dataset_ref = prompt_pack["causal"]
         records_path = "{run_dir}/sae/records.jsonl"
         train_args: dict[str, Any] = {
             "hf_model": model,
-            "dataset": dataset_ref,
+            "dataset": sae_dataset_ref,
             "criterion": criterion,
             "preset": preset,
             "out": "{run_dir}/sae/sae.json",
@@ -150,6 +164,8 @@ def build_run_template(
             "device": device,
         }
         train_args.update(hf_loading_args)
+        if latent_dim is not None:
+            train_args["latent_dim"] = latent_dim
         if layer is not None:
             train_args["layer"] = layer
         if max_length is not None:
@@ -158,6 +174,8 @@ def build_run_template(
         if include_causal:
             causal_path = "{run_dir}/sae/interventions.jsonl"
             train_args["causal_out"] = causal_path
+            if causal_dataset_ref is not None:
+                train_args["causal_dataset"] = causal_dataset_ref
             if target_token:
                 train_args["target_token"] = target_token
         config["steps"].append(
@@ -204,20 +222,36 @@ def build_run_template(
         target_report_path = "{run_dir}/target-report/report.json"
         path_records_path = "{run_dir}/paths.jsonl"
         graph_path = "{run_dir}/graph.json"
+        sae_dataset_ref = dataset_ref
+        causal_dataset_ref = None
         validation_dataset_ref = str(validation_dataset) if validation_dataset is not None else dataset_ref
+        if prepare_sae_prompts:
+            prompt_pack = _add_prepare_sae_prompt_step(
+                config,
+                dataset=dataset_ref,
+                out_dir="{run_dir}/sae-prompts",
+                latent_dim=latent_dim,
+                max_length=max_length,
+            )
+            sae_dataset_ref = prompt_pack["train"]
+            causal_dataset_ref = prompt_pack["causal"]
+            if validation_dataset is None:
+                validation_dataset_ref = prompt_pack["validation"]
         config["steps"].append(
             {
                 "name": "train-source-sae",
                 "command": "train-sae",
                 "args": _hf_sae_train_args(
                     model=model,
-                    dataset=dataset_ref,
+                    dataset=sae_dataset_ref,
                     criterion=criterion,
                     preset=preset,
+                    latent_dim=latent_dim,
                     layer=source_layer,
                     out=source_sae_path,
                     records_out=source_records_path,
                     causal_out=source_interventions_path,
+                    causal_dataset=causal_dataset_ref,
                     pool=pool,
                     device=device,
                     max_length=max_length,
@@ -232,13 +266,15 @@ def build_run_template(
                 "command": "train-sae",
                 "args": _hf_sae_train_args(
                     model=model,
-                    dataset=dataset_ref,
+                    dataset=sae_dataset_ref,
                     criterion=criterion,
                     preset=preset,
+                    latent_dim=latent_dim,
                     layer=target_layer,
                     out=target_sae_path,
                     records_out=target_records_path,
                     causal_out=target_interventions_path,
+                    causal_dataset=causal_dataset_ref,
                     pool=pool,
                     device=device,
                     max_length=max_length,
@@ -271,7 +307,7 @@ def build_run_template(
         )
         path_args: dict[str, Any] = {
             "model": model,
-            "dataset": dataset_ref,
+            "dataset": causal_dataset_ref or dataset_ref,
             "criterion": criterion,
             "source_sae": source_sae_path,
             "target_sae": target_sae_path,
@@ -298,12 +334,12 @@ def build_run_template(
         )
         _add_graph_step(
             config,
-        report=[source_report_path, target_report_path],
-        path_records=path_records_path,
-        out=graph_path,
-        markdown_out="{run_dir}/graph.md",
-        html_out="{run_dir}/graph.html",
-    )
+            report=[source_report_path, target_report_path],
+            path_records=path_records_path,
+            out=graph_path,
+            markdown_out="{run_dir}/graph.md",
+            html_out="{run_dir}/graph.html",
+        )
         _add_graph_summary_step(
             config,
             name="summarize-graph",
@@ -392,6 +428,7 @@ def build_init_run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--features-per-layer", type=int, default=16)
     parser.add_argument("--layers", help="Hidden-state layers for --workflow hf-records, e.g. 6 or 2-6.")
     parser.add_argument("--preset", choices=["minimal", "production", "custom"], default="minimal")
+    parser.add_argument("--latent-dim", type=int, help="SAE latent count for generated SAE training steps.")
     parser.add_argument("--layer", type=int, help="HF hidden-state layer for --workflow sae.")
     parser.add_argument("--source-layer", type=int, help="Upstream HF hidden-state layer for --workflow sae-paths.")
     parser.add_argument("--target-layer", type=int, help="Downstream HF hidden-state layer for --workflow sae-paths.")
@@ -409,6 +446,11 @@ def build_init_run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--max-length", type=int)
     parser.add_argument("--include-causal", action="store_true", help="Add SAE causal validation output to SAE runs.")
+    parser.add_argument(
+        "--skip-prompt-pack",
+        action="store_true",
+        help="Use --dataset directly in SAE workflows instead of preparing train/causal/validation prompt splits.",
+    )
     parser.add_argument("--target-token", action="append", default=[], help="Target token for SAE causal scoring.")
     parser.add_argument("--model-class", choices=MODEL_CLASS_CHOICES, default="auto-causal-lm")
     parser.add_argument("--trust-remote-code", action="store_true")
@@ -444,6 +486,7 @@ def run_init_run_from_args(args: argparse.Namespace) -> RunTemplateWriteResult:
             features_per_layer=args.features_per_layer,
             layers=args.layers,
             preset=args.preset,
+            latent_dim=args.latent_dim,
             layer=args.layer,
             source_layer=args.source_layer,
             target_layer=args.target_layer,
@@ -456,6 +499,7 @@ def run_init_run_from_args(args: argparse.Namespace) -> RunTemplateWriteResult:
             device=args.device,
             max_length=args.max_length,
             include_causal=args.include_causal,
+            prepare_sae_prompts=not args.skip_prompt_pack,
             target_token=args.target_token,
             model_class=args.model_class,
             trust_remote_code=args.trust_remote_code,
@@ -523,16 +567,48 @@ def _hf_loading_step_args(
     return args
 
 
+def _add_prepare_sae_prompt_step(
+    config: dict[str, Any],
+    *,
+    dataset: str,
+    out_dir: str,
+    latent_dim: int | None,
+    max_length: int | None,
+) -> dict[str, str]:
+    args: dict[str, Any] = {
+        "dataset": dataset,
+        "out_dir": out_dir,
+    }
+    if latent_dim is not None:
+        args["latent_dim"] = latent_dim
+    if max_length is not None:
+        args["max_length"] = max_length
+    config["steps"].append(
+        {
+            "name": "prepare-sae-prompts",
+            "command": "prepare-sae-prompts",
+            "args": args,
+        }
+    )
+    return {
+        "train": f"{out_dir}/train.jsonl",
+        "causal": f"{out_dir}/causal.jsonl",
+        "validation": f"{out_dir}/validation.jsonl",
+    }
+
+
 def _hf_sae_train_args(
     *,
     model: str,
     dataset: str,
     criterion: str,
     preset: str,
+    latent_dim: int | None,
     layer: int,
     out: str,
     records_out: str,
     causal_out: str | None,
+    causal_dataset: str | None,
     pool: str,
     device: str,
     max_length: int | None,
@@ -551,10 +627,14 @@ def _hf_sae_train_args(
         "device": device,
     }
     args.update(hf_loading_args)
+    if latent_dim is not None:
+        args["latent_dim"] = latent_dim
     if max_length is not None:
         args["max_length"] = max_length
     if causal_out is not None:
         args["causal_out"] = causal_out
+        if causal_dataset is not None:
+            args["causal_dataset"] = causal_dataset
         if target_token:
             args["target_token"] = target_token
     return args

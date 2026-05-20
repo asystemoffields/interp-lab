@@ -189,11 +189,12 @@ interp-lab init-run \
   --negative-prompt "The answer is a person's name." \
   --include-causal \
   --target-token auto \
+  --latent-dim 1024 \
   --run-dir reports/distilgpt2-sae-run \
   --out runs/distilgpt2-sae.json
 ```
 
-Then run it with `interp-lab run runs/distilgpt2-sae.json`. The generated JSON is meant to be edited before larger runs. With `--include-causal`, the generated SAE inspection focuses on features that received causal intervention rows.
+Then run it with `interp-lab run runs/distilgpt2-sae.json`. The generated JSON is meant to be edited before larger runs. SAE workflows add a `prepare-sae-prompts` step by default, then train on `train.jsonl`, score interventions on `causal.jsonl`, and keep `validation.jsonl` available for held-out checks. With `--include-causal`, the generated SAE inspection focuses on features that received causal intervention rows. Pass `--skip-prompt-pack` when your dataset is already split and you want to use it directly.
 
 For a two-layer path-patching workflow, use `--workflow sae-paths` with `--source-layer` and `--target-layer`. This scaffolds source and target SAE training, causal feature reports, measured SAE-latent paths, graph exports, compact graph summaries, and optional held-out path validation. Add `--validation-dataset` when you have a separate held-out prompt set:
 
@@ -209,6 +210,7 @@ interp-lab init-run \
   --include-causal \
   --target-token auto \
   --validate-paths \
+  --latent-dim 1024 \
   --run-dir reports/distilgpt2-sae-paths \
   --out runs/distilgpt2-sae-paths.json
 ```

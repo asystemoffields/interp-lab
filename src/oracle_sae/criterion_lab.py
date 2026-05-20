@@ -53,11 +53,13 @@ def build_criterion_lab_config(
     top_k: int = 8,
     features_per_layer: int = 16,
     layers: str | None = None,
+    latent_dim: int | None = None,
     layer: int | None = None,
     source_layer: int | None = None,
     target_layer: int | None = None,
     include_causal: bool = True,
     target_token: list[str] | None = None,
+    prepare_sae_prompts: bool = True,
     device: str = "cpu",
     max_length: int | None = None,
     model_class: str = "auto-causal-lm",
@@ -118,10 +120,12 @@ def build_criterion_lab_config(
         features_per_layer=features_per_layer,
         layers=resolved_layers,
         preset=resolved_training_preset,
+        latent_dim=latent_dim,
         layer=resolved_layer,
         source_layer=resolved_source_layer,
         target_layer=resolved_target_layer,
         include_causal=include_causal,
+        prepare_sae_prompts=prepare_sae_prompts,
         target_token=causal_tokens,
         device=device,
         max_length=max_length,
@@ -153,8 +157,10 @@ def build_criterion_lab_config(
             "target_token_hints": target_hints,
             "use_preset_target_hints": use_preset_target_hints,
             "target_tokens": causal_tokens or [],
+            "prepare_sae_prompts": prepare_sae_prompts,
             "workflow": resolved_workflow,
             "training_preset": resolved_training_preset,
+            "latent_dim": latent_dim,
         }
     }
     config["agent_next_actions"] = _recommended_next_actions(preset_data)
@@ -449,10 +455,16 @@ def build_criterion_lab_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-k", type=int, default=8)
     parser.add_argument("--features-per-layer", type=int, default=16)
     parser.add_argument("--layers", help="Hidden-state layers for --workflow hf-records.")
+    parser.add_argument("--latent-dim", type=int, help="SAE latent count for generated SAE workflows.")
     parser.add_argument("--layer", type=int, help="Hidden-state layer for --workflow sae.")
     parser.add_argument("--source-layer", type=int, help="Source layer for --workflow sae-paths.")
     parser.add_argument("--target-layer", type=int, help="Target layer for --workflow sae-paths.")
     parser.add_argument("--skip-causal", action="store_true", help="Skip first-pass SAE causal validation.")
+    parser.add_argument(
+        "--skip-prompt-pack",
+        action="store_true",
+        help="Use the generated prompt dataset directly in SAE workflows instead of splitting a prompt pack.",
+    )
     parser.add_argument("--target-token", action="append", default=[], help="Target token for causal scoring.")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--max-length", type=int)
@@ -504,10 +516,12 @@ def run_criterion_lab_from_args(args: argparse.Namespace) -> CriterionLabWriteRe
             top_k=args.top_k,
             features_per_layer=args.features_per_layer,
             layers=args.layers,
+            latent_dim=args.latent_dim,
             layer=args.layer,
             source_layer=args.source_layer,
             target_layer=args.target_layer,
             include_causal=not args.skip_causal,
+            prepare_sae_prompts=not args.skip_prompt_pack,
             target_token=args.target_token or None,
             device=args.device,
             max_length=args.max_length,

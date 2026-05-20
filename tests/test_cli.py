@@ -691,17 +691,58 @@ def test_init_run_scaffolds_editable_sae_workflow(tmp_path: Path, capsys):
     assert "interp-lab run" in output
     assert [step["command"] for step in data["steps"]] == [
         "build-prompts",
+        "prepare-sae-prompts",
         "train-sae",
         "inspect",
         "export-attribution-graph",
     ]
-    assert data["steps"][1]["args"]["preset"] == "production"
-    assert data["steps"][1]["args"]["causal_out"] == "{run_dir}/sae/interventions.jsonl"
-    assert data["steps"][1]["args"]["target_token"] == ["auto"]
-    assert data["steps"][2]["args"]["require_interventions"] is True
+    prepare_args = data["steps"][1]["args"]
+    train_args = data["steps"][2]["args"]
+    assert prepare_args["dataset"] == "{run_dir}/prompts.jsonl"
+    assert train_args["dataset"] == "{run_dir}/sae-prompts/train.jsonl"
+    assert train_args["causal_dataset"] == "{run_dir}/sae-prompts/causal.jsonl"
+    assert train_args["preset"] == "production"
+    assert train_args["causal_out"] == "{run_dir}/sae/interventions.jsonl"
+    assert train_args["target_token"] == ["auto"]
+    assert data["steps"][3]["args"]["require_interventions"] is True
 
     assert main(["run", str(config), "--dry-run"]) == 0
     assert "interp-lab train-sae" in capsys.readouterr().out
+
+
+def test_init_run_can_skip_sae_prompt_pack(tmp_path: Path):
+    config = tmp_path / "sae-run.json"
+
+    exit_code = main(
+        [
+            "init-run",
+            "--workflow",
+            "sae",
+            "--model",
+            "distilgpt2",
+            "--criterion",
+            "unit prediction",
+            "--dataset",
+            str(tmp_path / "already-split-train.jsonl"),
+            "--layer",
+            "6",
+            "--include-causal",
+            "--skip-prompt-pack",
+            "--out",
+            str(config),
+        ]
+    )
+
+    data = json.loads(config.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert [step["command"] for step in data["steps"]] == [
+        "train-sae",
+        "inspect",
+        "export-attribution-graph",
+    ]
+    train_args = data["steps"][0]["args"]
+    assert train_args["dataset"] == str(tmp_path / "already-split-train.jsonl")
+    assert "causal_dataset" not in train_args
 
 
 def test_criterion_lab_scaffolds_overconfidence_workflow(tmp_path: Path, capsys):
@@ -891,8 +932,12 @@ def test_criterion_lab_sae_workflow_uses_auto_targets_without_preset_hints(tmp_p
     lab = data["metadata"]["criterion_lab"]
     assert lab["discovery_first"] is False
     assert lab["target_tokens"] == ["auto"]
-    train_args = data["steps"][1]["args"]
+    assert lab["prepare_sae_prompts"] is True
+    assert data["steps"][1]["command"] == "prepare-sae-prompts"
+    train_args = data["steps"][2]["args"]
     assert train_args["layer"] == 6
+    assert train_args["dataset"] == "{run_dir}/sae-prompts/train.jsonl"
+    assert train_args["causal_dataset"] == "{run_dir}/sae-prompts/causal.jsonl"
     assert train_args["target_token"] == ["auto"]
 
 
@@ -981,6 +1026,7 @@ def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
     assert exit_code == 0
     assert [step["command"] for step in data["steps"]] == [
         "build-prompts",
+        "prepare-sae-prompts",
         "train-sae",
         "train-sae",
         "inspect",
@@ -991,34 +1037,39 @@ def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
         "validate-hf-sae-paths",
         "summarize-attribution-graph",
     ]
-    source_train = data["steps"][1]["args"]
-    target_train = data["steps"][2]["args"]
+    prepare_args = data["steps"][1]["args"]
+    source_train = data["steps"][2]["args"]
+    target_train = data["steps"][3]["args"]
+    assert prepare_args["dataset"] == "{run_dir}/prompts.jsonl"
     assert source_train["layer"] == 2
     assert target_train["layer"] == 4
+    assert source_train["dataset"] == "{run_dir}/sae-prompts/train.jsonl"
+    assert source_train["causal_dataset"] == "{run_dir}/sae-prompts/causal.jsonl"
     assert source_train["causal_out"] == "{run_dir}/source-sae/interventions.jsonl"
     assert source_train["model_class"] == "gemma4-conditional"
     assert source_train["trust_remote_code"] is True
     assert source_train["torch_dtype"] == "bfloat16"
     assert source_train["device_map"] == "auto"
     assert target_train["target_token"] == ["auto"]
-    assert data["steps"][3]["name"] == "inspect-source"
-    assert data["steps"][3]["args"]["require_interventions"] is True
-    assert data["steps"][5]["args"]["source_top_k"] == 2
-    assert data["steps"][5]["args"]["target_top_k"] == 5
-    assert data["steps"][5]["args"]["model_class"] == "gemma4-conditional"
-    graph_args = data["steps"][6]["args"]
+    assert data["steps"][4]["name"] == "inspect-source"
+    assert data["steps"][4]["args"]["require_interventions"] is True
+    assert data["steps"][6]["args"]["dataset"] == "{run_dir}/sae-prompts/causal.jsonl"
+    assert data["steps"][6]["args"]["source_top_k"] == 2
+    assert data["steps"][6]["args"]["target_top_k"] == 5
+    assert data["steps"][6]["args"]["model_class"] == "gemma4-conditional"
+    graph_args = data["steps"][7]["args"]
     assert graph_args["report"] == [
         "{run_dir}/source-report/report.json",
         "{run_dir}/target-report/report.json",
     ]
     assert graph_args["path_records"] == "{run_dir}/paths.jsonl"
-    assert data["steps"][7]["name"] == "summarize-graph"
-    validation_args = data["steps"][8]["args"]
+    assert data["steps"][8]["name"] == "summarize-graph"
+    validation_args = data["steps"][9]["args"]
     assert validation_args["dataset"] == str(tmp_path / "heldout.jsonl")
     assert validation_args["top_k"] == 3
     assert validation_args["graph_out"] == "{run_dir}/validated-graph.json"
     assert validation_args["graph_html_out"] == "{run_dir}/validated-graph.html"
-    assert data["steps"][9]["name"] == "summarize-validated-graph"
+    assert data["steps"][10]["name"] == "summarize-validated-graph"
 
     assert main(["run", str(config), "--dry-run"]) == 0
     dry_run = capsys.readouterr().out

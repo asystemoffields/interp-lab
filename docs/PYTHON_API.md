@@ -134,11 +134,14 @@ scaffold = scaffold_run(
     negative_prompt="The answer is a person's name.",
     include_causal=True,
     target_token="auto",
+    latent_dim=1024,
     run_dir="reports/distilgpt2-sae-run",
 )
 
 run(scaffold.path)
 ```
+
+SAE scaffolds prepare prompt packs by default. Set `prepare_sae_prompts=False` when `dataset` already points to the exact training split you want.
 
 For SAE-latent path experiments, scaffold a two-layer workflow:
 
@@ -155,6 +158,7 @@ scaffold = scaffold_run(
     include_causal=True,
     target_token="auto",
     validate_paths=True,
+    latent_dim=1024,
     torch_dtype="auto",
     device_map="auto",
     run_dir="reports/distilgpt2-sae-paths",
