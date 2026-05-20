@@ -14,6 +14,9 @@ def test_release_check_reports_current_stable_blockers():
     assert any(check["id"] == "development_classifier" for check in report["checks"])
     assert any(check["id"] == "known_stable_blockers" for check in report["checks"])
     assert any(action["id"] == "development_classifier" for action in report["agent_next_actions"])
+    demo_check = next(check for check in report["checks"] if check["id"] == "real_model_demo_coverage")
+    assert demo_check["status"] == "pass"
+    assert "valid real-model demo manifest" in demo_check["detail"]
     assert "NOT READY" in render_release_check_text(report)
 
 

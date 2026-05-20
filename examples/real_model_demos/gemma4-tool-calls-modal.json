@@ -1,0 +1,139 @@
+{
+  "schema_version": "interp-lab.real_model_demo.v1",
+  "id": "gemma4-tool-calls-modal",
+  "title": "Gemma 4 successful tool-call workflow on Modal",
+  "model": "google/gemma-4-E2B-it",
+  "model_family": "Gemma 4 conditional-generation model",
+  "criterion": "the assistant should produce a valid schema-following tool call that successfully executes the user's requested operation",
+  "workflow": "modal-hidden-discovery-to-behavior-sae",
+  "doc": "docs/GEMMA4_WALKTHROUGH.md",
+  "estimated_runtime": "Remote GPU run; depends on Modal GPU choice, prompt count, and SAE size",
+  "commands": [
+    {
+      "name": "validate tool-call assay",
+      "argv": [
+        "validate-assay",
+        "--preset-file",
+        "examples/presets/successful-tool-calls.json",
+        "--out",
+        "reports/gemma4-tool-calls/assay-validation.json"
+      ]
+    },
+    {
+      "name": "run Modal hidden discovery",
+      "argv": [
+        "modal",
+        "run",
+        "examples/modal_gemma4.py",
+        "--workflow",
+        "hidden",
+        "--dataset",
+        "examples/gemma4_tool_call_prompts.jsonl",
+        "--criterion",
+        "the assistant should produce a valid schema-following tool call that successfully executes the user's requested operation",
+        "--layers",
+        "20,28,35",
+        "--features-per-layer",
+        "32",
+        "--top-k",
+        "16",
+        "--group-top-k",
+        "8",
+        "--out-dir",
+        "reports/gemma4-tool-calls/modal-hidden"
+      ]
+    },
+    {
+      "name": "export causal report graph",
+      "argv": [
+        "export-attribution-graph",
+        "--report",
+        "reports/gemma4-tool-calls/modal-hidden/hidden-causal/report.json",
+        "--out",
+        "reports/gemma4-tool-calls/modal-hidden/graph.json",
+        "--markdown-out",
+        "reports/gemma4-tool-calls/modal-hidden/graph.md",
+        "--html-out",
+        "reports/gemma4-tool-calls/modal-hidden/graph.html"
+      ]
+    },
+    {
+      "name": "prepare behavior SAE prompts",
+      "argv": [
+        "prepare-sae-prompts",
+        "--dataset",
+        "prompts/broader-tool-call-training.jsonl",
+        "--out-dir",
+        "prompts/gemma4-tool-call-sae-pack",
+        "--latent-dim",
+        "128",
+        "--max-length",
+        "96"
+      ]
+    },
+    {
+      "name": "train behavior SAE on Modal",
+      "argv": [
+        "modal",
+        "run",
+        "examples/modal_train_sae.py",
+        "--dataset",
+        "prompts/gemma4-tool-call-sae-pack/train.jsonl",
+        "--causal-dataset",
+        "prompts/gemma4-tool-call-sae-pack/causal.jsonl",
+        "--out-dir",
+        "reports/gemma4-tool-calls/modal-sae-layer35",
+        "--model",
+        "google/gemma-4-E2B-it",
+        "--model-class",
+        "gemma4-conditional",
+        "--criterion",
+        "the assistant should produce a valid schema-following tool call that successfully executes the user's requested operation",
+        "--layers",
+        "35",
+        "--preset",
+        "production",
+        "--latent-dim",
+        "128",
+        "--top-k",
+        "12"
+      ]
+    }
+  ],
+  "expected_artifacts": [
+    {
+      "path": "reports/gemma4-tool-calls/assay-validation.json",
+      "kind": "assay-validation",
+      "why_it_matters": "Checks whether the criterion prompt set is usable before expensive GPU work.",
+      "interpretation_notes": "Warnings should be fixed or acknowledged before launching larger runs."
+    },
+    {
+      "path": "reports/gemma4-tool-calls/modal-hidden/hidden-causal/report.html",
+      "kind": "causal-hidden-feature-report",
+      "why_it_matters": "Ranks Gemma 4 hidden features with intervention evidence for successful tool calls.",
+      "interpretation_notes": "Use this to choose layers and feature families for SAE training."
+    },
+    {
+      "path": "reports/gemma4-tool-calls/modal-hidden/graph.html",
+      "kind": "graph-viewer",
+      "why_it_matters": "Shows a browser-readable mechanism sketch for the causal hidden-feature report.",
+      "interpretation_notes": "Edges without path validation remain candidate relationships."
+    },
+    {
+      "path": "reports/gemma4-tool-calls/modal-sae-layer35/sae.json",
+      "kind": "behavior-sae-artifact",
+      "why_it_matters": "Stores the production-preset SAE trained on the discovered Gemma 4 layer.",
+      "interpretation_notes": "Review validation reconstruction drift and causal specificity before interpreting individual latents."
+    }
+  ],
+  "evidence_checks": [
+    "The assay validator should pass without errors before Modal execution.",
+    "The causal hidden-feature report should show behavior-score movement and side-effect estimates.",
+    "The SAE artifact should include validation metrics and causal records for top latents."
+  ],
+  "agent_next_actions": [
+    "Profile the target environment before choosing local, Modal, or remote execution.",
+    "Use the hidden-discovery report to select a layer instead of assuming a layer in advance.",
+    "Broaden the prompt pack when validation drift or generic labels appear."
+  ]
+}

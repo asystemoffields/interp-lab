@@ -1,0 +1,141 @@
+{
+  "schema_version": "interp-lab.real_model_demo.v1",
+  "id": "tiny-gpt2-sae-paths",
+  "title": "Tiny GPT-2 SAE path-patching sanity run",
+  "model": "sshleifer/tiny-gpt2",
+  "model_family": "GPT-2 style decoder",
+  "criterion": "the next token should be a physical measurement unit",
+  "workflow": "sae-latent-path-patching",
+  "doc": "docs/REAL_MODEL_SMOKE_TEST.md",
+  "estimated_runtime": "CPU-friendly sanity run; intended for fast path-patching verification",
+  "commands": [
+    {
+      "name": "train source-layer SAE",
+      "argv": [
+        "train-sae",
+        "--preset",
+        "minimal",
+        "--hf-model",
+        "sshleifer/tiny-gpt2",
+        "--dataset",
+        "examples/hf_prompts_unit_prediction.jsonl",
+        "--layer",
+        "1",
+        "--latent-dim",
+        "4",
+        "--out",
+        "reports/real-small/tiny-gpt2-unit/sae-layer1/sae.json",
+        "--records-out",
+        "reports/real-small/tiny-gpt2-unit/sae-layer1/records.jsonl"
+      ]
+    },
+    {
+      "name": "train target-layer SAE",
+      "argv": [
+        "train-sae",
+        "--preset",
+        "minimal",
+        "--hf-model",
+        "sshleifer/tiny-gpt2",
+        "--dataset",
+        "examples/hf_prompts_unit_prediction.jsonl",
+        "--layer",
+        "2",
+        "--latent-dim",
+        "4",
+        "--out",
+        "reports/real-small/tiny-gpt2-unit/sae-layer2/sae.json",
+        "--records-out",
+        "reports/real-small/tiny-gpt2-unit/sae-layer2/records.jsonl"
+      ]
+    },
+    {
+      "name": "inspect source SAE",
+      "argv": [
+        "inspect",
+        "--model",
+        "sshleifer/tiny-gpt2",
+        "--criterion",
+        "the next token should be a physical measurement unit",
+        "--backend",
+        "records",
+        "--records",
+        "reports/real-small/tiny-gpt2-unit/sae-layer1/records.jsonl",
+        "--out",
+        "reports/real-small/tiny-gpt2-unit/sae-layer1/report"
+      ]
+    },
+    {
+      "name": "measure SAE paths",
+      "argv": [
+        "export-hf-sae-paths",
+        "--model",
+        "sshleifer/tiny-gpt2",
+        "--dataset",
+        "examples/hf_prompts_unit_prediction.jsonl",
+        "--criterion",
+        "the next token should be a physical measurement unit",
+        "--source-sae",
+        "reports/real-small/tiny-gpt2-unit/sae-layer1/sae.json",
+        "--target-sae",
+        "reports/real-small/tiny-gpt2-unit/sae-layer2/sae.json",
+        "--source-report",
+        "reports/real-small/tiny-gpt2-unit/sae-layer1/report/report.json",
+        "--target-report",
+        "reports/real-small/tiny-gpt2-unit/sae-layer2/report/report.json",
+        "--out",
+        "reports/real-small/tiny-gpt2-unit/paths/layer1-to-layer2.jsonl"
+      ]
+    },
+    {
+      "name": "fuse graph",
+      "argv": [
+        "export-attribution-graph",
+        "--report",
+        "reports/real-small/tiny-gpt2-unit/sae-layer1/report/report.json",
+        "--report",
+        "reports/real-small/tiny-gpt2-unit/sae-layer2/report/report.json",
+        "--path-records",
+        "reports/real-small/tiny-gpt2-unit/paths/layer1-to-layer2.jsonl",
+        "--out",
+        "reports/real-small/tiny-gpt2-unit/paths/graph.json"
+      ]
+    }
+  ],
+  "expected_artifacts": [
+    {
+      "path": "reports/real-small/tiny-gpt2-unit/paths/layer1-to-layer2.jsonl",
+      "kind": "path-patching-records",
+      "why_it_matters": "Stores measured source-latent to target-latent effects.",
+      "interpretation_notes": "Compare target-latent deltas with random-source controls before calling a path specific."
+    },
+    {
+      "path": "reports/real-small/tiny-gpt2-unit/paths/graph.json",
+      "kind": "attribution-graph",
+      "why_it_matters": "Fuses source features, target features, and measured path records into one graph.",
+      "interpretation_notes": "On tiny-gpt2 this is a sanity check for plumbing, not a strong behavioral claim."
+    },
+    {
+      "path": "reports/real-small/tiny-gpt2-unit/sae-layer1/report/report.json",
+      "kind": "source-feature-report",
+      "why_it_matters": "Defines source SAE latents selected for path patching.",
+      "interpretation_notes": "Weak association scores should lead to broader prompts or a larger model run."
+    },
+    {
+      "path": "reports/real-small/tiny-gpt2-unit/sae-layer2/report/report.json",
+      "kind": "target-feature-report",
+      "why_it_matters": "Defines downstream SAE latents measured during path patching.",
+      "interpretation_notes": "Treat target labels as provisional until examples and held-out path validation agree."
+    }
+  ],
+  "evidence_checks": [
+    "Path records should include both selected-source rows and random-source controls.",
+    "Graph edges should carry measured path effect metadata instead of similarity-only claims.",
+    "The report should keep tiny-model limitations explicit."
+  ],
+  "agent_next_actions": [
+    "Run this demo before changing path-patching code.",
+    "Open graph.json and verify measured path edges are present.",
+    "Repeat on a larger small model if tiny-gpt2 controls are comparable to selected paths."
+  ]
+}

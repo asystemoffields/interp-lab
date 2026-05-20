@@ -17,6 +17,7 @@ from oracle_sae.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
 from oracle_sae.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA
 
 RELEASE_CHECK_SCHEMA = "interp-lab.release_check.v1"
+REAL_MODEL_DEMO_SCHEMA = "interp-lab.real_model_demo.v1"
 
 
 @dataclass(frozen=True)
@@ -170,6 +171,7 @@ def _check_required_docs(root: Path) -> dict[str, str]:
         "docs/RELEASE.md",
         "docs/SCALING.md",
         "docs/GOLDEN_REAL_MODEL_DEMO.md",
+        "docs/REAL_MODEL_DEMOS.md",
     ]
     missing = [path for path in required if not (root / path).exists()]
     return _check(
@@ -264,20 +266,84 @@ def _check_golden_demo_doc(root: Path) -> dict[str, str]:
 
 
 def _check_real_model_demo_coverage(root: Path) -> dict[str, str]:
-    candidates = [
-        root / "docs/GOLDEN_REAL_MODEL_DEMO.md",
-        root / "docs/REAL_MODEL_SMOKE_TEST.md",
-        root / "docs/GEMMA4_WALKTHROUGH.md",
-    ]
-    present = [path.name for path in candidates if path.exists()]
-    status = "pass" if len(present) >= 3 else "warn"
+    demo_dir = root / "examples/real_model_demos"
+    manifests = sorted(demo_dir.glob("*.json")) if demo_dir.exists() else []
+    valid: list[str] = []
+    invalid: list[str] = []
+    docs: set[str] = set()
+    workflows: set[str] = set()
+    for path in manifests:
+        ok, detail = _validate_real_model_demo_manifest(path, root)
+        if ok:
+            valid.append(path.name)
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            docs.add(str(payload.get("doc", "")))
+            workflows.add(str(payload.get("workflow", "")))
+        else:
+            invalid.append(f"{path.name}: {detail}")
+    doc_files = [root / "docs/GOLDEN_REAL_MODEL_DEMO.md", root / "docs/REAL_MODEL_SMOKE_TEST.md", root / "docs/GEMMA4_WALKTHROUGH.md"]
+    documented = [path.name for path in doc_files if path.exists()]
+    enough = len(valid) >= 3 and len(docs) >= 3 and len(workflows) >= 3 and not invalid
+    status = "pass" if enough else "warn"
+    detail = (
+        f"Found {len(valid)} valid real-model demo manifest(s): {', '.join(valid)}"
+        if enough
+        else (
+            f"Valid manifests={len(valid)}, docs={len(documented)}, workflows={len(workflows)}. "
+            + ("Invalid: " + "; ".join(invalid) if invalid else "Add or complete real-model demo manifests.")
+        )
+    )
     return _check(
         "real_model_demo_coverage",
         "Multiple real-model workflows are documented",
         status,
-        f"Found {len(present)} real-model doc(s): {', '.join(present) if present else 'none'}",
-        "Add at least three reproducible real-model walkthroughs before claiming stable release readiness.",
+        detail,
+        "Add at least three reproducible real-model demo manifests with expected artifacts and interpretation notes.",
     )
+
+
+def _validate_real_model_demo_manifest(path: Path, root: Path) -> tuple[bool, str]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return False, f"invalid JSON: {exc.msg}"
+    if not isinstance(payload, dict):
+        return False, "manifest must be a JSON object"
+    required_scalars = ["schema_version", "id", "title", "model", "criterion", "workflow", "doc", "estimated_runtime"]
+    missing = [key for key in required_scalars if not payload.get(key)]
+    if missing:
+        return False, f"missing fields: {', '.join(missing)}"
+    if payload["schema_version"] != REAL_MODEL_DEMO_SCHEMA:
+        return False, f"schema_version must be {REAL_MODEL_DEMO_SCHEMA}"
+    doc_path = root / str(payload["doc"])
+    if not doc_path.exists():
+        return False, f"doc path does not exist: {payload['doc']}"
+    commands = payload.get("commands")
+    if not isinstance(commands, list) or len(commands) < 3:
+        return False, "commands must include at least three runnable steps"
+    for command in commands:
+        if not isinstance(command, dict) or not command.get("name") or not command.get("argv"):
+            return False, "each command needs name and argv"
+        argv = command["argv"]
+        if not isinstance(argv, list) or not argv or not all(isinstance(item, str) and item for item in argv):
+            return False, "command argv must be a non-empty string list"
+    artifacts = payload.get("expected_artifacts")
+    if not isinstance(artifacts, list) or len(artifacts) < 3:
+        return False, "expected_artifacts must include at least three artifacts"
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            return False, "expected_artifacts entries must be objects"
+        missing_artifact = [
+            key
+            for key in ["path", "kind", "why_it_matters", "interpretation_notes"]
+            if not artifact.get(key)
+        ]
+        if missing_artifact:
+            return False, f"artifact missing fields: {', '.join(missing_artifact)}"
+    checks = payload.get("evidence_checks")
+    if not isinstance(checks, list) or len(checks) < 2:
+        return False, "evidence_checks must include at least two checks"
+    return True, "ok"
 
 
 def _check_browser_app(root: Path) -> dict[str, str]:
@@ -357,6 +423,7 @@ def _check_schema_contracts() -> dict[str, str]:
         "graph_validation": "interp-lab.graph_validation.v1",
         "environment_profile": "interp-lab.env_profile.v1",
         "release_check": RELEASE_CHECK_SCHEMA,
+        "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
     }
     missing = [key for key, value in required.items() if not value.endswith(".v1")]
     return _check(

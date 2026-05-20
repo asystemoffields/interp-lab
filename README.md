@@ -123,7 +123,7 @@ interp-lab demo --out reports/demo
 
 The demo writes a complete tour: feature reports for two toy models, cross-model matches, match validation, an attribution graph, HTML viewers, a compact graph summary, and a local Studio page.
 
-For a compact real-model release check, follow `docs/GOLDEN_REAL_MODEL_DEMO.md`. It trains a small DistilGPT-2 SAE, suppresses selected SAE latents, re-inspects with intervention evidence, and exports an HTML attribution graph.
+For a compact real-model release check, follow `docs/GOLDEN_REAL_MODEL_DEMO.md`. It trains a small DistilGPT-2 SAE, suppresses selected SAE latents, re-inspects with intervention evidence, and exports an HTML attribution graph. The broader stable-demo suite is cataloged in `docs/REAL_MODEL_DEMOS.md` and `examples/real_model_demos/`.
 
 Open the browser Studio command builder:
 

@@ -5,7 +5,7 @@ interp-lab should only be released as stable when it is dependable for a serious
 ## Required Capabilities
 
 - A real-model golden path runs end to end: prompt preparation, activation collection or SAE training, inspection, intervention, causal re-inspection, attribution graph export, and compact machine-readable summary.
-- At least three real-model walkthroughs cover different model families, criteria, and workflows, including one small CPU-friendly run.
+- At least three real-model walkthroughs cover different model families, criteria, and workflows, including one small CPU-friendly run. Each walkthrough has a machine-readable manifest with ordered commands, expected artifacts, and interpretation notes.
 - The browser app supports the core workflow for less-technical users: guided command setup, local job execution, persistent run history, artifact browsing, report preview, graph preview, clear errors, and configuration export/import.
 - Causal validation defaults encourage held-out prompts, control prompts or control paths, repeated interventions, and honest evidence-strength language.
 - Cross-model and path-patching reports distinguish association, measured causal effects, validated paths, controls, and unvalidated hypotheses.

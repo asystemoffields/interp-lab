@@ -196,6 +196,8 @@ interp-lab export-nnsight-records --help
 interp-lab publish-hf-artifact --help
 ```
 
+The reproducible real-model demo suite is cataloged in `docs/REAL_MODEL_DEMOS.md`. Each demo has a JSON manifest under `examples/real_model_demos/` with ordered commands, expected artifacts, and interpretation notes for reviewers and agents.
+
 PyPI release details live in `docs/RELEASE.md`.
 
 ## Large Runs

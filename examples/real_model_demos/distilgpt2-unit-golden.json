@@ -1,0 +1,139 @@
+{
+  "schema_version": "interp-lab.real_model_demo.v1",
+  "id": "distilgpt2-unit-golden",
+  "title": "DistilGPT-2 unit-prediction golden path",
+  "model": "distilgpt2",
+  "model_family": "GPT-2 style decoder",
+  "criterion": "the next token should be a physical measurement unit",
+  "workflow": "golden-real-sae-causal-graph",
+  "doc": "docs/GOLDEN_REAL_MODEL_DEMO.md",
+  "estimated_runtime": "CPU-friendly small run; minutes on a recent laptop after dependencies are installed",
+  "commands": [
+    {
+      "name": "prepare prompt pack",
+      "argv": [
+        "prepare-sae-prompts",
+        "--dataset",
+        "examples/hf_prompts_unit_prediction.jsonl",
+        "--out-dir",
+        "reports/golden-real/distilgpt2-unit/prompt-pack",
+        "--latent-dim",
+        "32",
+        "--max-length",
+        "64"
+      ]
+    },
+    {
+      "name": "train minimal SAE",
+      "argv": [
+        "train-sae",
+        "--preset",
+        "minimal",
+        "--hf-model",
+        "distilgpt2",
+        "--dataset",
+        "reports/golden-real/distilgpt2-unit/prompt-pack/train.jsonl",
+        "--layer",
+        "6",
+        "--latent-dim",
+        "32",
+        "--out",
+        "reports/golden-real/distilgpt2-unit/sae/sae.json",
+        "--records-out",
+        "reports/golden-real/distilgpt2-unit/sae/records.jsonl"
+      ]
+    },
+    {
+      "name": "inspect SAE latents",
+      "argv": [
+        "inspect",
+        "--model",
+        "distilgpt2",
+        "--criterion",
+        "the next token should be a physical measurement unit",
+        "--backend",
+        "records",
+        "--records",
+        "reports/golden-real/distilgpt2-unit/sae/records.jsonl",
+        "--out",
+        "reports/golden-real/distilgpt2-unit/inspect"
+      ]
+    },
+    {
+      "name": "suppress top SAE latents",
+      "argv": [
+        "intervene",
+        "--model",
+        "distilgpt2",
+        "--dataset",
+        "reports/golden-real/distilgpt2-unit/prompt-pack/causal.jsonl",
+        "--criterion",
+        "the next token should be a physical measurement unit",
+        "--report",
+        "reports/golden-real/distilgpt2-unit/inspect/report.json",
+        "--records",
+        "reports/golden-real/distilgpt2-unit/sae/records.jsonl",
+        "--top-k",
+        "3",
+        "--sae",
+        "reports/golden-real/distilgpt2-unit/sae/sae.json",
+        "--mode",
+        "suppress",
+        "--target-token",
+        "auto",
+        "--out",
+        "reports/golden-real/distilgpt2-unit/interventions.jsonl"
+      ]
+    },
+    {
+      "name": "export attribution graph",
+      "argv": [
+        "export-attribution-graph",
+        "--report",
+        "reports/golden-real/distilgpt2-unit/inspect-causal/report.json",
+        "--out",
+        "reports/golden-real/distilgpt2-unit/graph.json",
+        "--markdown-out",
+        "reports/golden-real/distilgpt2-unit/graph.md",
+        "--html-out",
+        "reports/golden-real/distilgpt2-unit/graph.html"
+      ]
+    }
+  ],
+  "expected_artifacts": [
+    {
+      "path": "reports/golden-real/distilgpt2-unit/prompt-pack/manifest.json",
+      "kind": "prompt-pack-manifest",
+      "why_it_matters": "Confirms train, causal, and validation prompt splits exist.",
+      "interpretation_notes": "Check split counts and advisories before treating causal results as more than a compact demo."
+    },
+    {
+      "path": "reports/golden-real/distilgpt2-unit/sae/sae.json",
+      "kind": "sae-artifact",
+      "why_it_matters": "Stores the trained encoder, decoder, feature metadata, and reconstruction metrics.",
+      "interpretation_notes": "Review reconstruction MSE, validation MSE, average L0, and dead latent count."
+    },
+    {
+      "path": "reports/golden-real/distilgpt2-unit/inspect-causal/report.html",
+      "kind": "causal-feature-report",
+      "why_it_matters": "Shows which SAE latents remain important after intervention evidence is attached.",
+      "interpretation_notes": "Prioritize features with held-out causal movement, specificity, and readable activation examples."
+    },
+    {
+      "path": "reports/golden-real/distilgpt2-unit/graph-summary.json",
+      "kind": "agent-graph-summary",
+      "why_it_matters": "Gives agents a compact list of important nodes, edges, and next actions.",
+      "interpretation_notes": "Use it to decide whether to broaden prompts, repeat interventions, or validate paths."
+    }
+  ],
+  "evidence_checks": [
+    "The causal report should include intervention-backed features rather than association-only cards.",
+    "The intervention plan should include estimated forward passes and an agent action for causal re-inspection.",
+    "The graph summary should distinguish measured evidence from hypotheses that need replication."
+  ],
+  "agent_next_actions": [
+    "Run the commands in docs/GOLDEN_REAL_MODEL_DEMO.md from a clean checkout with interp-lab[hf,train] installed.",
+    "Archive manifest.json, report.json, report.html, graph.json, graph.html, and graph-summary.json together.",
+    "If feature labels look generic, broaden the prompt pack and rerun before publishing claims."
+  ]
+}
