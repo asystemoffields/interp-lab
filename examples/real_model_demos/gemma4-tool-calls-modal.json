@@ -8,6 +8,33 @@
   "workflow": "modal-hidden-discovery-to-behavior-sae",
   "doc": "docs/GEMMA4_WALKTHROUGH.md",
   "estimated_runtime": "Remote GPU run; depends on Modal GPU choice, prompt count, and SAE size",
+  "required_inputs": [
+    {
+      "path": "examples/presets/successful-tool-calls.json",
+      "kind": "criterion-preset",
+      "description": "Tool-call assay used before remote execution."
+    },
+    {
+      "path": "examples/gemma4_tool_call_prompts.jsonl",
+      "kind": "prompt-dataset",
+      "description": "Compact causal/discovery assay prompts for hidden-feature discovery."
+    },
+    {
+      "path": "examples/broader_tool_call_training.jsonl",
+      "kind": "prompt-dataset",
+      "description": "Broader scored prompts for the behavior SAE prompt pack."
+    },
+    {
+      "path": "examples/modal_gemma4.py",
+      "kind": "modal-entrypoint",
+      "description": "Remote hidden-feature discovery runner."
+    },
+    {
+      "path": "examples/modal_train_sae.py",
+      "kind": "modal-entrypoint",
+      "description": "Remote behavior SAE trainer."
+    }
+  ],
   "commands": [
     {
       "name": "validate tool-call assay",
@@ -62,9 +89,9 @@
       "argv": [
         "prepare-sae-prompts",
         "--dataset",
-        "prompts/broader-tool-call-training.jsonl",
+        "examples/broader_tool_call_training.jsonl",
         "--out-dir",
-        "prompts/gemma4-tool-call-sae-pack",
+        "reports/gemma4-tool-calls/prompt-pack",
         "--latent-dim",
         "128",
         "--max-length",
@@ -78,9 +105,9 @@
         "run",
         "examples/modal_train_sae.py",
         "--dataset",
-        "prompts/gemma4-tool-call-sae-pack/train.jsonl",
+        "reports/gemma4-tool-calls/prompt-pack/train.jsonl",
         "--causal-dataset",
-        "prompts/gemma4-tool-call-sae-pack/causal.jsonl",
+        "reports/gemma4-tool-calls/prompt-pack/causal.jsonl",
         "--out-dir",
         "reports/gemma4-tool-calls/modal-sae-layer35",
         "--model",
@@ -120,7 +147,7 @@
       "interpretation_notes": "Edges without path validation remain candidate relationships."
     },
     {
-      "path": "reports/gemma4-tool-calls/modal-sae-layer35/sae.json",
+      "path": "reports/gemma4-tool-calls/modal-sae-layer35/layer-35/sae.json",
       "kind": "behavior-sae-artifact",
       "why_it_matters": "Stores the production-preset SAE trained on the discovered Gemma 4 layer.",
       "interpretation_notes": "Review validation reconstruction drift and causal specificity before interpreting individual latents."

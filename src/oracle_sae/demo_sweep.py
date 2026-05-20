@@ -207,6 +207,12 @@ def render_demo_sweep_text(report: dict[str, Any]) -> str:
             lines.append(f"  model: {demo['model']}")
         if demo.get("workflow"):
             lines.append(f"  workflow: {demo['workflow']}")
+        input_summary = demo.get("input_summary", {})
+        if input_summary:
+            lines.append(
+                "  inputs: "
+                f"{input_summary.get('present', 0)}/{input_summary.get('total', 0)} present"
+            )
         artifact_summary = demo.get("artifact_summary", {})
         if artifact_summary:
             lines.append(
@@ -257,8 +263,18 @@ def _build_single_demo_report(
     commands = []
     command_failed = False
     command_blocked = False
+    inputs = [_input_record(item, repo_root=repo_root) for item in payload.get("required_inputs", [])]
+    input_summary = {
+        "total": len(inputs),
+        "present": sum(1 for item in inputs if item["exists"]),
+        "missing": sum(1 for item in inputs if not item["exists"]),
+    }
     if run:
-        for command in payload.get("commands", []):
+        if input_summary["missing"]:
+            commands = [_blocked_command(command, detail="Command was not run because required inputs are missing.") for command in payload.get("commands", [])]
+            command_blocked = True
+        runnable_commands = [] if input_summary["missing"] else payload.get("commands", [])
+        for command in runnable_commands:
             if command_blocked:
                 commands.append(_blocked_command(command))
                 continue
@@ -286,7 +302,12 @@ def _build_single_demo_report(
         "missing": sum(1 for artifact in artifacts if not artifact["exists"]),
     }
     command_summary = _command_summary(commands)
-    incomplete = artifact_summary["missing"] > 0 or command_summary["skipped"] > 0 or command_summary["blocked"] > 0
+    incomplete = (
+        input_summary["missing"] > 0
+        or artifact_summary["missing"] > 0
+        or command_summary["skipped"] > 0
+        or command_summary["blocked"] > 0
+    )
     status = "passed"
     if command_failed:
         status = "failed"
@@ -302,13 +323,15 @@ def _build_single_demo_report(
         "doc": payload["doc"],
         "manifest_path": str(manifest_path),
         "status": status,
-        "detail": _demo_detail(status, artifact_summary, command_summary, run),
+        "detail": _demo_detail(status, input_summary, artifact_summary, command_summary, run),
+        "inputs": inputs,
+        "input_summary": input_summary,
         "commands": commands,
         "command_summary": command_summary,
         "artifacts": artifacts,
         "artifact_summary": artifact_summary,
         "evidence_checks": payload.get("evidence_checks", []),
-        "agent_next_actions": _demo_next_actions(payload, status, artifact_summary, command_summary, run),
+        "agent_next_actions": _demo_next_actions(payload, status, input_summary, artifact_summary, command_summary, run),
     }
 
 
@@ -441,7 +464,11 @@ def _planned_command(command: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _blocked_command(command: dict[str, Any]) -> dict[str, Any]:
+def _blocked_command(
+    command: dict[str, Any],
+    *,
+    detail: str = "Command was not run because an earlier command was skipped.",
+) -> dict[str, Any]:
     raw_argv = list(command["argv"])
     normalized = _normalize_argv(raw_argv)
     return {
@@ -450,7 +477,26 @@ def _blocked_command(command: dict[str, Any]) -> dict[str, Any]:
         "normalized_argv": normalized,
         "kind": "internal" if normalized and normalized[0] in INTERNAL_COMMANDS else "external",
         "status": "blocked",
-        "detail": "Command was not run because an earlier command was skipped.",
+        "detail": detail,
+    }
+
+
+def _input_record(item: str | dict[str, Any], *, repo_root: Path) -> dict[str, Any]:
+    if isinstance(item, str):
+        relative = item
+        kind = "file"
+        description = ""
+    else:
+        relative = str(item.get("path", ""))
+        kind = str(item.get("kind", "file"))
+        description = str(item.get("description", ""))
+    path = _resolve_under_root(repo_root, relative)
+    return {
+        "path": relative,
+        "absolute_path": str(path),
+        "kind": kind,
+        "description": description,
+        "exists": path.exists(),
     }
 
 
@@ -538,6 +584,7 @@ def _command_summary(commands: list[dict[str, Any]]) -> dict[str, int]:
 
 def _demo_detail(
     status: str,
+    input_summary: dict[str, int],
     artifact_summary: dict[str, int],
     command_summary: dict[str, int],
     run: bool,
@@ -546,6 +593,8 @@ def _demo_detail(
         return "All expected artifacts are present."
     if status == "failed":
         return "One or more commands failed during the sweep."
+    if input_summary["missing"]:
+        return f"{input_summary['missing']} required input(s) are missing."
     if artifact_summary["missing"]:
         return f"{artifact_summary['missing']} expected artifact(s) are missing."
     if run and command_summary["skipped"]:
@@ -558,6 +607,7 @@ def _demo_detail(
 def _demo_next_actions(
     payload: dict[str, Any],
     status: str,
+    input_summary: dict[str, int],
     artifact_summary: dict[str, int],
     command_summary: dict[str, int],
     run: bool,
@@ -568,6 +618,8 @@ def _demo_next_actions(
             *payload.get("agent_next_actions", [])[:2],
         ]
     actions = []
+    if input_summary["missing"]:
+        actions.append("Add or correct the missing required inputs before running this demo.")
     if not run:
         actions.append("Re-run this sweep with --run when dependencies and credentials are ready.")
     if command_summary["skipped"]:

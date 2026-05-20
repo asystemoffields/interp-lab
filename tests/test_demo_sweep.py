@@ -80,6 +80,22 @@ def test_demo_sweep_runs_internal_commands_and_skips_external_by_default(tmp_pat
     assert report["demos"][0]["command_summary"]["blocked"] == 1
 
 
+def test_demo_sweep_preflights_required_inputs(tmp_path: Path):
+    _write_demo_manifest(tmp_path, required_inputs=["examples/missing.jsonl"])
+    report = build_demo_sweep_report(
+        repo_root=tmp_path,
+        manifest_dir="examples/real_model_demos",
+        run=True,
+        command_runner=lambda argv: 0,
+    )
+
+    demo = report["demos"][0]
+    assert report["status"] == "incomplete"
+    assert demo["input_summary"]["missing"] == 1
+    assert demo["command_summary"]["blocked"] == 3
+    assert "required input" in demo["detail"]
+
+
 def test_public_api_demo_sweep_writes_report(tmp_path: Path):
     _write_demo_manifest(tmp_path)
     out = tmp_path / "api-sweep.json"
@@ -98,6 +114,7 @@ def _write_demo_manifest(
     root: Path,
     *,
     commands: list[list[str]] | None = None,
+    required_inputs: list[str] | None = None,
 ) -> Path:
     doc = root / "docs" / "DEMO.md"
     doc.parent.mkdir(parents=True, exist_ok=True)
@@ -113,6 +130,7 @@ def _write_demo_manifest(
         "workflow": "sample-workflow",
         "doc": "docs/DEMO.md",
         "estimated_runtime": "quick",
+        "required_inputs": required_inputs or [],
         "commands": [
             {"name": f"step {index}", "argv": argv}
             for index, argv in enumerate(

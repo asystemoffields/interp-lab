@@ -183,7 +183,7 @@ interp-lab run examples/run_records.json
 interp-lab release-check --strict --out reports/release-check.json
 ```
 
-`release-check --strict` is the stable-release gate. It should fail while the project is still classified as alpha or has unresolved stable-release blockers. The release bar is documented in `docs/STABLE_RELEASE.md`.
+`release-check --strict` is the stable-release gate. It fails when the package metadata, real-model demo archive, release docs, CI matrix, public schemas, or worktree state are not ready for a stable tag. The release bar is documented in `docs/STABLE_RELEASE.md`.
 
 For model-backed release examples:
 

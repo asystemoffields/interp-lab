@@ -45,8 +45,8 @@ python -c "from interp_lab import inspect, compare, train_sae, doctor; print(doc
 4. Tag the release:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 5. Create a GitHub Release for that tag.

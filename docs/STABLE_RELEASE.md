@@ -22,7 +22,7 @@ Run:
 interp-lab release-check --strict --out reports/release-check.json
 ```
 
-The command must report no blockers before changing the PyPI classifier to `Development Status :: 5 - Production/Stable`, tagging a stable GitHub release, or publishing the matching PyPI release.
+The command must report no blockers before tagging a stable GitHub release or publishing the matching PyPI release.
 
 Archive demo evidence with:
 
@@ -34,5 +34,4 @@ Add `--allow-external` for trusted remote launchers such as Modal after credenti
 
 ## Current Known Blockers
 
-- Keep the package classifier as alpha until the release gate passes.
-- Run one final clean-install `demo-sweep --run` of the real-model demo suite and archive the produced manifests, reports, graphs, and interpretation notes before tagging stable.
+No known stable-release blockers remain. Keep the archived demo sweep, release-check report, CI run, and built distributions together with the release notes.

@@ -388,6 +388,16 @@ def _validate_real_model_demo_manifest(path: Path, root: Path) -> tuple[bool, st
     checks = payload.get("evidence_checks")
     if not isinstance(checks, list) or len(checks) < 2:
         return False, "evidence_checks must include at least two checks"
+    inputs = payload.get("required_inputs", [])
+    if inputs and not isinstance(inputs, list):
+        return False, "required_inputs must be a list when present"
+    for item in inputs:
+        if isinstance(item, str):
+            if not item:
+                return False, "required_inputs string entries cannot be empty"
+            continue
+        if not isinstance(item, dict) or not item.get("path"):
+            return False, "required_inputs entries must be strings or objects with path"
     return True, "ok"
 
 

@@ -20,6 +20,7 @@ from oracle_sae.modal_workflows import (
     expected_modal_gemma_outputs,
     summarize_modal_result,
 )
+from oracle_sae.reporting import load_inspection_report, write_inspection_html
 
 
 APP_NAME = "interp-lab-gemma4"
@@ -142,6 +143,7 @@ def main(
         path = output_root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+    _write_report_html(output_root)
     (output_root / "modal-result.json").write_text(
         _json_dump(summarize_modal_result(result)),
         encoding="utf-8",
@@ -155,3 +157,9 @@ def _json_dump(value: object) -> str:
     import json
 
     return json.dumps(value, indent=2, sort_keys=True)
+
+
+def _write_report_html(output_root: Path) -> None:
+    for report_path in output_root.glob("**/report.json"):
+        report = load_inspection_report(report_path)
+        write_inspection_html(report, report_path.with_suffix(".html"))

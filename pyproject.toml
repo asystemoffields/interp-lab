@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "interp-lab"
-version = "0.2.0"
+version = "1.0.0"
 description = "Criterion-driven feature discovery, explanation, causal testing, and cross-model activation matching."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,7 +20,7 @@ keywords = [
   "natural-language-autoencoders"
 ]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: MIT License",

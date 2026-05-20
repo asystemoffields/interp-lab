@@ -1,0 +1,48 @@
+{"prompt_id":"tool-train-pos-001","text":"Tool available: get_weather(location: string, date: string). User: Check tomorrow's weather in Boston. Return exactly one JSON object with name and arguments for the tool call.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-002","text":"Tool available: search_docs(query: string). User: Find documentation for rotating OAuth refresh tokens. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-003","text":"Tool available: create_calendar_event(title: string, start: string, end: string, attendees: array). User: Schedule a 30 minute design review with Mina at 3 PM Friday. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-004","text":"Tool available: lookup_order(order_id: string). User: Check order ZX-4812. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-005","text":"Tool available: calculate(expression: string). User: Compute 14.5 percent of 860. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-006","text":"Tool available: send_email(to: string, subject: string, body: string). User: Email Priya a short update that the dataset export finished. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-007","text":"Tool available: book_flight(origin: string, destination: string, date: string). User: Book a one-way flight from LAX to SEA on July 9. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-008","text":"Tool available: query_database(sql: string). User: Count paid accounts created after May 1. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-009","text":"Tool available: create_ticket(title: string, priority: string, description: string). User: File a high-priority ticket for login timeouts on mobile. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-010","text":"Tool available: translate(text: string, target_language: string). User: Translate 'the meeting moved to Thursday' into French. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-011","text":"Tool available: get_stock_price(symbol: string). User: Look up the current price for MSFT. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-012","text":"Tool available: resize_image(path: string, width: integer, height: integer). User: Resize /tmp/banner.png to 1200 by 630. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-013","text":"Tool available: send_slack(channel: string, text: string). User: Post a launch reminder in #release. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-014","text":"Tool available: retrieve_file(path: string). User: Open /docs/q3-plan.md. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-015","text":"Tool available: summarize_url(url: string). User: Summarize https://example.com/release-notes. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-016","text":"Tool available: refund_payment(payment_id: string, reason: string). User: Refund payment pay_914 for duplicate charge. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-017","text":"Tool available: reserve_room(room: string, start: string, end: string). User: Reserve Atlas from noon to 1 PM tomorrow. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-018","text":"Tool available: update_crm(contact: string, field: string, value: string). User: Set Jamie Lee's lifecycle stage to customer. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-019","text":"Tool available: run_unit_tests(path: string). User: Run tests under services/billing. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-020","text":"Tool available: convert_currency(amount: number, from_currency: string, to_currency: string). User: Convert 240 USD to EUR. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-021","text":"Tool available: get_distance(origin: string, destination: string). User: Find the distance from Chicago to Detroit. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-022","text":"Tool available: create_invoice(customer_id: string, amount: number, memo: string). User: Create a 500 dollar invoice for customer C-77 for onboarding. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-023","text":"Tool available: check_inventory(sku: string, warehouse: string). User: Check inventory for SKU A12 in the east warehouse. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-pos-024","text":"Tool available: add_todo(title: string, due_date: string). User: Add a task to renew the domain by Friday. Return exactly one JSON object with name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-train-neg-001","text":"Explain why structured tool calls can help assistants interact with APIs reliably. Do not output JSON.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-002","text":"No tools are available. User: Check tomorrow's weather in Boston. Explain what information you would need in plain language.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-003","text":"Write a short paragraph about good calendar hygiene for busy teams.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-004","text":"Tool result: lookup_order returned shipped. Answer the user in a friendly sentence without making another tool call.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-005","text":"Define function calling for a nontechnical product manager. Avoid code and JSON.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-006","text":"Summarize this note: billing export completed, QA is reviewing the CSV, and launch remains on schedule.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-007","text":"Available tool: send_email(to: string, subject: string, body: string). User: Do not send anything; draft the message text only.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-008","text":"Translate the sentence 'the meeting moved to Thursday' into French and include only the translated sentence.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-009","text":"User: What is 14.5 percent of 860? Solve it step by step in prose without using a tool or JSON.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-010","text":"Describe three risks of calling external tools without user confirmation.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-011","text":"Available tool: query_database(sql: string). User: Explain how I could count paid accounts without running SQL.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-012","text":"Write a friendly reminder that the launch checklist should be reviewed today.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-013","text":"Tool result: search_docs found the OAuth page. Summarize the result without returning a tool call.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-014","text":"Explain what fields belong in a JSON tool-call object, but do not produce one.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-015","text":"User: Book a one-way flight from LAX to SEA. Explain that flight booking requires confirmation and do not output JSON.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-016","text":"Write a concise project update for Slack without invoking any external action.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-017","text":"Available tool: refund_payment(payment_id: string, reason: string). User: Tell me the policy for refunds, but do not issue one.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-018","text":"Give a plain-language explanation of why assistants should validate tool arguments.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-019","text":"User: Open /docs/q3-plan.md. Say that you cannot access local files from this chat unless a file is provided.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-020","text":"List common calendar event fields in a sentence, without producing a tool call object.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-021","text":"Tool result: calculate returned 124.7. Respond with the answer only, not JSON.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-022","text":"Explain what makes an API schema easy for an assistant to use.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-023","text":"Available tool: update_crm(contact: string, field: string, value: string). User: Explain what CRM fields mean; do not update anything.","criterion_score":0.0}
+{"prompt_id":"tool-train-neg-024","text":"Write a short note about checking inventory before promising delivery dates.","criterion_score":0.0}

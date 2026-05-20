@@ -123,14 +123,14 @@ Train a behavior SAE on the discovered layer:
 
 ```bash
 interp-lab prepare-sae-prompts \
-  --dataset prompts/broader-tool-call-training.jsonl \
-  --out-dir prompts/gemma4-tool-call-sae-pack \
+  --dataset examples/broader_tool_call_training.jsonl \
+  --out-dir reports/gemma4-tool-calls/prompt-pack \
   --latent-dim 128 \
   --max-length 96
 
 modal run examples/modal_train_sae.py \
-  --dataset prompts/gemma4-tool-call-sae-pack/train.jsonl \
-  --causal-dataset prompts/gemma4-tool-call-sae-pack/causal.jsonl \
+  --dataset reports/gemma4-tool-calls/prompt-pack/train.jsonl \
+  --causal-dataset reports/gemma4-tool-calls/prompt-pack/causal.jsonl \
   --out-dir reports/gemma4-tool-calls/modal-sae-layer35 \
   --model google/gemma-4-E2B-it \
   --model-class gemma4-conditional \
