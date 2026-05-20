@@ -12,6 +12,7 @@ def test_release_check_reports_current_stable_blockers():
     assert report["ready_for_stable_release"] is False
     assert report["summary"]["blocker"] >= 1
     assert any(check["id"] == "development_classifier" for check in report["checks"])
+    assert any(check["id"] == "known_stable_blockers" for check in report["checks"])
     assert any(action["id"] == "development_classifier" for action in report["agent_next_actions"])
     assert "NOT READY" in render_release_check_text(report)
 

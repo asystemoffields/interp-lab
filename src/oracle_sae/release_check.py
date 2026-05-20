@@ -57,6 +57,7 @@ def build_release_readiness_report(root: str | Path = ".") -> dict[str, Any]:
         _check_development_classifier(pyproject),
         _check_required_docs(repo_root),
         _check_stable_release_doc(repo_root),
+        _check_known_stable_blockers(repo_root),
         _check_golden_demo_doc(repo_root),
         _check_real_model_demo_coverage(repo_root),
         _check_browser_app(repo_root),
@@ -200,6 +201,42 @@ def _check_stable_release_doc(root: Path) -> dict[str, str]:
         "Stable release criteria doc is present." if not missing else f"Missing topics: {', '.join(missing)}",
         "Expand docs/STABLE_RELEASE.md so it covers the full non-alpha release bar.",
     )
+
+
+def _check_known_stable_blockers(root: Path) -> dict[str, str]:
+    path = root / "docs/STABLE_RELEASE.md"
+    if not path.exists():
+        return _check(
+            "known_stable_blockers",
+            "Known stable-release blockers are tracked",
+            "blocker",
+            "Stable release doc is missing, so known blockers cannot be audited.",
+            "Add docs/STABLE_RELEASE.md with a Current Known Blockers section.",
+        )
+    blockers = _stable_release_blockers(path.read_text(encoding="utf-8"))
+    return _check(
+        "known_stable_blockers",
+        "Known stable-release blockers are resolved",
+        "pass" if not blockers else "blocker",
+        "No known stable-release blockers are listed."
+        if not blockers
+        else f"{len(blockers)} blocker(s) listed in docs/STABLE_RELEASE.md.",
+        "Resolve or intentionally remove every item in docs/STABLE_RELEASE.md Current Known Blockers before stable release.",
+    )
+
+
+def _stable_release_blockers(text: str) -> list[str]:
+    lines = text.splitlines()
+    in_section = False
+    blockers: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_section = stripped.lower() == "## current known blockers"
+            continue
+        if in_section and stripped.startswith("- "):
+            blockers.append(stripped[2:].strip())
+    return blockers
 
 
 def _check_golden_demo_doc(root: Path) -> dict[str, str]:
