@@ -1,8 +1,8 @@
 # interp-lab
 
-interp-lab is an open-source toolkit for **criterion-driven mechanistic interpretability**.
+interp-lab is an open-source toolkit for criterion-driven mechanistic interpretability.
 
-Give it a model, a plain-language criterion, and feature evidence. It ranks the internal features that track the criterion, explains them, tests their causal impact with interventions, and searches for equivalent features in other models — then grades how much each claim is actually supported by evidence.
+Give it a model, a plain-language criterion, and feature evidence. It ranks the internal features that track the criterion, explains them, tests their causal impact with interventions, and searches for equivalent features in other models, then grades how much each claim is supported by evidence.
 
 ```bash
 python -m pip install interp-lab
@@ -20,13 +20,11 @@ interp-lab inspect \
   --out reports/eval-awareness
 ```
 
-## What makes this different
+## Features
 
-Most interpretability tooling reports correlations and lets you infer the rest. interp-lab is built to **resist overclaiming**:
-
-- **Correlational vs. causal evidence are kept separate.** Association comes from activation/criterion statistics; causal effect comes from real ablation, amplification, clamp, patch, and steering runs. A feature that merely co-activates is not treated like one that *moves* the behavior.
+- **Correlational vs. causal evidence are kept separate.** Association comes from activation/criterion statistics; causal effect comes from ablation, amplification, clamp, patch, and steering runs. A feature that merely co-activates is not treated like one that *moves* the behavior.
 - **Claims are graded, not asserted.** `validate-matches` and `validate-attribution-graph` mark each result as `validated`, `needs_causal_evidence`, `plausible`, `contradicted`, or `weak`, with reason codes.
-- **Controls and uncertainty are first-class.** Intervention runs support `random_feature`, `matched_frequency`, and `placebo` controls, side-effect checks, sign-consistency, and confidence intervals. Cross-model matches with opposite-sign effects are explicitly *not* called equivalent.
+- **Controls and uncertainty are first-class.** Intervention runs support `random_feature`, `matched_frequency`, and `placebo` controls, side-effect checks, sign-consistency, and confidence intervals.
 - **Everything is reproducible and agent-friendly.** Runs emit manifests with the tool version, platform, and input hashes; reports include `agent_next_actions` with exact follow-up commands; `interp_lab.public_api_contract()` exposes the stable surface as data.
 
 ## The workflow
@@ -84,7 +82,7 @@ export INTERP_LAB_TEXT_EMBEDDER=minilm
 
 Each fingerprint records the embedder that produced it, and matching refuses to compare vectors from different embedders (it drops the text component and renormalizes rather than silently cosine-ing across incompatible axes). `interp-lab doctor` shows the active embedder and whether the extra is installed.
 
-> Note: ranking importance weights are heuristic, not calibrated against ground truth — treat scores as evidence-weighted rankings, not probabilities.
+> Note: ranking importance weights are heuristic — treat scores as evidence-weighted rankings, not probabilities.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 
