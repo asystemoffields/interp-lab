@@ -29,6 +29,14 @@ def test_inspection_markdown_includes_mechanism_sketch_without_boilerplate():
                     "strong_causal_score": 0.072,
                 },
                 metadata={
+                    "agent_next_actions": [
+                        {
+                            "id": "plan_sae_suppression",
+                            "title": "Plan a suppression test",
+                            "command": "interp-lab intervene --feature SAE:L24:F8 --dry-run --json",
+                            "requires": ["causal prompts", "SAE artifact"],
+                        }
+                    ],
                     "interventions": {
                         "count": 2,
                         "mean_directed_effect": 0.073,
@@ -37,6 +45,16 @@ def test_inspection_markdown_includes_mechanism_sketch_without_boilerplate():
                 },
             )
         ],
+        metadata={
+            "agent_next_actions": [
+                {
+                    "id": "plan_top_feature_interventions",
+                    "title": "Plan causal tests",
+                    "command": "interp-lab intervene --report report.json --dry-run --json",
+                    "requires": ["report JSON", "causal prompts"],
+                }
+            ]
+        },
     )
 
     markdown = render_inspection_markdown(report)
@@ -48,6 +66,10 @@ def test_inspection_markdown_includes_mechanism_sketch_without_boilerplate():
     assert "Causal direction: promotes criterion (0.073)" in markdown
     assert "Activation readout: `code planning latent`" in markdown
     assert "Causal readout: steering or ablating this feature promoted the criterion" in markdown
+    assert "## Agent Next Actions" in markdown
+    assert "interp-lab intervene --report report.json --dry-run --json" in markdown
+    assert "Next actions:" in markdown
+    assert "interp-lab intervene --feature SAE:L24:F8 --dry-run --json" in markdown
     assert "Treat this as a hypothesis" not in markdown
     assert "weak signed association" not in markdown
 
@@ -176,7 +198,19 @@ def test_inspection_html_renders_searchable_feature_cards(tmp_path):
                 metadata={"interventions": {"count": 2, "mean_directed_effect": 0.073}},
             )
         ],
-        metadata={"evidence": {"record_count": 12, "feature_count": 1}, "feature_count": 1, "kept_feature_count": 1},
+        metadata={
+            "evidence": {"record_count": 12, "feature_count": 1},
+            "feature_count": 1,
+            "kept_feature_count": 1,
+            "agent_next_actions": [
+                {
+                    "id": "plan_top_feature_interventions",
+                    "title": "Plan causal tests",
+                    "command": "interp-lab intervene --report report.json --dry-run --json",
+                    "requires": ["report JSON", "causal prompts"],
+                }
+            ],
+        },
     )
 
     html = render_inspection_html(report)
@@ -188,6 +222,8 @@ def test_inspection_html_renders_searchable_feature_cards(tmp_path):
     assert "SAE:L24:F8" in html
     assert "code planning latent" in html
     assert "strong causal 0.072" in html
+    assert "Agent Next Actions" in html
+    assert "interp-lab intervene --report report.json --dry-run --json" in html
     assert "visibleRows" in html
 
     path = write_inspection_html(report, tmp_path / "report.html")

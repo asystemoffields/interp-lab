@@ -71,7 +71,7 @@ interp-lab inspect \
   --html-out reports/inspection/report.html
 ```
 
-This writes JSON and Markdown by default. `--html-out` adds a self-contained searchable feature-card report.
+This writes JSON and Markdown by default. `--html-out` adds a self-contained searchable feature-card report. Reports include `agent_next_actions` with exact follow-up command templates for intervention planning, causal re-inspection, and graph export.
 
 Build a prompt dataset from prompts you wrote:
 

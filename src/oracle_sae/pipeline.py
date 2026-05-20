@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from oracle_sae.agent_actions import add_inspection_agent_actions
 from oracle_sae.adapters.base import FeatureProvider, InterventionRunner, Verbalizer
 from oracle_sae.criteria import CriterionCompiler, HeuristicCriterionCompiler
 from oracle_sae.fingerprints import build_fingerprint
@@ -56,12 +57,13 @@ def inspect_model(
     metadata = {"feature_count": len(evidence_items), "kept_feature_count": len(cards)}
     metadata.update(_provider_report_metadata(feature_provider))
     metadata.update(_runner_report_metadata(intervention_runner))
-    return InspectionReport(
+    report = InspectionReport(
         model=model,
         criterion=criterion,
         cards=cards[:top_k],
         metadata=metadata,
     )
+    return add_inspection_agent_actions(report)
 
 
 def match_reports(left: InspectionReport, right: InspectionReport, *, top_k: int = 10) -> MatchReport:

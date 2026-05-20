@@ -1,7 +1,7 @@
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.matching import match_feature_cards
 from oracle_sae.pipeline import inspect_model, match_reports
-from oracle_sae.schema import FeatureCard, FeatureFingerprint
+from oracle_sae.schema import Criterion, FeatureCard, FeatureEvidence, FeatureFingerprint
 
 
 def test_inspection_report_contains_ranked_feature_cards():
@@ -18,6 +18,23 @@ def test_inspection_report_contains_ranked_feature_cards():
     assert report.cards[0].importance >= report.cards[-1].importance
     assert report.cards[0].fingerprint.text_vector
     assert " the " not in f" {report.cards[0].label} "
+
+
+def test_inspection_report_includes_agent_intervention_actions():
+    report = inspect_model(
+        model="m",
+        criterion_text="successful tool calls",
+        feature_provider=_HiddenDimensionProvider(),
+        verbalizer=ToyVerbalizer(),
+        intervention_runner=ToyInterventionRunner(),
+        top_k=1,
+    )
+
+    assert report.metadata["agent_next_actions"][0]["id"] == "plan_top_feature_interventions"
+    actions = report.cards[0].metadata["agent_next_actions"]
+    assert actions[0]["id"] == "plan_hidden_suppression"
+    assert "--feature" in actions[0]["argv"]
+    assert "L6:D12" in actions[0]["command"]
 
 
 def test_match_reports_returns_candidates():
@@ -84,3 +101,20 @@ def _card(feature_id: str, label: str, signed: float) -> FeatureCard:
         fingerprint=fingerprint,
         causal_effects={"signed_causal_effect": signed},
     )
+
+
+class _HiddenDimensionProvider:
+    def features_for(self, model: str, criterion: Criterion) -> list[FeatureEvidence]:
+        return [
+            FeatureEvidence(
+                feature_id="L6:D12",
+                model=model,
+                layer=6,
+                label="tool-call hidden dimension",
+                examples=["p1: activation=1.0 | call the tool"],
+                activation_signature=[1.0, 0.0],
+                decoder_signature=[0.0, 1.0],
+                causal_effects={"criterion": 0.2, "specificity": 0.1},
+                source="activation-records",
+            )
+        ]

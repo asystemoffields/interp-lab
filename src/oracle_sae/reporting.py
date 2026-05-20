@@ -77,6 +77,9 @@ def render_inspection_markdown(report: InspectionReport) -> str:
     mechanism = _mechanism_sketch_lines(report)
     if mechanism:
         lines.extend(mechanism)
+    agent_actions = _agent_action_lines(report.metadata.get("agent_next_actions"), heading="## Agent Next Actions")
+    if agent_actions:
+        lines.extend(agent_actions)
     lines.extend(
         [
         "## Top Features",
@@ -115,6 +118,9 @@ def render_inspection_markdown(report: InspectionReport) -> str:
         interpretation = _card_interpretation_lines(card)
         if interpretation:
             lines.extend(interpretation)
+        actions = _agent_action_lines(card.metadata.get("agent_next_actions"), heading="Next actions:", limit=2)
+        if actions:
+            lines.extend(actions)
         lines.extend(["Examples:"])
         for example in card.examples[:3]:
             lines.append(f"- {example}")
@@ -164,6 +170,7 @@ def render_inspection_html(report: InspectionReport) -> str:
     evidence_summary = _html_evidence_summary(report.metadata.get("evidence"))
     scope = _report_scope_line(report.metadata)
     mechanism = _html_mechanism_summary(report)
+    agent_actions = _html_agent_actions(report.metadata.get("agent_next_actions"), limit=3)
     layer_options = "\n".join(
         f'<option value="{_attr(layer)}">{_h(layer)}</option>'
         for layer in _layer_filter_values(cards)
@@ -359,6 +366,22 @@ def render_inspection_html(report: InspectionReport) -> str:
       display: grid;
       gap: 6px;
     }}
+    .actions {{
+      display: grid;
+      gap: 8px;
+    }}
+    .action {{
+      display: grid;
+      gap: 4px;
+      padding: 9px;
+      border-radius: 7px;
+      background: #f6f8f7;
+    }}
+    .command {{
+      display: block;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }}
     .example {{
       padding: 8px;
       border-radius: 7px;
@@ -407,6 +430,7 @@ def render_inspection_html(report: InspectionReport) -> str:
       <h2>Mechanism Sketch</h2>
       <div class="notes">{mechanism}</div>
     </section>
+    {agent_actions}
     <section class="panel">
       <div class="toolbar">
         <input id="feature-search" type="search" placeholder="Filter by feature, label, examples, or evidence">
@@ -910,6 +934,7 @@ def _feature_detail_card(card, index: int) -> str:
         examples = '<div class="example">No activation examples were attached.</div>'
     training = _html_sae_training(card.metadata.get("sae_training"))
     interventions = _html_interventions(card.metadata.get("interventions"))
+    actions = _html_card_actions(card.metadata.get("agent_next_actions"), limit=2)
     chips = "\n".join(
         item
         for item in [
@@ -940,6 +965,7 @@ def _feature_detail_card(card, index: int) -> str:
           {interpretation}
           {training}
           {interventions}
+          {actions}
           <div class="examples">{examples}</div>
         </article>
 """
@@ -966,6 +992,76 @@ def _html_interventions(raw_value: object) -> str:
             continue
         compact.append(line.removeprefix("- "))
     return "\n".join(_html_note(line) for line in compact[:6])
+
+
+def _agent_action_lines(raw_value: object, *, heading: str, limit: int = 3) -> list[str]:
+    if not isinstance(raw_value, list):
+        return []
+    actions = [item for item in raw_value if isinstance(item, dict)][:limit]
+    if not actions:
+        return []
+    lines = [heading, ""]
+    for action in actions:
+        title = str(action.get("title") or action.get("id") or "Next action")
+        command = _action_command(action)
+        requires = action.get("requires")
+        requirement = ""
+        if isinstance(requires, list) and requires:
+            requirement = " Requires: " + ", ".join(str(item) for item in requires) + "."
+        lines.append(f"- {title}: `{command}`.{requirement}")
+    lines.append("")
+    return lines
+
+
+def _html_agent_actions(raw_value: object, *, limit: int = 3) -> str:
+    if not isinstance(raw_value, list):
+        return ""
+    actions = [item for item in raw_value if isinstance(item, dict)][:limit]
+    if not actions:
+        return ""
+    rows = "\n".join(_html_action(action) for action in actions)
+    return f"""
+    <section class="panel">
+      <h2>Agent Next Actions</h2>
+      <div class="actions">{rows}</div>
+    </section>
+"""
+
+
+def _html_card_actions(raw_value: object, *, limit: int = 2) -> str:
+    if not isinstance(raw_value, list):
+        return ""
+    actions = [item for item in raw_value if isinstance(item, dict)][:limit]
+    if not actions:
+        return ""
+    rows = "\n".join(_html_action(action) for action in actions)
+    return f'<div class="actions">{rows}</div>'
+
+
+def _html_action(action: dict) -> str:
+    title = str(action.get("title") or action.get("id") or "Next action")
+    command = _action_command(action)
+    requires = action.get("requires")
+    requirement = ""
+    if isinstance(requires, list) and requires:
+        requirement = f'<span class="label-line">Requires: {_h(", ".join(str(item) for item in requires))}</span>'
+    return f"""
+        <div class="action">
+          <strong>{_h(title)}</strong>
+          <code class="command">{_h(command)}</code>
+          {requirement}
+        </div>
+"""
+
+
+def _action_command(action: dict) -> str:
+    command = action.get("command")
+    if command:
+        return str(command)
+    argv = action.get("argv")
+    if isinstance(argv, list):
+        return " ".join(str(item) for item in argv)
+    return ""
 
 
 def _feature_evidence_pill(card) -> str:
