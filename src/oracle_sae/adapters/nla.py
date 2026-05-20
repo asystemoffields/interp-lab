@@ -48,26 +48,36 @@ class NlaVerbalizer:
     def metadata_for(self, evidence: FeatureEvidence, criterion: Criterion) -> dict[str, Any]:
         record = self._record_for(evidence)
         metadata_explanation = _metadata_explanation(evidence.metadata)
+        fallback_available = self.fallback is not None
         if record is None:
             return {
                 "verbalizer": {
                     "type": "nla",
-                    "source": "metadata" if metadata_explanation else "fallback",
+                    "source": _fallback_source(metadata_explanation, fallback_available),
                     "used_record": False,
-                    "used_fallback": metadata_explanation == "",
+                    "used_fallback": not metadata_explanation and fallback_available,
                 }
             }
         used_record = _passes_confidence(record, self.min_confidence)
-        return {
-            "verbalizer": {
-                "type": "nla",
+        source = "record" if used_record else _fallback_source(metadata_explanation, fallback_available)
+        metadata: dict[str, Any] = {
+            "type": "nla",
+            "source": source,
+            "record_source": record.source,
+            "confidence": record.confidence,
+            "used_record": used_record,
+            "used_fallback": not used_record and not metadata_explanation and fallback_available,
+            "paraphrases": record.paraphrases,
+            "metadata": record.metadata,
+        }
+        if not used_record:
+            metadata["rejected_record"] = {
                 "source": record.source,
                 "confidence": record.confidence,
-                "used_record": used_record,
-                "used_fallback": not used_record and not metadata_explanation,
-                "paraphrases": record.paraphrases,
-                "metadata": record.metadata,
+                "reason": "below_min_confidence",
             }
+        return {
+            "verbalizer": metadata
         }
 
     def report_metadata(self) -> dict[str, Any]:
@@ -148,6 +158,14 @@ def _passes_confidence(record: NlaExplanationRecord, min_confidence: float | Non
     if min_confidence is None or record.confidence is None:
         return True
     return record.confidence >= min_confidence
+
+
+def _fallback_source(metadata_explanation: str, fallback_available: bool) -> str:
+    if metadata_explanation:
+        return "metadata"
+    if fallback_available:
+        return "fallback"
+    return "label"
 
 
 def _optional_float(value: Any) -> float | None:

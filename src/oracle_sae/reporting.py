@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 
-from oracle_sae.schema import InspectionReport, MatchReport
+from oracle_sae.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA, InspectionReport, MatchReport
 
 PROMOTING_THRESHOLD = 0.05
 SMALL_EFFECT_THRESHOLD = 0.02
@@ -48,13 +48,39 @@ def write_inspection_html(report: InspectionReport, out_path: str | Path) -> Pat
 
 
 def load_inspection_report(path: str | Path) -> InspectionReport:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    return InspectionReport.from_dict(data)
+    report_path = Path(path)
+    try:
+        data = json.loads(report_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{report_path}: invalid inspection report JSON: {exc.msg}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{report_path}: inspection report must be a JSON object")
+    schema = data.get("schema_version")
+    if schema is not None and schema != INSPECTION_REPORT_SCHEMA:
+        raise ValueError(f"{report_path}: unsupported inspection report schema_version {schema!r}")
+    if "cards" in data and not isinstance(data["cards"], list):
+        raise ValueError(f"{report_path}: inspection report cards must be a list")
+    try:
+        return InspectionReport.from_dict(data)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"{report_path}: invalid inspection report: {exc}") from exc
 
 
 def load_match_report(path: str | Path) -> MatchReport:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    return MatchReport.from_dict(data)
+    report_path = Path(path)
+    try:
+        data = json.loads(report_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{report_path}: invalid match report JSON: {exc.msg}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{report_path}: match report must be a JSON object")
+    schema = data.get("schema_version")
+    if schema is not None and schema != MATCH_REPORT_SCHEMA:
+        raise ValueError(f"{report_path}: unsupported match report schema_version {schema!r}")
+    try:
+        return MatchReport.from_dict(data)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"{report_path}: invalid match report: {exc}") from exc
 
 
 def render_inspection_markdown(report: InspectionReport) -> str:

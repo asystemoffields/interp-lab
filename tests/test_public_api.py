@@ -373,8 +373,8 @@ def test_run_and_doctor_api(tmp_path: Path):
     assert profile_environment(tmp_path)["schema_version"] == "interp-lab.env_profile.v1"
 
 
-def test_release_check_public_api_reports_not_ready():
-    report = release_check(Path.cwd())
+def test_release_check_public_api_reports_not_ready(tmp_path: Path):
+    report = release_check(tmp_path)
 
     assert report["schema_version"] == "interp-lab.release_check.v1"
     assert report["ready_for_stable_release"] is False

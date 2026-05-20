@@ -4,6 +4,7 @@ import argparse
 import html
 import itertools
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ EXPLANATION_CONSISTENCY_SCHEMA = "interp-lab.explanation_consistency.v1"
 FEATURE_SEARCH_SCHEMA = "interp-lab.feature_search.v1"
 MODEL_FAMILY_COMPARISON_SCHEMA = "interp-lab.model_family_comparison.v1"
 TEXT_PIVOT_MATCH_SCHEMA = "interp-lab.text_pivot_match.v1"
+DEFAULT_MAX_ANALYSIS_FEATURES = 50_000
+DEFAULT_MAX_PAIRWISE_COMPARISONS = 250_000
 
 
 @dataclass(frozen=True)
@@ -165,24 +168,36 @@ def build_explanation_consistency_report(
     max_rank_span: int = 5,
     top_k: int | None = None,
 ) -> dict[str, Any]:
+    top_k = _optional_positive_int("top_k", top_k)
+    max_rank_span = _nonnegative_int("max_rank_span", max_rank_span)
+    min_similarity = _bounded_float("min_similarity", min_similarity)
     loaded = _load_reports(reports)
-    feature_groups: dict[str, list[tuple[int, FeatureCard]]] = {}
+    _check_feature_budget(sum(len(item["report"].cards) for item in loaded), context="explanation consistency")
+    feature_groups: dict[str, list[tuple[int, int, FeatureCard]]] = {}
     for report_index, item in enumerate(loaded):
         cards = item["report"].cards[:top_k] if top_k is not None else item["report"].cards
         for rank, card in enumerate(cards, start=1):
-            feature_groups.setdefault(card.feature_id, []).append((rank, card))
+            feature_groups.setdefault(card.feature_id, []).append((report_index, rank, card))
     checks = []
     for feature_id, occurrences in sorted(feature_groups.items()):
-        ranks = [rank for rank, _ in occurrences]
-        cards = [card for _, card in occurrences]
+        ranks = [rank for _, rank, _ in occurrences]
+        cards = [card for _, _, card in occurrences]
+        covered_report_indexes = {index for index, _, _ in occurrences}
+        duplicate_report_indexes = sorted(
+            index
+            for index in covered_report_indexes
+            if sum(1 for item_index, _, _ in occurrences if item_index == index) > 1
+        )
         similarities = [
             _text_similarity(_explanation_text(left), _explanation_text(right))
             for left, right in itertools.combinations(cards, 2)
         ]
         mean_similarity = sum(similarities) / len(similarities) if similarities else 1.0
         rank_span = max(ranks) - min(ranks) if ranks else 0
-        if len(occurrences) < len(loaded):
+        if len(covered_report_indexes) < len(loaded):
             status = "missing_in_some_reports"
+        elif duplicate_report_indexes:
+            status = "duplicate_feature_id"
         elif mean_similarity < min_similarity:
             status = "explanation_drift"
         elif rank_span > max_rank_span:
@@ -194,7 +209,9 @@ def build_explanation_consistency_report(
                 "feature_id": feature_id,
                 "status": status,
                 "occurrence_count": len(occurrences),
+                "covered_report_count": len(covered_report_indexes),
                 "report_count": len(loaded),
+                "duplicate_report_indexes": duplicate_report_indexes,
                 "mean_explanation_similarity": round(mean_similarity, 6),
                 "rank_span": rank_span,
                 "importance_mean": round(sum(card.importance for card in cards) / len(cards), 6),
@@ -212,7 +229,7 @@ def build_explanation_consistency_report(
                 ],
             }
         )
-    checks.sort(key=lambda item: (_status_sort_key(item["status"]), -item["occurrence_count"], -item["importance_mean"]))
+    checks.sort(key=lambda item: (_status_sort_key(item["status"]), -item["covered_report_count"], -item["importance_mean"]))
     summary = {
         "report_count": len(loaded),
         "feature_count": len(checks),
@@ -220,7 +237,8 @@ def build_explanation_consistency_report(
         "explanation_drift_count": sum(1 for item in checks if item["status"] == "explanation_drift"),
         "rank_drift_count": sum(1 for item in checks if item["status"] == "rank_drift"),
         "missing_count": sum(1 for item in checks if item["status"] == "missing_in_some_reports"),
-        "shared_feature_count": sum(1 for item in checks if item["occurrence_count"] == len(loaded)),
+        "duplicate_feature_id_count": sum(1 for item in checks if item["status"] == "duplicate_feature_id"),
+        "shared_feature_count": sum(1 for item in checks if item["covered_report_count"] == len(loaded)),
     }
     summary["shared_feature_fraction"] = round(
         summary["shared_feature_count"] / summary["feature_count"],
@@ -268,7 +286,10 @@ def build_feature_search_report(
     top_k: int = 10,
     min_score: float = 0.0,
 ) -> dict[str, Any]:
+    top_k = _positive_int("top_k", top_k)
+    min_score = _nonnegative_float("min_score", min_score)
     loaded = _load_reports(reports)
+    _check_feature_budget(sum(len(item["report"].cards) for item in loaded), context="feature search")
     query_vector = hash_text_vector(query)
     results = []
     for item in loaded:
@@ -306,6 +327,13 @@ def build_feature_search_report(
                         f"Run interp-lab intervene --report {item['path']} --feature {card.feature_id} "
                         "to test amplification or suppression."
                     ),
+                    "agent_next_action_argv": [
+                        "intervene",
+                        "--report",
+                        item["path"],
+                        "--feature",
+                        card.feature_id,
+                    ],
                 }
             )
     results.sort(key=lambda item: item["score"], reverse=True)
@@ -389,11 +417,15 @@ def build_text_pivot_match_report(
     min_score: float = 0.0,
     min_text_score: float = 0.55,
 ) -> dict[str, Any]:
+    top_k = _positive_int("top_k", top_k)
+    per_left = _positive_int("per_left", per_left)
+    min_score = _nonnegative_float("min_score", min_score)
+    min_text_score = _bounded_float("min_text_score", min_text_score)
     left_loaded = _load_reports(left_reports)
     right_loaded = _load_reports(right_reports)
     left_cards = _ranked_cards(left_loaded)
     right_cards = _ranked_cards(right_loaded)
-    grouped: list[dict[str, Any]] = []
+    _check_pairwise_budget(len(left_cards) * len(right_cards), context="text-pivot matching")
     all_matches: list[dict[str, Any]] = []
     for left_item in left_cards:
         candidates = []
@@ -402,26 +434,17 @@ def build_text_pivot_match_report(
             if match["score"] >= min_score:
                 candidates.append(match)
         candidates.sort(key=lambda item: item["score"], reverse=True)
-        kept = candidates[: max(1, per_left)]
+        kept = candidates[:per_left]
         all_matches.extend(kept)
-        if kept:
-            grouped.append(
-                {
-                    "left_feature_id": left_item["card"].feature_id,
-                    "left_model": left_item["report"].model,
-                    "left_report": left_item["path"],
-                    "left_rank": left_item["rank"],
-                    "left_label": left_item["card"].label,
-                    "candidates": kept,
-                }
-            )
     all_matches.sort(key=lambda item: item["score"], reverse=True)
     top_matches = all_matches[:top_k]
+    grouped = _group_text_pivot_matches(left_cards, top_matches)
     summary = {
         "left_report_count": len(left_loaded),
         "right_report_count": len(right_loaded),
         "left_feature_count": len(left_cards),
         "right_feature_count": len(right_cards),
+        "candidate_pool_count": len(all_matches),
         "candidate_count": len(top_matches),
         "text_supported_count": sum(1 for item in top_matches if item["components"]["text_pivot"] >= min_text_score),
         "causal_supported_count": sum(1 for item in top_matches if item["evidence_grade"] == "text_pivot_with_causal_support"),
@@ -451,11 +474,18 @@ def build_model_family_comparison_report(
     top_k: int = 5,
     min_score: float = 0.65,
 ) -> dict[str, Any]:
+    top_k = _positive_int("top_k", top_k)
+    min_score = _nonnegative_float("min_score", min_score)
     loaded = []
     for member in members:
         report_path = _resolve_report_path(member["report"])
         report = load_inspection_report(report_path)
         loaded.append({"family": member["family"], "path": str(report_path), "report": report})
+    comparison_count = sum(
+        len(left["report"].cards) * len(right["report"].cards)
+        for left, right in itertools.combinations(loaded, 2)
+    )
+    _check_pairwise_budget(comparison_count, context="model-family comparison")
     pairwise = []
     for left, right in itertools.combinations(loaded, 2):
         matches = match_feature_cards(left["report"].cards, right["report"].cards, top_k=top_k, min_score=0.0)
@@ -796,15 +826,37 @@ def _ranked_cards(loaded: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _occurrences_with_report_indexes(
     loaded: list[dict[str, Any]],
-    occurrences: list[tuple[int, FeatureCard]],
+    occurrences: list[tuple[int, int, FeatureCard]],
 ) -> list[tuple[int, tuple[int, FeatureCard]]]:
-    output = []
-    for rank, card in occurrences:
-        for index, item in enumerate(loaded):
-            if any(existing.feature_id == card.feature_id and existing is card for existing in item["report"].cards):
-                output.append((index, (rank, card)))
-                break
-    return output
+    return [(index, (rank, card)) for index, rank, card in occurrences]
+
+
+def _group_text_pivot_matches(
+    left_cards: list[dict[str, Any]],
+    matches: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped = []
+    for left_item in left_cards:
+        card = left_item["card"]
+        candidates = [
+            item
+            for item in matches
+            if item["left_feature_id"] == card.feature_id
+            and item["left_model"] == card.model
+            and item["left_report"] == left_item["path"]
+        ]
+        if candidates:
+            grouped.append(
+                {
+                    "left_feature_id": card.feature_id,
+                    "left_model": left_item["report"].model,
+                    "left_report": left_item["path"],
+                    "left_rank": left_item["rank"],
+                    "left_label": card.label,
+                    "candidates": candidates,
+                }
+            )
+    return grouped
 
 
 def _search_components(query: str, query_vector: list[float], card: FeatureCard) -> dict[str, float]:
@@ -819,7 +871,7 @@ def _search_components(query: str, query_vector: list[float], card: FeatureCard)
 def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, min_text_score: float) -> dict[str, Any]:
     left = left_item["card"]
     right = right_item["card"]
-    explanation = _text_similarity(_explanation_text(left), _explanation_text(right))
+    explanation = _text_similarity(left.explanation, right.explanation)
     label = _text_similarity(left.label, right.label)
     examples = _text_similarity(" ".join(left.examples[:5]), " ".join(right.examples[:5]))
     fingerprint_text = _unit_cosine(left.fingerprint.text_vector, right.fingerprint.text_vector)
@@ -828,7 +880,15 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
     causal = _causal_component(left, right)
     rank = _rank_component(left_item["rank"], right_item["rank"], left_item["total"], right_item["total"])
     signed = _signed_component(left, right)
-    text_pivot = max(explanation, label, examples, fingerprint_text)
+    text_pivot = max(explanation, label, examples)
+    text_source = _text_pivot_source(
+        {
+            "explanation": explanation,
+            "label": label,
+            "examples": examples,
+        }
+    )
+    causal_evidence = 1.0 if _has_intervention_evidence(left) and _has_intervention_evidence(right) else 0.0
     score = clamp(
         0.38 * text_pivot
         + 0.17 * explanation
@@ -849,6 +909,7 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
         "activation": round(activation, 6),
         "decoder": round(decoder, 6),
         "causal": round(causal, 6),
+        "causal_evidence": causal_evidence,
         "rank": round(rank, 6),
         "signed_effect": round(signed, 6),
     }
@@ -866,11 +927,19 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
         "score": round(score, 6),
         "components": components,
         "evidence_grade": _text_pivot_grade(components, min_text_score=min_text_score),
+        "text_pivot_source": text_source,
         "matched_terms": sorted(set(content_tokens(_card_search_text(left))) & set(content_tokens(_card_search_text(right)))),
         "agent_next_action": (
             f"Validate with interp-lab match --left {left_item['path']} --right {right_item['path']} "
             "followed by interp-lab validate-matches."
         ),
+        "agent_next_action_argv": [
+            "match",
+            "--left",
+            left_item["path"],
+            "--right",
+            right_item["path"],
+        ],
     }
 
 
@@ -933,18 +1002,33 @@ def _signed_effect(card: FeatureCard) -> float | None:
     return None
 
 
+def _has_intervention_evidence(card: FeatureCard) -> bool:
+    return any(key in card.causal_effects for key in ("signed_causal_effect", "strong_causal_score"))
+
+
 def _norm(values: list[float]) -> float:
     return sum(value * value for value in values) ** 0.5
 
 
 def _text_pivot_grade(components: dict[str, float], *, min_text_score: float) -> str:
-    if components["text_pivot"] >= min_text_score and components["causal"] >= 0.65 and components["signed_effect"] >= 0.65:
+    if (
+        components["explanation"] >= min_text_score
+        and components["causal_evidence"] >= 1.0
+        and components["causal"] >= 0.65
+        and components["signed_effect"] >= 0.65
+    ):
         return "text_pivot_with_causal_support"
-    if components["text_pivot"] >= min_text_score and components["activation"] >= 0.65:
+    if components["explanation"] >= min_text_score and components["activation"] >= 0.65:
         return "text_pivot_with_activation_support"
-    if components["text_pivot"] >= min_text_score:
+    if components["explanation"] >= min_text_score:
         return "text_pivot_candidate"
+    if components["text_pivot"] >= min_text_score:
+        return "label_or_example_text_candidate"
     return "weak_text_pivot"
+
+
+def _text_pivot_source(components: dict[str, float]) -> str:
+    return max(components.items(), key=lambda item: item[1])[0]
 
 
 def _status_sort_key(status: str) -> int:
@@ -952,12 +1036,63 @@ def _status_sort_key(status: str) -> int:
         "explanation_drift": 0,
         "rank_drift": 1,
         "missing_in_some_reports": 2,
-        "consistent": 3,
+        "duplicate_feature_id": 3,
+        "consistent": 4,
     }.get(status, 4)
 
 
 def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _positive_int(name: str, value: int) -> int:
+    value = int(value)
+    if value < 1:
+        raise ValueError(f"{name} must be at least 1")
+    return value
+
+
+def _optional_positive_int(name: str, value: int | None) -> int | None:
+    if value is None:
+        return None
+    return _positive_int(name, value)
+
+
+def _nonnegative_int(name: str, value: int) -> int:
+    value = int(value)
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative")
+    return value
+
+
+def _nonnegative_float(name: str, value: float) -> float:
+    value = float(value)
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError(f"{name} must be a finite non-negative number")
+    return value
+
+
+def _bounded_float(name: str, value: float) -> float:
+    value = _nonnegative_float(name, value)
+    if value > 1.0:
+        raise ValueError(f"{name} must be between 0 and 1")
+    return value
+
+
+def _check_feature_budget(count: int, *, context: str) -> None:
+    if count > DEFAULT_MAX_ANALYSIS_FEATURES:
+        raise ValueError(
+            f"{context} would scan {count} features; split the report set or reduce top_k "
+            f"below {DEFAULT_MAX_ANALYSIS_FEATURES}"
+        )
+
+
+def _check_pairwise_budget(count: int, *, context: str) -> None:
+    if count > DEFAULT_MAX_PAIRWISE_COMPARISONS:
+        raise ValueError(
+            f"{context} would compare {count} feature pairs; split reports or keep fewer cards "
+            f"below {DEFAULT_MAX_PAIRWISE_COMPARISONS} pairwise comparisons"
+        )
 
 
 def _family_pair_summaries(pairwise: list[dict[str, Any]]) -> list[dict[str, Any]]:

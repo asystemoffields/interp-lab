@@ -37,7 +37,11 @@ python -m build
 python -m twine check dist/*
 interp-lab doctor
 interp-lab run examples/run_records.json
+interp-lab demo-sweep --run --out reports/real-model-demo-sweep.json
+interp-lab release-check --strict --out reports/release-check.json
 ```
+
+Archive the generated demo-sweep and release-check reports with the GitHub release notes.
 
 Confirm the package imports:
 

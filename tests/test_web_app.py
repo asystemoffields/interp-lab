@@ -78,6 +78,35 @@ def test_optional_select_fields_do_not_receive_parser_choice_defaults():
     assert "default" not in scope_source
 
 
+def test_explanation_studio_specs_round_trip_through_parser():
+    parser = build_parser()
+    specs = command_specs_from_parser(parser)
+    ids = {spec["id"]: spec for spec in specs}
+    samples = {
+        "check-explanation-consistency": [
+            "--report",
+            "reports/a/report.json",
+            "--report",
+            "reports/b/report.json",
+            "--max-rank-span",
+            "3",
+        ],
+        "search-features": ["--report", "reports/a/report.json", "--query", "tool calls"],
+        "compare-model-families": [
+            "--member",
+            "gemma=reports/gemma/report.json",
+            "--member",
+            "qwen=reports/qwen/report.json",
+        ],
+        "match-text-pivot": ["--left", "reports/a/report.json", "--right", "reports/b/report.json"],
+    }
+
+    for command, args in samples.items():
+        assert command in ids
+        namespace = parser.parse_args([command, *args])
+        assert namespace.command == command
+
+
 def test_write_web_app(tmp_path: Path):
     out = tmp_path / "studio.html"
 

@@ -29,6 +29,7 @@ def test_public_api_signature_contract_is_current():
         actual_parameters = list(inspect.signature(function).parameters)
         for parameter in expected_parameters:
             assert parameter in actual_parameters, f"{function_name} missing {parameter}"
+        assert expected_parameters == list(dict.fromkeys(expected_parameters)), function_name
 
 
 def test_schema_contracts_stay_versioned():

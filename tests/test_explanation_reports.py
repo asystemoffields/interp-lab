@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from oracle_sae.adapters.nla import NlaVerbalizer
-from oracle_sae.adapters.toy import ToyInterventionRunner
+from oracle_sae.adapters.toy import ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.cli import main
 from oracle_sae.explanation_reports import (
     build_explanation_consistency_report,
@@ -41,6 +43,31 @@ def test_nla_verbalizer_uses_external_feature_explanations():
     assert report.metadata["verbalizer"]["record_count"] == 1
 
 
+def test_nla_verbalizer_metadata_reports_actual_fallback_source():
+    report = inspect_model(
+        model="m",
+        criterion_text="successful tool calls",
+        feature_provider=_SingleFeatureProvider(),
+        verbalizer=NlaVerbalizer(
+            {
+                "L1:F7": {
+                    "explanation": "Low-confidence explanation.",
+                    "confidence": 0.1,
+                }
+            },
+            min_confidence=0.8,
+            fallback=ToyVerbalizer(),
+        ),
+        intervention_runner=ToyInterventionRunner(),
+        top_k=1,
+    )
+
+    metadata = report.cards[0].metadata["verbalizer"]
+    assert metadata["source"] == "fallback"
+    assert metadata["used_record"] is False
+    assert metadata["rejected_record"]["reason"] == "below_min_confidence"
+
+
 def test_explanation_consistency_report_flags_stable_shared_features(tmp_path: Path):
     left_path = _write_report(
         tmp_path / "left",
@@ -58,6 +85,30 @@ def test_explanation_consistency_report_flags_stable_shared_features(tmp_path: P
     assert report["schema_version"] == "interp-lab.explanation_consistency.v1"
     assert report["summary"]["consistent_count"] == 1
     assert report["checks"][0]["feature_id"] == "L1:F1"
+
+
+def test_explanation_consistency_uses_distinct_report_coverage(tmp_path: Path):
+    left_path = _write_report(
+        tmp_path / "left",
+        criterion="successful tool calls",
+        cards=[
+            _card("L1:F1", "tool call syntax", "Activates on structured tool calls.", 0.9),
+            _card("L1:F1", "tool call syntax duplicate", "Activates on structured tool calls.", 0.7),
+        ],
+    )
+    right_path = _write_report(
+        tmp_path / "right",
+        criterion="successful tool calls",
+        cards=[_card("L1:F2", "other feature", "Activates on something else.", 0.6)],
+    )
+
+    report = build_explanation_consistency_report(reports=[left_path, right_path])
+    check = next(item for item in report["checks"] if item["feature_id"] == "L1:F1")
+
+    assert check["status"] == "missing_in_some_reports"
+    assert check["covered_report_count"] == 1
+    assert check["duplicate_report_indexes"] == [0]
+    assert report["summary"]["shared_feature_count"] == 0
 
 
 def test_feature_search_ranks_natural_language_query(tmp_path: Path):
@@ -132,6 +183,95 @@ def test_text_pivot_match_report_uses_explanations_as_bridge(tmp_path: Path):
     assert report["matches"][0]["right_feature_id"] == "L4:F9"
     assert report["matches"][0]["components"]["text_pivot"] >= 0.9
     assert report["matches"][0]["evidence_grade"] == "text_pivot_with_causal_support"
+
+
+def test_text_pivot_does_not_upgrade_label_only_or_association_only_matches(tmp_path: Path):
+    left = _write_report(
+        tmp_path / "left",
+        model="left-model",
+        criterion="successful tool calls",
+        cards=[
+            _card(
+                "L1:F1",
+                "shared label",
+                "Represents valid tool-call argument construction.",
+                0.9,
+                model="left-model",
+                causal_effects={"criterion": 0.9, "signed_association": 0.9},
+            )
+        ],
+    )
+    right = _write_report(
+        tmp_path / "right",
+        model="right-model",
+        criterion="successful tool calls",
+        cards=[
+            _card(
+                "L1:F9",
+                "shared label",
+                "Represents warm social greeting style.",
+                0.8,
+                model="right-model",
+                causal_effects={"criterion": 0.8, "signed_association": 0.8},
+            )
+        ],
+    )
+
+    report = build_text_pivot_match_report(
+        left_reports=[left],
+        right_reports=[right],
+        top_k=1,
+        per_left=1,
+        min_text_score=0.95,
+    )
+    match = report["matches"][0]
+
+    assert match["text_pivot_source"] == "label"
+    assert match["components"]["causal_evidence"] == 0.0
+    assert match["evidence_grade"] == "label_or_example_text_candidate"
+
+
+def test_text_pivot_rejects_zero_per_left(tmp_path: Path):
+    left = _write_report(
+        tmp_path / "left",
+        criterion="successful tool calls",
+        cards=[_card("L1:F1", "tool call syntax", "Tracks tool calls.", 0.9)],
+    )
+    right = _write_report(
+        tmp_path / "right",
+        criterion="successful tool calls",
+        cards=[_card("L1:F2", "tool call syntax", "Tracks tool calls.", 0.9)],
+    )
+
+    with pytest.raises(ValueError, match="per_left must be at least 1"):
+        build_text_pivot_match_report(left_reports=[left], right_reports=[right], per_left=0)
+
+
+def test_text_pivot_rejects_unbounded_pairwise_work(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    left = _write_report(
+        tmp_path / "left",
+        criterion="successful tool calls",
+        cards=[_card("L1:F1", "tool call syntax", "Tracks tool calls.", 0.9)],
+    )
+    right = _write_report(
+        tmp_path / "right",
+        criterion="successful tool calls",
+        cards=[_card("L1:F2", "tool call syntax", "Tracks tool calls.", 0.9)],
+    )
+
+    monkeypatch.setattr("oracle_sae.explanation_reports.DEFAULT_MAX_PAIRWISE_COMPARISONS", 0)
+    with pytest.raises(ValueError, match="text-pivot matching would compare"):
+        build_text_pivot_match_report(left_reports=[left], right_reports=[right])
+
+
+def test_malformed_report_errors_are_user_facing(tmp_path: Path):
+    bad_report = tmp_path / "bad-report.json"
+    bad_report.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        main(["search-features", "--report", str(bad_report), "--query", "tool calls"])
+
+    assert exc.value.code == 2
 
 
 def test_new_report_commands_write_json_and_markdown(tmp_path: Path):
@@ -317,7 +457,9 @@ def _card(
     importance: float,
     *,
     model: str = "m",
+    causal_effects: dict[str, float] | None = None,
 ) -> FeatureCard:
+    causal = causal_effects or {"criterion": importance, "signed_causal_effect": importance}
     evidence = FeatureEvidence(
         feature_id=feature_id,
         model=model,
@@ -326,7 +468,7 @@ def _card(
         examples=[explanation],
         activation_signature=[1.0, 0.0],
         decoder_signature=[0.0, 1.0],
-        causal_effects={"criterion": importance, "signed_causal_effect": importance},
+        causal_effects=causal,
         source="test",
     )
     return FeatureCard(

@@ -230,6 +230,7 @@ COMMAND_SPECS: list[dict[str, Any]] = [
             {"key": "markdown_out", "flag": "--markdown-out", "label": "Markdown report", "default": "reports/explanation-consistency.md"},
             {"key": "html_out", "flag": "--html-out", "label": "HTML report", "default": "reports/explanation-consistency.html"},
             {"key": "min_similarity", "flag": "--min-similarity", "label": "Min similarity", "type": "number", "default": "0.72"},
+            {"key": "max_rank_span", "flag": "--max-rank-span", "label": "Max rank span", "type": "number", "default": "5"},
             {"key": "top_k", "flag": "--top-k", "label": "Top K", "type": "number"},
         ],
     },
