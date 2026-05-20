@@ -85,9 +85,50 @@ modal run examples/modal_gemma4.py \
   --out-dir reports/gemma4-modal/hidden
 ```
 
+Run a tool-call behavior assay:
+
+```bash
+interp-lab validate-assay \
+  --preset-file examples/presets/successful-tool-calls.json \
+  --out reports/gemma4-tool-calls/assay-validation.json
+
+modal run examples/modal_gemma4.py \
+  --workflow hidden \
+  --dataset examples/gemma4_tool_call_prompts.jsonl \
+  --criterion "the assistant should produce a valid schema-following tool call that successfully executes the user's requested operation" \
+  --layers 20,28,35 \
+  --features-per-layer 32 \
+  --top-k 16 \
+  --group-top-k 8 \
+  --target-token auto \
+  --max-length 96 \
+  --out-dir reports/gemma4-tool-calls/modal-hidden
+```
+
+After the run, export the causal report as an attribution graph:
+
+```bash
+interp-lab export-attribution-graph \
+  --report reports/gemma4-tool-calls/modal-hidden/hidden-causal/report.json \
+  --out reports/gemma4-tool-calls/modal-hidden/graph.json \
+  --markdown-out reports/gemma4-tool-calls/modal-hidden/graph.md \
+  --html-out reports/gemma4-tool-calls/modal-hidden/graph.html
+
+interp-lab summarize-attribution-graph \
+  --graph reports/gemma4-tool-calls/modal-hidden/graph.json \
+  --out reports/gemma4-tool-calls/modal-hidden/graph-summary.json
+```
+
 Set `INTERP_LAB_MODAL_GPU=L40S` or another Modal GPU name before `modal run` when you want a larger accelerator. The default is `A10G`.
 
 The Modal workflows default to `--target-token auto`. Read the causal report's behavior-score line after the run: if the baseline score is saturated, rerun with a narrower explicit target-token set for the behavior you care about. If the score is near zero even with auto targets, inspect the target-token sample in the report and pass explicit `raw:` or `space:` tokens for the behavior.
+
+On Windows PowerShell, set UTF-8 output before running Modal in a redirected or background process:
+
+```powershell
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+```
 
 ## Choose The Model
 

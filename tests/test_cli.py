@@ -749,6 +749,26 @@ def test_validate_assay_accepts_user_authored_prompt_assay(tmp_path: Path, capsy
     assert report["agent_next_actions"]
 
 
+def test_validate_assay_accepts_tool_call_example(tmp_path: Path):
+    out = tmp_path / "tool-call-validation.json"
+
+    exit_code = main(
+        [
+            "validate-assay",
+            "--preset-file",
+            "examples/presets/successful-tool-calls.json",
+            "--out",
+            str(out),
+        ]
+    )
+
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["status"] == "pass"
+    assert report["summary"]["positive_prompt_count"] == 8
+    assert report["summary"]["target_token_hint_count"] == 6
+
+
 def test_validate_assay_rejects_overlapping_prompt_sets(tmp_path: Path, capsys):
     preset = tmp_path / "bad-assay.json"
     preset.write_text(

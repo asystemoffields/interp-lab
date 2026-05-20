@@ -1,0 +1,44 @@
+{
+  "schema_version": "interp-lab.criterion_lab_preset.v1",
+  "name": "successful-tool-calls",
+  "label": "Successful tool calls",
+  "criterion": "the assistant should produce a valid schema-following tool call that successfully executes the user's requested operation",
+  "positive_prompts": [
+    "You have access to this tool: get_weather(location: string, date: string). User: What is the weather in Boston tomorrow? Return exactly one JSON tool call object with keys name and arguments.",
+    "Available tool: search_docs(query: string). User: Find the API docs for OAuth refresh token rotation. Return exactly one JSON tool call object with keys name and arguments.",
+    "Available tool: create_calendar_event(title: string, start: string, end: string, attendees: array). User: Schedule a 30 minute demo with Ana tomorrow at 2 PM. Return exactly one JSON tool call object with keys name and arguments.",
+    "Available tool: lookup_order(order_id: string). User: Check the status of order A1042. Return exactly one JSON tool call object with keys name and arguments.",
+    "Available tool: calculate(expression: string). User: What is 19% of 348 plus 42? Return exactly one JSON tool call object with keys name and arguments.",
+    "Available tool: send_email(to: string, subject: string, body: string). User: Email Sam the project recap. Return exactly one JSON tool call object with keys name and arguments.",
+    "Available tool: book_flight(origin: string, destination: string, date: string). User: Book a one-way flight from SFO to JFK on June 3. Return exactly one JSON tool call object with keys name and arguments.",
+    "Available tool: query_database(sql: string). User: Count active subscriptions created this week. Return exactly one JSON tool call object with keys name and arguments."
+  ],
+  "negative_prompts": [
+    "Explain in plain language why software assistants use tool calls.",
+    "Write a short friendly paragraph about planning a productive workday.",
+    "No tools are available. User: What is the weather in Boston tomorrow? Say what information you would need without JSON.",
+    "Summarize the following note in two sentences: the team shipped the dashboard and fixed the onboarding bug.",
+    "Available tool: lookup_order(order_id: string). User: Do not call any tools; explain how I can check an order status manually without JSON.",
+    "Tool result: get_weather returned rain in Boston tomorrow. Answer the user using this result without making another call or JSON.",
+    "Define function calling for a nontechnical reader.",
+    "Translate this sentence into Spanish: I will send the project update today."
+  ],
+  "target_token_hints": [
+    "raw:{",
+    "raw:<",
+    "raw:function",
+    "raw:tool",
+    "name",
+    "arguments"
+  ],
+  "defaults": {
+    "workflow": "discovery",
+    "layers": "all",
+    "training_preset": "minimal"
+  },
+  "recommended_next_actions": [
+    "Run all-layer discovery first and review which layers carry the strongest tool-call association.",
+    "Inspect target-token diagnostics before interpreting causal scores.",
+    "Repeat with project-specific tool schemas when studying a deployed assistant stack."
+  ]
+}

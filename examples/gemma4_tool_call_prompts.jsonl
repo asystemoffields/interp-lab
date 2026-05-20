@@ -1,0 +1,16 @@
+{"prompt_id":"tool-call-1","text":"You have access to this tool: get_weather(location: string, date: string). User: What is the weather in Boston tomorrow? Return exactly one JSON tool call object with keys name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-call-2","text":"Available tool: search_docs(query: string). User: Find the API docs for OAuth refresh token rotation. Return exactly one JSON tool call object with keys name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-call-3","text":"Available tool: create_calendar_event(title: string, start: string, end: string, attendees: array). User: Schedule a 30 minute demo with Ana tomorrow at 2 PM. Return exactly one JSON tool call object with keys name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-call-4","text":"Available tool: lookup_order(order_id: string). User: Check the status of order A1042. Return exactly one JSON tool call object with keys name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-call-5","text":"Available tool: calculate(expression: string). User: What is 19% of 348 plus 42? Return exactly one JSON tool call object with keys name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-call-6","text":"Available tool: send_email(to: string, subject: string, body: string). User: Email Sam the project recap. Return exactly one JSON tool call object with keys name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-call-7","text":"Available tool: book_flight(origin: string, destination: string, date: string). User: Book a one-way flight from SFO to JFK on June 3. Return exactly one JSON tool call object with keys name and arguments.","criterion_score":1.0}
+{"prompt_id":"tool-call-8","text":"Available tool: query_database(sql: string). User: Count active subscriptions created this week. Return exactly one JSON tool call object with keys name and arguments.","criterion_score":1.0}
+{"prompt_id":"non-tool-1","text":"Explain in plain language why software assistants use tool calls.","criterion_score":0.0}
+{"prompt_id":"non-tool-2","text":"Write a short friendly paragraph about planning a productive workday.","criterion_score":0.0}
+{"prompt_id":"non-tool-3","text":"No tools are available. User: What is the weather in Boston tomorrow? Say what information you would need without JSON.","criterion_score":0.0}
+{"prompt_id":"non-tool-4","text":"Summarize the following note in two sentences: the team shipped the dashboard and fixed the onboarding bug.","criterion_score":0.0}
+{"prompt_id":"non-tool-5","text":"Available tool: lookup_order(order_id: string). User: Do not call any tools; explain how I can check an order status manually without JSON.","criterion_score":0.0}
+{"prompt_id":"non-tool-6","text":"Tool result: get_weather returned rain in Boston tomorrow. Answer the user using this result without making another call or JSON.","criterion_score":0.0}
+{"prompt_id":"non-tool-7","text":"Define function calling for a nontechnical reader.","criterion_score":0.0}
+{"prompt_id":"non-tool-8","text":"Translate this sentence into Spanish: I will send the project update today.","criterion_score":0.0}

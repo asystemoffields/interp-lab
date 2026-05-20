@@ -650,6 +650,7 @@ Modal users can run the Gemma 4 remote workflow directly:
 ```bash
 modal run examples/modal_gemma4.py --workflow contrast --out-dir reports/gemma4-modal/contrast
 modal run examples/modal_gemma4.py --workflow hidden --out-dir reports/gemma4-modal/hidden
+modal run examples/modal_gemma4.py --workflow hidden --dataset examples/gemma4_tool_call_prompts.jsonl --out-dir reports/gemma4-tool-calls/modal-hidden
 ```
 
 ## Architecture
