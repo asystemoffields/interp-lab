@@ -13,6 +13,7 @@ from oracle_sae.adapters.neuronpedia import (
     NeuronpediaFeatureProvider,
     load_neuronpedia_feature_refs,
 )
+from oracle_sae.adapters.nla import NlaVerbalizer
 from oracle_sae.adapters.records import ActivationRecordFeatureProvider
 from oracle_sae.adapters.saelens import (
     SAELensFeatureProvider,
@@ -33,6 +34,16 @@ from oracle_sae.criterion_lab import (
 from oracle_sae.demo_sweep import build_demo_sweep_report
 from oracle_sae.doctor import collect_diagnostics
 from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
+from oracle_sae.explanation_reports import (
+    WrittenJsonMarkdown,
+    build_explanation_consistency_report,
+    build_feature_search_report,
+    build_model_family_comparison_report,
+    export_explanation_consistency_report,
+    export_feature_search_report,
+    export_model_family_comparison_report,
+    parse_family_member,
+)
 from oracle_sae.feature_interventions import (
     FeatureInterventionResult,
     intervene_on_features,
@@ -162,6 +173,9 @@ class HfSaePathValidation:
 @dataclass(frozen=True)
 class PathPatchResult:
     path_records: Path
+
+
+WrittenAnalysis = WrittenJsonMarkdown
 
 
 def build_prompts(
@@ -441,6 +455,10 @@ def inspect(
     scope_device: str = "cpu",
     scope_force_download: bool = False,
     scope_feature_metadata: str | Path | None = None,
+    verbalizer: str = "toy",
+    nla_explanations: str | Path | dict[str, Any] | list[dict[str, Any]] | None = None,
+    nla_min_confidence: float | None = None,
+    nla_fallback: bool = True,
 ) -> InspectionReport | WrittenInspection:
     """Rank and explain features for a natural-language criterion.
 
@@ -483,7 +501,12 @@ def inspect(
         model=model,
         criterion_text=criterion,
         feature_provider=provider,
-        verbalizer=ToyVerbalizer(),
+        verbalizer=_verbalizer(
+            verbalizer,
+            nla_explanations=nla_explanations,
+            nla_min_confidence=nla_min_confidence,
+            nla_fallback=nla_fallback,
+        ),
         intervention_runner=intervention_runner,
         top_k=top_k,
     )
@@ -498,6 +521,87 @@ def inspect(
         json_path=json_path,
         markdown_path=markdown_path,
         html_path=html_path,
+    )
+
+
+def check_explanation_consistency(
+    reports: str | Path | list[str | Path],
+    *,
+    out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+    min_similarity: float = 0.72,
+    max_rank_span: int = 5,
+    top_k: int | None = None,
+) -> dict[str, Any] | WrittenAnalysis:
+    """Check whether explanations and ranks stay stable across paraphrased reports."""
+    report_paths = _as_path_list(reports)
+    if out is None:
+        return build_explanation_consistency_report(
+            reports=report_paths,
+            min_similarity=min_similarity,
+            max_rank_span=max_rank_span,
+            top_k=top_k,
+        )
+    return export_explanation_consistency_report(
+        reports=report_paths,
+        out=out,
+        markdown_out=markdown_out,
+        min_similarity=min_similarity,
+        max_rank_span=max_rank_span,
+        top_k=top_k,
+    )
+
+
+def search_features(
+    query: str,
+    reports: str | Path | list[str | Path],
+    *,
+    out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+    top_k: int = 10,
+    min_score: float = 0.0,
+) -> dict[str, Any] | WrittenAnalysis:
+    """Search inspection reports for features whose labels, explanations, or examples match a query."""
+    report_paths = _as_path_list(reports)
+    if out is None:
+        return build_feature_search_report(
+            reports=report_paths,
+            query=query,
+            top_k=top_k,
+            min_score=min_score,
+        )
+    return export_feature_search_report(
+        reports=report_paths,
+        query=query,
+        out=out,
+        markdown_out=markdown_out,
+        top_k=top_k,
+        min_score=min_score,
+    )
+
+
+def compare_model_families(
+    members: str | dict[str, str] | list[str | dict[str, str]],
+    *,
+    out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+    top_k: int = 5,
+    min_score: float = 0.65,
+) -> dict[str, Any] | WrittenAnalysis:
+    """Compare inspection reports grouped by model family."""
+    parsed_members = _family_members(members)
+    if out is None:
+        return build_model_family_comparison_report(
+            members=parsed_members,
+            top_k=top_k,
+            min_score=min_score,
+        )
+    return export_model_family_comparison_report(
+        members=parsed_members,
+        out=out,
+        markdown_out=markdown_out,
+        top_k=top_k,
+        min_score=min_score,
     )
 
 
@@ -1367,10 +1471,45 @@ def _intervention_runner(
     )
 
 
+def _verbalizer(
+    verbalizer: str,
+    *,
+    nla_explanations: str | Path | dict[str, Any] | list[dict[str, Any]] | None,
+    nla_min_confidence: float | None,
+    nla_fallback: bool,
+):
+    if verbalizer == "toy":
+        return ToyVerbalizer()
+    if verbalizer == "nla":
+        return NlaVerbalizer(
+            nla_explanations,
+            min_confidence=nla_min_confidence,
+            fallback=ToyVerbalizer() if nla_fallback else None,
+        )
+    raise ValueError("verbalizer must be one of: toy, nla")
+
+
 def _load_report(value: InspectionReport | str | Path) -> InspectionReport:
     if isinstance(value, InspectionReport):
         return value
     return load_inspection_report(value)
+
+
+def _as_path_list(value: str | Path | list[str | Path]) -> list[str | Path]:
+    if isinstance(value, (str, Path)):
+        return [value]
+    return list(value)
+
+
+def _family_members(value: str | dict[str, str] | list[str | dict[str, str]]) -> list[dict[str, str]]:
+    values = [value] if isinstance(value, (str, dict)) else list(value)
+    members: list[dict[str, str]] = []
+    for item in values:
+        if isinstance(item, str):
+            members.append(parse_family_member(item))
+        else:
+            members.append({"family": str(item["family"]), "report": str(item["report"])})
+    return members
 
 
 def _as_optional_list(value):

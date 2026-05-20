@@ -5,7 +5,9 @@ from interp_lab import (
     attribution_graph,
     attribution_graph_summary,
     build_prompts,
+    check_explanation_consistency,
     compare,
+    compare_model_families,
     criterion_lab,
     criterion_lab_presets,
     doctor,
@@ -18,6 +20,7 @@ from interp_lab import (
     run,
     scale_plan,
     scaffold_run,
+    search_features,
     train_sae,
     validate_attribution_graph,
     validate_criterion_assay,
@@ -69,6 +72,32 @@ def test_compare_api_accepts_reports_and_paths(tmp_path: Path):
     assert result.json_path == tmp_path / "matches.json"
     assert result.markdown_path == tmp_path / "matches.md"
     assert result.report.matches
+
+
+def test_explanation_report_public_apis_accept_paths(tmp_path: Path):
+    left = inspect("toy/a", "successful tool calls", backend="toy", out=tmp_path / "left", top_k=2)
+    right = inspect("toy/b", "the assistant uses tools successfully", backend="toy", out=tmp_path / "right", top_k=2)
+
+    consistency = check_explanation_consistency(
+        [left.json_path, right.json_path],
+        out=tmp_path / "consistency.json",
+    )
+    hits = search_features(
+        "tool calls",
+        left.json_path,
+        out=tmp_path / "search.json",
+    )
+    families = compare_model_families(
+        [
+            {"family": "toy-a", "report": str(left.json_path)},
+            {"family": "toy-b", "report": str(right.json_path)},
+        ],
+        out=tmp_path / "families.json",
+    )
+
+    assert consistency.report["schema_version"] == "interp-lab.explanation_consistency.v1"
+    assert hits.report["schema_version"] == "interp-lab.feature_search.v1"
+    assert families.report["schema_version"] == "interp-lab.model_family_comparison.v1"
 
 
 def test_validate_matches_public_api_accepts_report_and_path(tmp_path: Path):

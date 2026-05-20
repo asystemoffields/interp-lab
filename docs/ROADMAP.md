@@ -39,14 +39,17 @@ The north star:
 - Hugging Face artifact publishing.
 - HTML feature cards.
 
-## Next Research And Engineering Milestones
+## Available On Main After 1.0
 
 - Natural Language Autoencoder verbalizer adapter.
 - Explanation consistency checks across paraphrases.
 - Explanation-to-feature search.
+- Model-family comparison reports.
+
+## Next Research And Engineering Milestones
+
 - Text-pivot cross-model matching.
 - Match calibration against held-out intervention transfer.
-- Model-family comparison reports.
 - Distributed SAE training manifests.
 - Remote causal validation workers.
 - Public example gallery with archived real-model reports.

@@ -13,6 +13,11 @@ except ImportError:  # pragma: no cover - exercised on Python 3.10 in CI.
     import tomli as tomllib
 
 from oracle_sae import __version__ as oracle_version
+from oracle_sae.explanation_reports import (
+    EXPLANATION_CONSISTENCY_SCHEMA,
+    FEATURE_SEARCH_SCHEMA,
+    MODEL_FAMILY_COMPARISON_SCHEMA,
+)
 from oracle_sae.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
 from oracle_sae.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA
 
@@ -477,10 +482,13 @@ def _check_schema_contracts(root: Path) -> dict[str, str]:
         "match_validation": "interp-lab.match_validation.v1",
         "graph_validation": "interp-lab.graph_validation.v1",
         "environment_profile": "interp-lab.env_profile.v1",
+        "explanation_consistency": EXPLANATION_CONSISTENCY_SCHEMA,
+        "feature_search": FEATURE_SEARCH_SCHEMA,
         "public_api_contract": "interp-lab.public_api_contract.v1",
         "release_check": RELEASE_CHECK_SCHEMA,
         "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
         "real_model_demo_sweep": "interp-lab.real_model_demo_sweep.v1",
+        "model_family_comparison": MODEL_FAMILY_COMPARISON_SCHEMA,
     }
     contract_tests = (root / "tests/test_contracts.py").exists()
     missing = [key for key, value in required.items() if not value.endswith(".v1")]

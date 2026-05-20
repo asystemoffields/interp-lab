@@ -12,6 +12,7 @@ from oracle_sae.adapters.neuronpedia import (
     NeuronpediaFeatureProvider,
     load_neuronpedia_feature_refs,
 )
+from oracle_sae.adapters.nla import NlaVerbalizer
 from oracle_sae.adapters.records import ActivationRecordFeatureProvider
 from oracle_sae.adapters.saelens import (
     SAELensFeatureProvider,
@@ -35,6 +36,14 @@ from oracle_sae.demo_sweep import (
 )
 from oracle_sae.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
 from oracle_sae.env_profile import build_environment_profile_parser, run_environment_profile_from_args
+from oracle_sae.explanation_reports import (
+    build_explanation_consistency_parser,
+    build_feature_search_parser,
+    build_model_family_parser,
+    run_explanation_consistency_from_args,
+    run_feature_search_from_args,
+    run_model_family_from_args,
+)
 from oracle_sae.feature_interventions import build_intervene_parser, run_intervene_from_args
 from oracle_sae.graphs import (
     build_graph_export_parser,
@@ -196,6 +205,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional JSON object keyed by feature index with labels/examples.",
     )
     inspect.add_argument("--top-k", type=int, default=8, help="Number of feature cards to keep.")
+    inspect.add_argument(
+        "--verbalizer",
+        choices=["toy", "nla"],
+        default="toy",
+        help="Explanation adapter. Use nla with --nla-explanations for external NLA/autointerp records.",
+    )
+    inspect.add_argument(
+        "--nla-explanations",
+        help="JSON or JSONL explanation records keyed by feature_id for --verbalizer nla.",
+    )
+    inspect.add_argument(
+        "--nla-min-confidence",
+        type=float,
+        help="Ignore NLA explanation records below this confidence or score.",
+    )
+    inspect.add_argument(
+        "--nla-no-fallback",
+        action="store_true",
+        help="When an NLA record is missing, use the feature label instead of the heuristic fallback.",
+    )
     inspect.add_argument("--out", default="reports/inspection", help="Output directory.")
     inspect.add_argument("--html-out", help="Optional output self-contained HTML feature report path.")
     inspect.set_defaults(func=run_inspect)
@@ -214,6 +243,30 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     validate_matches.set_defaults(func=run_validate_matches)
+
+    consistency = subparsers.add_parser(
+        "check-explanation-consistency",
+        help="Compare feature explanations across paraphrased inspection reports.",
+        parents=[build_explanation_consistency_parser()],
+        add_help=False,
+    )
+    consistency.set_defaults(func=run_check_explanation_consistency)
+
+    search_features = subparsers.add_parser(
+        "search-features",
+        help="Search inspection reports for features matching a natural-language explanation.",
+        parents=[build_feature_search_parser()],
+        add_help=False,
+    )
+    search_features.set_defaults(func=run_search_features)
+
+    family_report = subparsers.add_parser(
+        "compare-model-families",
+        help="Compare feature reports across model families.",
+        parents=[build_model_family_parser()],
+        add_help=False,
+    )
+    family_report.set_defaults(func=run_compare_model_families)
 
     demo = subparsers.add_parser("demo", help="Run two toy inspections and match their features.")
     demo.add_argument("--out", default="reports/demo", help="Output directory.")
@@ -429,7 +482,7 @@ def run_inspect(args: argparse.Namespace) -> int:
         model=args.model,
         criterion_text=args.criterion,
         feature_provider=provider,
-        verbalizer=ToyVerbalizer(),
+        verbalizer=_verbalizer_from_args(args),
         intervention_runner=intervention_runner,
         top_k=args.top_k,
     )
@@ -459,6 +512,27 @@ def run_validate_matches(args: argparse.Namespace) -> int:
     print(f"Wrote {result.markdown_path}")
     if result.html_path is not None:
         print(f"Wrote {result.html_path}")
+    return 0
+
+
+def run_check_explanation_consistency(args: argparse.Namespace) -> int:
+    result = run_explanation_consistency_from_args(args)
+    print(f"Wrote {result.json_path}")
+    print(f"Wrote {result.markdown_path}")
+    return 0
+
+
+def run_search_features(args: argparse.Namespace) -> int:
+    result = run_feature_search_from_args(args)
+    print(f"Wrote {result.json_path}")
+    print(f"Wrote {result.markdown_path}")
+    return 0
+
+
+def run_compare_model_families(args: argparse.Namespace) -> int:
+    result = run_model_family_from_args(args)
+    print(f"Wrote {result.json_path}")
+    print(f"Wrote {result.markdown_path}")
     return 0
 
 
@@ -858,6 +932,17 @@ def _intervention_runner_from_args(args: argparse.Namespace):
         require_criterion_match=not args.allow_intervention_criterion_mismatch,
         require_records=args.require_interventions,
     )
+
+
+def _verbalizer_from_args(args: argparse.Namespace):
+    fallback = None if args.nla_no_fallback else ToyVerbalizer()
+    if args.verbalizer == "nla":
+        return NlaVerbalizer(
+            args.nla_explanations,
+            min_confidence=args.nla_min_confidence,
+            fallback=fallback,
+        )
+    return ToyVerbalizer()
 
 
 def _match_markdown_path(out_path: str | Path) -> Path:

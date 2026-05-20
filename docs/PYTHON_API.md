@@ -58,6 +58,54 @@ print(validation.report["summary"]["overall_claim_grade"])
 
 `validate_matches` accepts an in-memory `MatchReport` or a `matches.json` path and writes JSON plus Markdown when `out` is supplied. Pass `html_out` for a self-contained searchable report.
 
+## Explanation Workflows
+
+Use external Natural Language Autoencoder or autointerp records when inspecting features:
+
+```python
+from interp_lab import inspect
+
+report = inspect(
+    "toy/model-a",
+    "successful tool calls",
+    backend="jsonl",
+    features="reports/features.jsonl",
+    verbalizer="nla",
+    nla_explanations="reports/nla-explanations.jsonl",
+)
+```
+
+Check paraphrase consistency, search explanations, and compare model families:
+
+```python
+from interp_lab import (
+    check_explanation_consistency,
+    compare_model_families,
+    search_features,
+)
+
+consistency = check_explanation_consistency(
+    ["reports/tool-calls/report.json", "reports/successful-tool-use/report.json"],
+    out="reports/explanation-consistency.json",
+)
+
+hits = search_features(
+    "features that represent valid tool-call arguments",
+    "reports/tool-calls/report.json",
+    out="reports/feature-search.json",
+)
+
+families = compare_model_families(
+    [
+        {"family": "gemma", "report": "reports/gemma/report.json"},
+        {"family": "qwen", "report": "reports/qwen/report.json"},
+    ],
+    out="reports/model-family-comparison.json",
+)
+```
+
+Each function returns machine-readable JSON when `out` is omitted, or a `WrittenAnalysis` with JSON and Markdown paths when `out` is supplied.
+
 ## Build Prompts
 
 ```python

@@ -9,6 +9,11 @@ from oracle_sae import __version__
 from oracle_sae.criterion_lab import PRESET_SCHEMA_VERSION
 from oracle_sae.demo_sweep import REAL_MODEL_DEMO_SWEEP_SCHEMA
 from oracle_sae.env_profile import SCHEMA_VERSION as ENV_PROFILE_SCHEMA
+from oracle_sae.explanation_reports import (
+    EXPLANATION_CONSISTENCY_SCHEMA,
+    FEATURE_SEARCH_SCHEMA,
+    MODEL_FAMILY_COMPARISON_SCHEMA,
+)
 from oracle_sae.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
 from oracle_sae.release_check import REAL_MODEL_DEMO_SCHEMA, RELEASE_CHECK_SCHEMA
 from oracle_sae.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA
@@ -40,10 +45,13 @@ PUBLIC_API_EXPORTS = [
     "WrittenInspection",
     "WrittenMatch",
     "WrittenMatchValidation",
+    "WrittenAnalysis",
     "attribution_graph",
     "attribution_graph_summary",
     "build_prompts",
+    "check_explanation_consistency",
     "compare",
+    "compare_model_families",
     "criterion_lab",
     "criterion_lab_presets",
     "demo_sweep",
@@ -59,6 +67,7 @@ PUBLIC_API_EXPORTS = [
     "run",
     "scale_plan",
     "scaffold_run",
+    "search_features",
     "train_sae",
     "validate_attribution_graph",
     "validate_criterion_assay",
@@ -73,6 +82,8 @@ SCHEMA_CONTRACTS = {
     "criterion_lab": "interp-lab.criterion_lab.v1",
     "criterion_lab_preset": PRESET_SCHEMA_VERSION,
     "environment_profile": ENV_PROFILE_SCHEMA,
+    "explanation_consistency": EXPLANATION_CONSISTENCY_SCHEMA,
+    "feature_search": FEATURE_SEARCH_SCHEMA,
     "graph_validation": "interp-lab.graph_validation.v1",
     "inspection_report": INSPECTION_REPORT_SCHEMA,
     "intervention_plan": PLAN_SCHEMA,
@@ -80,6 +91,7 @@ SCHEMA_CONTRACTS = {
     "intervention_result": INTERVENTION_SCHEMA,
     "match_report": MATCH_REPORT_SCHEMA,
     "match_validation": "interp-lab.match_validation.v1",
+    "model_family_comparison": MODEL_FAMILY_COMPARISON_SCHEMA,
     "path_patch": "interp-lab.path_patch.v1",
     "public_api_contract": PUBLIC_API_CONTRACT_SCHEMA,
     "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
@@ -96,7 +108,9 @@ PUBLIC_API_SIGNATURES = {
     "attribution_graph": ["report", "out", "markdown_out", "html_out", "path_records"],
     "attribution_graph_summary": ["graph", "out"],
     "build_prompts": ["out", "positive", "negative", "positive_prompt", "negative_prompt"],
+    "check_explanation_consistency": ["reports", "out", "markdown_out", "min_similarity", "top_k"],
     "compare": ["left", "right", "out", "top_k"],
+    "compare_model_families": ["members", "out", "markdown_out", "top_k", "min_score"],
     "criterion_lab": ["out", "model", "preset", "preset_file", "criterion", "workflow", "run_dir"],
     "demo_sweep": ["repo_root", "manifest_dir", "demos", "out", "run", "allow_external"],
     "inspect": ["model", "criterion", "backend", "records", "interventions", "out", "html_out", "top_k"],
@@ -108,6 +122,7 @@ PUBLIC_API_SIGNATURES = {
     "run": ["config", "dry_run"],
     "scale_plan": ["model_params", "tokens", "d_model", "selected_layers", "latent_dim", "profile"],
     "scaffold_run": ["out", "workflow", "model", "criterion", "run_dir"],
+    "search_features": ["query", "reports", "out", "markdown_out", "top_k", "min_score"],
     "train_sae": ["out", "records", "model", "hf_model", "dataset", "preset", "layer", "records_out"],
     "validate_attribution_graph": ["graph", "path_records", "out", "graph_out", "require_controls"],
     "validate_criterion_assay": ["preset", "preset_file", "preset_dir", "out"],

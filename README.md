@@ -84,6 +84,19 @@ interp-lab inspect \
 
 This writes JSON and Markdown by default. `--html-out` adds a self-contained searchable feature-card report with layer/source/evidence filters and copyable next-action commands. Reports include `agent_next_actions` with exact follow-up command templates for intervention planning, causal re-inspection, and graph export.
 
+Use external Natural Language Autoencoder or autointerp explanations as the verbalizer:
+
+```bash
+interp-lab inspect \
+  --model toy/a \
+  --criterion "successful tool calls" \
+  --backend jsonl \
+  --features reports/features.jsonl \
+  --verbalizer nla \
+  --nla-explanations reports/nla-explanations.jsonl \
+  --out reports/tool-calls
+```
+
 Build a prompt dataset from prompts you wrote:
 
 ```bash
@@ -119,6 +132,33 @@ interp-lab validate-matches \
 ```
 
 This grades each pair as `validated`, `needs_causal_evidence`, `plausible`, `contradicted`, or `weak`, with reason codes and next actions for agents or researchers. The HTML output is self-contained and includes search, status filters, score components, and evidence details.
+
+Check explanation consistency across paraphrased criteria:
+
+```bash
+interp-lab check-explanation-consistency \
+  --report reports/tool-calls/report.json \
+  --report reports/successful-tool-use/report.json \
+  --out reports/explanation-consistency.json
+```
+
+Search reports by a natural-language feature description:
+
+```bash
+interp-lab search-features \
+  --report reports/tool-calls/report.json \
+  --query "features that represent valid tool-call arguments" \
+  --out reports/feature-search.json
+```
+
+Compare feature patterns across model families:
+
+```bash
+interp-lab compare-model-families \
+  --member gemma=reports/gemma/report.json \
+  --member qwen=reports/qwen/report.json \
+  --out reports/model-family-comparison.json
+```
 
 Create a demo run:
 

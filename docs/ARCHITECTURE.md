@@ -62,7 +62,13 @@ Current activation exporters:
 
 ## Verbalizers
 
-A verbalizer turns feature evidence into an explanation. In the toy backend this is a short heuristic sentence. A real NLA adapter can generate explanations directly from residual-stream activations or from candidate feature activations.
+A verbalizer turns feature evidence into an explanation. In the toy backend this is a short heuristic sentence. `NlaVerbalizer` reads Natural Language Autoencoder or autointerp records keyed by `feature_id`, preserves confidence and paraphrase metadata, and falls back to the local heuristic when a feature has no external explanation.
+
+Explanation reports operate on existing inspection artifacts:
+
+- `check-explanation-consistency` compares shared feature explanations and ranks across paraphrased criteria.
+- `search-features` ranks report features against a natural-language explanation query.
+- `compare-model-families` groups inspection reports by model family and summarizes within-family and cross-family feature matches.
 
 ## Intervention Runners
 

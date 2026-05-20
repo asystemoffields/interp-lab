@@ -34,6 +34,8 @@ def inspect_model(
         explanation = verbalizer.explain(evidence, criterion)
         scores = score_feature(evidence, criterion)
         fingerprint = build_fingerprint(evidence, criterion, explanation)
+        metadata = dict(evidence.metadata)
+        metadata.update(_verbalizer_card_metadata(verbalizer, evidence, criterion))
         cards.append(
             FeatureCard(
                 feature_id=evidence.feature_id,
@@ -49,13 +51,14 @@ def inspect_model(
                 examples=evidence.examples,
                 source=evidence.source,
                 fingerprint=fingerprint,
-                metadata=evidence.metadata,
+                metadata=metadata,
                 causal_effects=evidence.causal_effects,
             )
         )
     cards.sort(key=lambda card: card.importance, reverse=True)
     metadata = {"feature_count": len(evidence_items), "kept_feature_count": len(cards)}
     metadata.update(_provider_report_metadata(feature_provider))
+    metadata.update(_verbalizer_report_metadata(verbalizer))
     metadata.update(_runner_report_metadata(intervention_runner))
     report = InspectionReport(
         model=model,
@@ -117,6 +120,22 @@ def _provider_report_metadata(feature_provider: FeatureProvider) -> dict:
 
 def _runner_report_metadata(intervention_runner: InterventionRunner) -> dict:
     metadata_for_report = getattr(intervention_runner, "report_metadata", None)
+    if metadata_for_report is None:
+        return {}
+    metadata = metadata_for_report()
+    return dict(metadata) if metadata else {}
+
+
+def _verbalizer_card_metadata(verbalizer: Verbalizer, evidence: FeatureEvidence, criterion) -> dict:
+    metadata_for = getattr(verbalizer, "metadata_for", None)
+    if metadata_for is None:
+        return {}
+    metadata = metadata_for(evidence, criterion)
+    return dict(metadata) if metadata else {}
+
+
+def _verbalizer_report_metadata(verbalizer: Verbalizer) -> dict:
+    metadata_for_report = getattr(verbalizer, "report_metadata", None)
     if metadata_for_report is None:
         return {}
     metadata = metadata_for_report()

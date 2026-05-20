@@ -5,6 +5,7 @@ from oracle_sae.adapters.goodfire import GoodfireFeatureProvider
 from oracle_sae.adapters.interventions import InterventionRecord, InterventionRecordRunner
 from oracle_sae.adapters.jsonl import JsonlFeatureProvider
 from oracle_sae.adapters.neuronpedia import NeuronpediaClient, NeuronpediaFeatureProvider
+from oracle_sae.adapters.nla import NlaExplanationRecord, NlaVerbalizer
 from oracle_sae.adapters.records import ActivationRecord, ActivationRecordFeatureProvider
 from oracle_sae.adapters.saelens import SAELensFeatureProvider
 from oracle_sae.adapters.scope import ScopeFeatureProvider
@@ -21,6 +22,8 @@ __all__ = [
     "JsonlFeatureProvider",
     "NeuronpediaClient",
     "NeuronpediaFeatureProvider",
+    "NlaExplanationRecord",
+    "NlaVerbalizer",
     "SAELensFeatureProvider",
     "ScopeFeatureProvider",
     "ToyFeatureProvider",
