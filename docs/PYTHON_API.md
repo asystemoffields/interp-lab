@@ -154,7 +154,6 @@ from interp_lab import criterion_lab, run
 lab = criterion_lab(
     model="distilgpt2",
     preset="overconfidence",
-    layer=6,
     out="reports/overconfidence-lab/run.json",
     run_dir="reports/overconfidence-lab",
 )
@@ -162,7 +161,17 @@ lab = criterion_lab(
 run(lab.path)
 ```
 
-The overconfidence preset writes paired calibration prompts, an SAE workflow, first-pass causal scoring target tokens, feature inspection, and graph export. Add `positive_prompt` and `negative_prompt` to adapt the lab before running it.
+Criterion Lab presets are JSON prompt assays. The default config runs all-layer discovery with activation records, feature inspection, and graph export. Use a project preset file when an agent or researcher defines a new criterion:
+
+```python
+lab = criterion_lab(
+    model="distilgpt2",
+    preset_file="examples/presets/math-reasoning.json",
+    out="reports/math-reasoning-lab/run.json",
+)
+```
+
+Use `criterion_lab_presets()` to list bundled and project presets. For a one-off run, pass `criterion`, `positive_prompt`, and `negative_prompt` directly. After discovery surfaces promising layers, call `criterion_lab(..., workflow="sae", layer=layer_index)` to train and causally test an SAE on that layer.
 
 ## Diagnostics
 

@@ -36,10 +36,10 @@ Served Studio adds a local runner, session job history, artifact browsing, HTML 
 For behavior-led work, start with Criterion Lab:
 
 ```bash
-interp-lab criterion-lab --model distilgpt2 --preset overconfidence --layer 6 --out reports/overconfidence-lab/run.json
+interp-lab criterion-lab --model distilgpt2 --preset overconfidence --out reports/overconfidence-lab/run.json
 ```
 
-The overconfidence preset creates paired prompts that contrast unwarranted certainty with calibrated uncertainty, then scaffolds the HF/SAE/inspection/graph workflow. The config includes metadata and next actions for agents. Researchers can edit the prompts, target tokens, layer, SAE preset, and workflow before running it with `interp-lab run`.
+Criterion Lab presets are prompt assays. The generated config first scans activation records across all hidden-state layers, ranks the features and layers that actually track the criterion, and exports reports plus graph artifacts for review. Researchers can then train SAEs or run path validation on discovered layers. Use `--preset-file path/to/preset.json` or `--preset-dir presets` for project-specific assays, and `--workflow sae --layer <N>` when discovery has identified a layer worth testing causally.
 
 ## Supported Platforms
 

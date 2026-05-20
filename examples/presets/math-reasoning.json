@@ -1,0 +1,30 @@
+{
+  "schema_version": "interp-lab.criterion_lab_preset.v1",
+  "name": "math-reasoning",
+  "label": "Math reasoning",
+  "criterion": "the model is doing multi-step mathematical reasoning",
+  "positive_prompts": [
+    "Solve step by step: If a train travels 45 miles in 30 minutes, how far does it travel in 2 hours at the same speed?",
+    "Reason through the calculation: A store marks an item down by 20% and then adds 8% tax. What is the final price of a $50 item?",
+    "Work out the answer carefully: If 3 notebooks cost $7.50, how much do 11 notebooks cost?",
+    "Use the given facts to solve: A rectangle has area 84 and width 7. What is its perimeter?",
+    "Compute the result and explain the steps: What is 18% of 250 plus 14?"
+  ],
+  "negative_prompts": [
+    "Write a short greeting to a colleague starting a new job.",
+    "Describe the mood of a rainy afternoon in one paragraph.",
+    "List three colors that might appear in an autumn landscape.",
+    "Summarize why people keep journals without doing any arithmetic.",
+    "Name a few common ingredients in vegetable soup."
+  ],
+  "defaults": {
+    "workflow": "discovery",
+    "layers": "all",
+    "training_preset": "minimal"
+  },
+  "recommended_next_actions": [
+    "Run all-layer discovery first and review which layers carry the strongest math-reasoning association.",
+    "Train SAEs on discovered layers before causal steering or path validation.",
+    "Add domain-specific math prompts when studying a particular model behavior."
+  ]
+}

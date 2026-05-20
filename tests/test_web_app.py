@@ -40,7 +40,9 @@ def test_render_web_app_contains_required_surfaces():
     assert "run-config-output" in html
     assert "validate-hf-sae-paths" in html
     assert "criterion-lab" in html
-    assert "Overconfidence lab" in html
+    assert "Discovery-first Criterion Lab" in html
+    assert "--preset-file" in html
+    assert "--list-presets" in html
     assert "--trust-remote-code" in html
     assert "Choose..." in html
     assert "splitExtraFlags" in html

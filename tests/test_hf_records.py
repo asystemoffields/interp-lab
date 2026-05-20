@@ -27,6 +27,8 @@ from oracle_sae.hf_interventions import (
 
 def test_parse_layers_supports_ranges():
     assert parse_layers("0,2,4-6") == [0, 2, 4, 5, 6]
+    assert parse_layers("all") == "all"
+    assert parse_layers("*") == "all"
     assert parse_layers(None) is None
     with pytest.raises(ValueError):
         parse_layers("3-1")

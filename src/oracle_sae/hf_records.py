@@ -11,6 +11,8 @@ from typing import Any
 from oracle_sae.hf_loading import add_hf_loading_args, hf_loading_options_from_args, load_hf_text_model
 from oracle_sae.math_utils import pearson
 
+LayerSelection = list[int] | str | None
+
 
 @dataclass(frozen=True)
 class PromptRecord:
@@ -44,7 +46,7 @@ def export_hf_activation_records(
     model_name: str,
     dataset_path: str | Path,
     out_path: str | Path,
-    layers: list[int] | None = None,
+    layers: LayerSelection = None,
     features_per_layer: int = 16,
     pool: str = "last",
     device: str = "cpu",
@@ -282,9 +284,11 @@ def split_prompt_record_indexes(prompts: list[PromptRecord]) -> tuple[set[int], 
     return positive_indexes, negative_indexes
 
 
-def parse_layers(value: str | None) -> list[int] | None:
+def parse_layers(value: str | None) -> LayerSelection:
     if value is None or not value.strip():
         return None
+    if value.strip().lower() in {"all", "*"}:
+        return "all"
     layers: list[int] = []
     for chunk in value.split(","):
         chunk = chunk.strip()
@@ -307,7 +311,10 @@ def build_export_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", required=True, help="Hugging Face model name.")
     parser.add_argument("--dataset", required=True, help="Prompt JSONL with text and criterion_score.")
     parser.add_argument("--out", required=True, help="Output activation-record JSONL path.")
-    parser.add_argument("--layers", help="Hidden-state layers, e.g. 0,4,8 or 1-3. Defaults to final layer.")
+    parser.add_argument(
+        "--layers",
+        help="Hidden-state layers, e.g. all, 0,4,8, or 1-3. Defaults to final layer.",
+    )
     parser.add_argument("--features-per-layer", type=int, default=16)
     parser.add_argument("--pool", choices=["last", "mean"], default="last")
     parser.add_argument("--device", default="cpu")
@@ -403,9 +410,13 @@ def _optional_import(name: str, message: str):
         raise RuntimeError(message) from exc
 
 
-def _resolve_layers(layers: list[int] | None, hidden_state_count: int) -> list[int]:
+def _resolve_layers(layers: LayerSelection, hidden_state_count: int) -> list[int]:
     if layers is None:
         return [hidden_state_count - 1]
+    if layers == "all":
+        return list(range(hidden_state_count))
+    if isinstance(layers, str):
+        raise ValueError("layers must be 'all' or a list of layer indexes")
     for layer in layers:
         if layer < 0 or layer >= hidden_state_count:
             raise ValueError(f"Layer {layer} is outside 0..{hidden_state_count - 1}")

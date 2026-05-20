@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from oracle_sae.hf_records import PromptRecord, load_prompt_records, parse_layers
+from oracle_sae.hf_records import LayerSelection, PromptRecord, load_prompt_records, parse_layers
 from oracle_sae.math_utils import pearson
 
 DEFAULT_HOOK_TEMPLATE = "blocks.{layer}.hook_resid_post"
@@ -18,7 +18,7 @@ def export_transformerlens_activation_records(
     dataset_path: str | Path,
     out_path: str | Path,
     hook_names: list[str] | None = None,
-    layers: list[int] | None = None,
+    layers: LayerSelection = None,
     hook_template: str = DEFAULT_HOOK_TEMPLATE,
     features_per_hook: int = 16,
     pool: str = "last",
@@ -130,7 +130,7 @@ def build_transformerlens_export_parser() -> argparse.ArgumentParser:
         action="append",
         help="Hook name or comma-separated hook names. Overrides --layers.",
     )
-    parser.add_argument("--layers", help="Layers for --hook-template, e.g. 0,4,8 or 1-3.")
+    parser.add_argument("--layers", help="Layers for --hook-template, e.g. all, 0,4,8, or 1-3.")
     parser.add_argument(
         "--hook-template",
         default=DEFAULT_HOOK_TEMPLATE,
@@ -176,19 +176,25 @@ def _optional_import(name: str, message: str):
 def _resolve_hook_names(
     model: Any,
     hook_names: list[str] | None,
-    layers: list[int] | None,
+    layers: LayerSelection,
     hook_template: str,
 ) -> list[str]:
     if hook_names:
         return hook_names
     if "{layer}" not in hook_template:
         raise ValueError("--hook-template must include {layer}")
+    cfg = getattr(model, "cfg", None)
+    n_layers = getattr(cfg, "n_layers", None)
     if layers is None:
-        cfg = getattr(model, "cfg", None)
-        n_layers = getattr(cfg, "n_layers", None)
         if n_layers is None:
             raise ValueError("--layers is required when the TransformerLens model has no cfg.n_layers")
         layers = [int(n_layers) - 1]
+    elif layers == "all":
+        if n_layers is None:
+            raise ValueError("--layers all requires the TransformerLens model to expose cfg.n_layers")
+        layers = list(range(int(n_layers)))
+    elif isinstance(layers, str):
+        raise ValueError("--layers must be 'all' or layer indexes")
     return [hook_template.format(layer=layer) for layer in layers]
 
 

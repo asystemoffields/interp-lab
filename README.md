@@ -133,18 +133,38 @@ interp-lab studio --serve --reports-dir reports
 
 The served app keeps job history for the current session, launches known interp-lab commands, and exposes generated HTML, JSON, Markdown, and graph artifacts under the current workspace. The static file remains useful for sharing commands and configs; served mode adds the local runner.
 
-Start a guided Criterion Lab for a behavior such as overconfidence:
+Start Criterion Lab from a prompt assay. The default path is discovery-first: it writes prompt pairs, exports activation records across every hidden-state layer, ranks the features that actually track the criterion, and builds a graph/report you can use to choose SAE and causal follow-up runs.
 
 ```bash
 interp-lab criterion-lab \
   --model distilgpt2 \
   --preset overconfidence \
-  --layer 6 \
   --run-dir reports/overconfidence-lab \
   --out reports/overconfidence-lab/run.json
 ```
 
-This writes an editable run config with paired calibration prompts, SAE training, first-pass causal scoring, feature inspection, and graph export. Add your own `--positive-prompt` and `--negative-prompt` examples to adapt the lab to a domain. In served Studio, use the “Overconfidence lab” guided start, review the generated config, then run it from the Local Runner.
+Presets are JSON files containing the criterion and contrast prompts. The bundled `overconfidence` preset is just one data file; you can point at your own preset file or directory:
+
+```bash
+interp-lab criterion-lab \
+  --model distilgpt2 \
+  --preset-file examples/presets/math-reasoning.json \
+  --run-dir reports/math-reasoning-lab \
+  --out reports/math-reasoning-lab/run.json
+```
+
+For an ad hoc agent-driven run, skip presets and provide the criterion plus prompt pairs directly:
+
+```bash
+interp-lab criterion-lab \
+  --model distilgpt2 \
+  --criterion "the model is doing multi-step mathematical reasoning" \
+  --positive-prompt "Solve step by step: If 3 notebooks cost $7.50, how much do 11 cost?" \
+  --negative-prompt "Write a friendly greeting to a new teammate." \
+  --out reports/math-custom/run.json
+```
+
+Use `--list-presets` to see discoverable presets, `--preset-dir presets` to add a local registry, and `--workflow sae --layer <N>` after discovery identifies promising layers. If you enable SAE causal scoring without explicit target tokens, Criterion Lab uses model-derived `auto` targets; preset target hints are only used when `--use-preset-target-hints` is supplied.
 
 Run a reproducible workflow from config:
 

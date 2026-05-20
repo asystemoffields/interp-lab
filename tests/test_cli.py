@@ -675,12 +675,12 @@ def test_criterion_lab_scaffolds_overconfidence_workflow(tmp_path: Path, capsys)
             "criterion-lab",
             "--model",
             "distilgpt2",
+            "--preset",
+            "overconfidence",
             "--run-dir",
             str(run_dir),
             "--out",
             str(config),
-            "--layer",
-            "6",
             "--positive-prompt",
             "Answer with total certainty: what did the missing note say?",
             "--negative-prompt",
@@ -694,26 +694,105 @@ def test_criterion_lab_scaffolds_overconfidence_workflow(tmp_path: Path, capsys)
     assert "overconfident" in output
     assert "interp-lab run" in output
     assert data["metadata"]["criterion_lab"]["preset"] == "overconfidence"
+    assert data["metadata"]["criterion_lab"]["discovery_first"] is True
+    assert data["metadata"]["criterion_lab"]["workflow"] == "discovery"
+    assert data["metadata"]["criterion_lab"]["template_workflow"] == "hf-records"
+    assert data["metadata"]["criterion_lab"]["layers"] == "all"
     assert data["metadata"]["criterion_lab"]["positive_prompt_count"] == 7
     assert data["metadata"]["criterion_lab"]["negative_prompt_count"] == 7
-    assert data["metadata"]["criterion_lab"]["target_tokens"]
+    assert data["metadata"]["criterion_lab"]["target_tokens"] == []
     assert [step["command"] for step in data["steps"]] == [
         "build-prompts",
-        "train-sae",
+        "export-hf-records",
         "inspect",
         "export-attribution-graph",
     ]
-    train_args = data["steps"][1]["args"]
-    assert train_args["hf_model"] == "distilgpt2"
-    assert train_args["layer"] == 6
-    assert train_args["causal_out"] == "{run_dir}/sae/interventions.jsonl"
-    assert "definitely" in train_args["target_token"]
-    assert data["steps"][2]["args"]["require_interventions"] is True
+    export_args = data["steps"][1]["args"]
+    assert export_args["model"] == "distilgpt2"
+    assert export_args["layers"] == "all"
+    assert data["steps"][2]["args"]["backend"] == "records"
 
     assert main(["run", str(config), "--dry-run"]) == 0
     dry_run = capsys.readouterr().out
     assert "interp-lab build-prompts" in dry_run
-    assert "interp-lab train-sae" in dry_run
+    assert "interp-lab export-hf-records" in dry_run
+
+
+def test_criterion_lab_can_list_discoverable_presets(capsys):
+    exit_code = main(["criterion-lab", "--list-presets"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Available Criterion Lab presets:" in output
+    assert "overconfidence" in output
+
+
+def test_criterion_lab_can_use_user_authored_preset_file(tmp_path: Path):
+    preset = tmp_path / "math-reasoning.json"
+    preset.write_text(
+        json.dumps(
+            {
+                "schema_version": "interp-lab.criterion_lab_preset.v1",
+                "name": "math-reasoning",
+                "criterion": "the model is doing mathematical reasoning",
+                "positive_prompts": ["Solve 12 * 7 step by step."],
+                "negative_prompts": ["Write a friendly greeting."],
+                "defaults": {"workflow": "discovery", "layers": "all"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = tmp_path / "math-run.json"
+
+    exit_code = main(
+        [
+            "criterion-lab",
+            "--model",
+            "distilgpt2",
+            "--preset-file",
+            str(preset),
+            "--out",
+            str(config),
+        ]
+    )
+
+    data = json.loads(config.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    lab = data["metadata"]["criterion_lab"]
+    assert lab["preset"] == "math-reasoning"
+    assert lab["preset_source"] == str(preset)
+    assert lab["criterion"] == "the model is doing mathematical reasoning"
+    assert lab["layers"] == "all"
+    assert data["steps"][1]["command"] == "export-hf-records"
+
+
+def test_criterion_lab_sae_workflow_uses_auto_targets_without_preset_hints(tmp_path: Path):
+    config = tmp_path / "sae-lab.json"
+
+    exit_code = main(
+        [
+            "criterion-lab",
+            "--model",
+            "distilgpt2",
+            "--preset",
+            "overconfidence",
+            "--workflow",
+            "sae",
+            "--layer",
+            "6",
+            "--out",
+            str(config),
+        ]
+    )
+
+    data = json.loads(config.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    lab = data["metadata"]["criterion_lab"]
+    assert lab["discovery_first"] is False
+    assert lab["target_tokens"] == ["auto"]
+    train_args = data["steps"][1]["args"]
+    assert train_args["layer"] == 6
+    assert train_args["target_token"] == ["auto"]
 
 
 def test_criterion_lab_can_use_only_custom_prompts(tmp_path: Path):
@@ -724,6 +803,8 @@ def test_criterion_lab_can_use_only_custom_prompts(tmp_path: Path):
             "criterion-lab",
             "--model",
             "distilgpt2",
+            "--criterion",
+            "the model answers with unjustified certainty",
             "--out",
             str(config),
             "--no-preset-prompts",
@@ -737,9 +818,11 @@ def test_criterion_lab_can_use_only_custom_prompts(tmp_path: Path):
 
     data = json.loads(config.read_text(encoding="utf-8"))
     assert exit_code == 0
+    assert data["metadata"]["criterion_lab"]["preset"] == "custom"
     assert data["metadata"]["criterion_lab"]["positive_prompt_count"] == 1
     assert data["metadata"]["criterion_lab"]["negative_prompt_count"] == 1
-    assert "causal_out" not in data["steps"][1]["args"]
+    assert data["metadata"]["criterion_lab"]["target_tokens"] == []
+    assert data["steps"][1]["command"] == "export-hf-records"
 
 
 def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):

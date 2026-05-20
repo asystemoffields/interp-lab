@@ -10,7 +10,7 @@ from oracle_sae.schema import (
     MatchReport,
 )
 from oracle_sae.hf_records import PromptDatasetSummary
-from oracle_sae.criterion_lab import CriterionLabWriteResult
+from oracle_sae.criterion_lab import CriterionLabPresetInfo, CriterionLabWriteResult
 from oracle_sae.workflows import RunTemplateWriteResult
 
 from interp_lab.api import (
@@ -28,6 +28,7 @@ from interp_lab.api import (
     build_prompts,
     compare,
     criterion_lab,
+    criterion_lab_presets,
     doctor,
     inspect,
     path_patch,
@@ -44,6 +45,7 @@ from interp_lab.api import (
 
 __all__ = [
     "CandidateMatch",
+    "CriterionLabPresetInfo",
     "CriterionLabWriteResult",
     "Criterion",
     "FeatureCard",
@@ -67,6 +69,7 @@ __all__ = [
     "build_prompts",
     "compare",
     "criterion_lab",
+    "criterion_lab_presets",
     "doctor",
     "inspect",
     "path_patch",

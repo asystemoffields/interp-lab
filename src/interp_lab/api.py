@@ -22,7 +22,12 @@ from oracle_sae.adapters.saelens import (
 from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.cli import main as _cli_main
-from oracle_sae.criterion_lab import CriterionLabWriteResult, write_criterion_lab_config
+from oracle_sae.criterion_lab import (
+    CriterionLabPresetInfo,
+    CriterionLabWriteResult,
+    available_criterion_lab_presets,
+    write_criterion_lab_config,
+)
 from oracle_sae.doctor import collect_diagnostics
 from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
 from oracle_sae.graphs import (
@@ -266,14 +271,17 @@ def criterion_lab(
     *,
     out: str | Path = "reports/criterion-lab/run.json",
     model: str,
-    preset: str = "overconfidence",
+    preset: str | None = None,
+    preset_file: str | Path | None = None,
+    preset_dir: str | Path | list[str | Path] | None = None,
     criterion: str | None = None,
-    workflow: str = "sae",
+    workflow: str | None = None,
     run_dir: str | Path = "reports/criterion-lab",
     positive_prompt: str | list[str] | None = None,
     negative_prompt: str | list[str] | None = None,
     include_preset_prompts: bool = True,
-    training_preset: str = "minimal",
+    use_preset_target_hints: bool = False,
+    training_preset: str | None = None,
     top_k: int = 8,
     features_per_layer: int = 16,
     layers: str | None = None,
@@ -293,18 +301,21 @@ def criterion_lab(
     tokenizer_kwargs_json: str | None = None,
     force: bool = False,
 ) -> CriterionLabWriteResult:
-    """Write an editable Criterion Lab config for a behavior such as overconfidence."""
+    """Write an editable, discovery-first Criterion Lab config for a behavior."""
     return write_criterion_lab_config(
         out=out,
         force=force,
         model=model,
         preset=preset,
+        preset_file=preset_file,
+        preset_dirs=_as_optional_list(preset_dir),
         criterion=criterion,
         workflow=workflow,
         run_dir=run_dir,
         positive_prompt=_as_optional_list(positive_prompt),
         negative_prompt=_as_optional_list(negative_prompt),
         include_preset_prompts=include_preset_prompts,
+        use_preset_target_hints=use_preset_target_hints,
         training_preset=training_preset,
         top_k=top_k,
         features_per_layer=features_per_layer,
@@ -324,6 +335,13 @@ def criterion_lab(
         model_kwargs_json=model_kwargs_json,
         tokenizer_kwargs_json=tokenizer_kwargs_json,
     )
+
+
+def criterion_lab_presets(
+    preset_dir: str | Path | list[str | Path] | None = None,
+) -> list[CriterionLabPresetInfo]:
+    """List bundled and user-supplied Criterion Lab preset files."""
+    return available_criterion_lab_presets(preset_dirs=_as_optional_list(preset_dir))
 
 
 def inspect(

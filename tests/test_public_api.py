@@ -7,6 +7,7 @@ from interp_lab import (
     build_prompts,
     compare,
     criterion_lab,
+    criterion_lab_presets,
     doctor,
     inspect,
     profile_environment,
@@ -184,8 +185,8 @@ def test_criterion_lab_public_api_writes_overconfidence_workflow(tmp_path: Path)
     result = criterion_lab(
         out=tmp_path / "lab.json",
         model="distilgpt2",
+        preset="overconfidence",
         run_dir=tmp_path / "lab-run",
-        layer=6,
         positive_prompt="Answer with certainty: what did the missing note say?",
         negative_prompt="Say what is unknown: what did the missing note say?",
     )
@@ -194,10 +195,17 @@ def test_criterion_lab_public_api_writes_overconfidence_workflow(tmp_path: Path)
     assert result.preset == "overconfidence"
     assert "overconfident" in result.criterion
     assert result.config["metadata"]["criterion_lab"]["positive_prompt_count"] == 7
-    assert result.config["steps"][1]["args"]["layer"] == 6
-    assert result.config["steps"][1]["args"]["target_token"]
+    assert result.config["metadata"]["criterion_lab"]["discovery_first"] is True
+    assert result.config["steps"][1]["command"] == "export-hf-records"
+    assert result.config["steps"][1]["args"]["layers"] == "all"
     saved = json.loads(result.path.read_text(encoding="utf-8"))
-    assert saved["metadata"]["criterion_lab"]["workflow"] == "sae"
+    assert saved["metadata"]["criterion_lab"]["workflow"] == "discovery"
+
+
+def test_criterion_lab_public_api_lists_presets():
+    presets = criterion_lab_presets()
+
+    assert any(preset.name == "overconfidence" for preset in presets)
 
 
 def test_train_sae_api_from_records(tmp_path: Path):

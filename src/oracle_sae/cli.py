@@ -20,7 +20,11 @@ from oracle_sae.adapters.saelens import (
 )
 from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
-from oracle_sae.criterion_lab import build_criterion_lab_parser, run_criterion_lab_from_args
+from oracle_sae.criterion_lab import (
+    build_criterion_lab_parser,
+    format_available_presets,
+    run_criterion_lab_from_args,
+)
 from oracle_sae.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
 from oracle_sae.env_profile import build_environment_profile_parser, run_environment_profile_from_args
 from oracle_sae.graphs import (
@@ -241,7 +245,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     criterion_lab = subparsers.add_parser(
         "criterion-lab",
-        help="Write a guided Criterion Lab run config for a behavior such as overconfidence.",
+        help="Write a discovery-first Criterion Lab run config for a behavior.",
         parents=[build_criterion_lab_parser()],
         add_help=False,
     )
@@ -519,6 +523,9 @@ def run_init_run(args: argparse.Namespace) -> int:
 
 
 def run_criterion_lab(args: argparse.Namespace) -> int:
+    if args.list_presets:
+        print(format_available_presets(preset_dirs=args.preset_dir))
+        return 0
     result = run_criterion_lab_from_args(args)
     print(f"Wrote {result.path}")
     print(f"Criterion: {result.criterion}")
