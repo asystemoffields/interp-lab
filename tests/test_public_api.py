@@ -17,6 +17,7 @@ from interp_lab import (
     scaffold_run,
     train_sae,
     validate_attribution_graph,
+    validate_criterion_assay,
     validate_hf_sae_paths,
     validate_matches,
 )
@@ -206,6 +207,18 @@ def test_criterion_lab_public_api_lists_presets():
     presets = criterion_lab_presets()
 
     assert any(preset.name == "overconfidence" for preset in presets)
+
+
+def test_validate_criterion_assay_public_api(tmp_path: Path):
+    report = validate_criterion_assay(preset_file="examples/presets/math-reasoning.json")
+    written = validate_criterion_assay(
+        preset_file="examples/presets/math-reasoning.json",
+        out=tmp_path / "assay-validation.json",
+    )
+
+    assert report["status"] == "pass"
+    assert written.json_path == tmp_path / "assay-validation.json"
+    assert written.report["summary"]["negative_prompt_count"] == 5
 
 
 def test_train_sae_api_from_records(tmp_path: Path):

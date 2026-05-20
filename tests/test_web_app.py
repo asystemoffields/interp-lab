@@ -22,6 +22,7 @@ def test_command_specs_cover_cli_subcommands():
         "validate-matches",
         "export-attribution-graph",
         "validate-attribution-graph",
+        "validate-assay",
         "criterion-lab",
         "studio",
         "demo",
@@ -39,8 +40,10 @@ def test_render_web_app_contains_required_surfaces():
     assert "generated-command" in html
     assert "run-config-output" in html
     assert "validate-hf-sae-paths" in html
+    assert "validate-assay" in html
     assert "criterion-lab" in html
     assert "Discovery-first Criterion Lab" in html
+    assert "Validate an assay" in html
     assert "--preset-file" in html
     assert "--list-presets" in html
     assert "--trust-remote-code" in html

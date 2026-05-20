@@ -23,9 +23,11 @@ from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.cli import main as _cli_main
 from oracle_sae.criterion_lab import (
+    CriterionAssayValidationResult,
     CriterionLabPresetInfo,
     CriterionLabWriteResult,
     available_criterion_lab_presets,
+    write_criterion_assay_validation_report,
     write_criterion_lab_config,
 )
 from oracle_sae.doctor import collect_diagnostics
@@ -342,6 +344,23 @@ def criterion_lab_presets(
 ) -> list[CriterionLabPresetInfo]:
     """List bundled and user-supplied Criterion Lab preset files."""
     return available_criterion_lab_presets(preset_dirs=_as_optional_list(preset_dir))
+
+
+def validate_criterion_assay(
+    *,
+    preset: str | None = None,
+    preset_file: str | Path | None = None,
+    preset_dir: str | Path | list[str | Path] | None = None,
+    out: str | Path | None = None,
+) -> dict[str, Any] | CriterionAssayValidationResult:
+    """Validate a human- or agent-authored Criterion Lab assay JSON file."""
+    result = write_criterion_assay_validation_report(
+        out=out,
+        preset=preset,
+        preset_file=preset_file,
+        preset_dirs=_as_optional_list(preset_dir),
+    )
+    return result if out is not None else result.report
 
 
 def inspect(

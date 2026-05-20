@@ -146,6 +146,10 @@ interp-lab criterion-lab \
 Presets are JSON files containing the criterion and contrast prompts. The bundled `overconfidence` preset is just one data file; you can point at your own preset file or directory:
 
 ```bash
+interp-lab validate-assay \
+  --preset-file examples/presets/math-reasoning.json \
+  --out reports/math-reasoning-lab/assay-validation.json
+
 interp-lab criterion-lab \
   --model distilgpt2 \
   --preset-file examples/presets/math-reasoning.json \

@@ -39,7 +39,7 @@ For behavior-led work, start with Criterion Lab:
 interp-lab criterion-lab --model distilgpt2 --preset overconfidence --out reports/overconfidence-lab/run.json
 ```
 
-Criterion Lab presets are prompt assays. The generated config first scans activation records across all hidden-state layers, ranks the features and layers that actually track the criterion, and exports reports plus graph artifacts for review. Researchers can then train SAEs or run path validation on discovered layers. Use `--preset-file path/to/preset.json` or `--preset-dir presets` for project-specific assays, and `--workflow sae --layer <N>` when discovery has identified a layer worth testing causally.
+Criterion Lab presets are prompt assays. Validate authored assays with `interp-lab validate-assay --preset-file path/to/preset.json` before launch. The generated config first scans activation records across all hidden-state layers, ranks the features and layers that actually track the criterion, and exports reports plus graph artifacts for review. Researchers can then train SAEs or run path validation on discovered layers. Use `--preset-file path/to/preset.json` or `--preset-dir presets` for project-specific assays, and `--workflow sae --layer <N>` when discovery has identified a layer worth testing causally.
 
 ## Supported Platforms
 

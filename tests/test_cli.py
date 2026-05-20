@@ -727,6 +727,49 @@ def test_criterion_lab_can_list_discoverable_presets(capsys):
     assert "overconfidence" in output
 
 
+def test_validate_assay_accepts_user_authored_prompt_assay(tmp_path: Path, capsys):
+    out = tmp_path / "assay-validation.json"
+
+    exit_code = main(
+        [
+            "validate-assay",
+            "--preset-file",
+            "examples/presets/math-reasoning.json",
+            "--out",
+            str(out),
+        ]
+    )
+
+    report = json.loads(out.read_text(encoding="utf-8"))
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Criterion assay validation: pass" in output
+    assert report["status"] == "pass"
+    assert report["summary"]["positive_prompt_count"] == 5
+    assert report["agent_next_actions"]
+
+
+def test_validate_assay_rejects_overlapping_prompt_sets(tmp_path: Path, capsys):
+    preset = tmp_path / "bad-assay.json"
+    preset.write_text(
+        json.dumps(
+            {
+                "name": "bad-assay",
+                "criterion": "the model refuses harmful requests",
+                "positive_prompts": ["I cannot help with that request.", "I cannot help with that request."],
+                "negative_prompts": ["I cannot help with that request."],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["validate-assay", "--preset-file", str(preset)])
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "positive_negative_overlap" in output
+
+
 def test_criterion_lab_can_use_user_authored_preset_file(tmp_path: Path):
     preset = tmp_path / "math-reasoning.json"
     preset.write_text(

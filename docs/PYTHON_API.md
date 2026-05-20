@@ -164,6 +164,12 @@ run(lab.path)
 Criterion Lab presets are JSON prompt assays. The default config runs all-layer discovery with activation records, feature inspection, and graph export. Use a project preset file when an agent or researcher defines a new criterion:
 
 ```python
+from interp_lab import validate_criterion_assay
+
+validation = validate_criterion_assay(
+    preset_file="examples/presets/math-reasoning.json",
+)
+
 lab = criterion_lab(
     model="distilgpt2",
     preset_file="examples/presets/math-reasoning.json",

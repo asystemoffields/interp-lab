@@ -21,8 +21,11 @@ from oracle_sae.adapters.saelens import (
 from oracle_sae.adapters.scope import ScopeFeatureProvider
 from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from oracle_sae.criterion_lab import (
+    build_criterion_assay_validation_parser,
     build_criterion_lab_parser,
     format_available_presets,
+    render_criterion_assay_validation_text,
+    run_criterion_assay_validation_from_args,
     run_criterion_lab_from_args,
 )
 from oracle_sae.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
@@ -250,6 +253,14 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     criterion_lab.set_defaults(func=run_criterion_lab)
+
+    validate_assay = subparsers.add_parser(
+        "validate-assay",
+        help="Validate a user-authored Criterion Lab assay JSON file.",
+        parents=[build_criterion_assay_validation_parser()],
+        add_help=False,
+    )
+    validate_assay.set_defaults(func=run_validate_assay)
 
     export_hf = subparsers.add_parser(
         "export-hf-records",
@@ -535,6 +546,17 @@ def run_criterion_lab(args: argparse.Namespace) -> int:
             command_runner=main,
         )
     print(f"Run with: interp-lab run {result.path}")
+    return 0
+
+
+def run_validate_assay(args: argparse.Namespace) -> int:
+    result = run_criterion_assay_validation_from_args(args)
+    print(render_criterion_assay_validation_text(result.report))
+    if result.json_path is not None:
+        print(f"Wrote {result.json_path}")
+    status = result.report["status"]
+    if status == "fail" or (args.fail_on_warning and status == "warn"):
+        return 1
     return 0
 
 

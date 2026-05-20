@@ -30,6 +30,12 @@ class CriterionLabPresetInfo:
     source: str
 
 
+@dataclass(frozen=True)
+class CriterionAssayValidationResult:
+    report: dict[str, Any]
+    json_path: Path | None = None
+
+
 def build_criterion_lab_config(
     *,
     model: str,
@@ -245,6 +251,181 @@ def format_available_presets(*, preset_dirs: list[str | Path] | None = None) -> 
     return "\n".join(lines)
 
 
+def build_criterion_assay_validation_report(
+    *,
+    preset: str | None = None,
+    preset_file: str | Path | None = None,
+    preset_dirs: list[str | Path] | None = None,
+) -> dict[str, Any]:
+    try:
+        data = load_criterion_lab_preset(
+            preset=preset,
+            preset_file=preset_file,
+            preset_dirs=preset_dirs,
+        )
+    except ValueError as exc:
+        return _assay_validation_failure(str(exc), source=str(preset_file or preset or ""))
+    if data is None:
+        return _assay_validation_failure(
+            "Supply --preset or --preset-file to validate an assay.",
+            source="",
+        )
+
+    positive = list(data["positive_prompts"])
+    negative = list(data["negative_prompts"])
+    target_hints = list(data.get("target_token_hints", []))
+    defaults = dict(data.get("defaults", {}))
+    issues: list[dict[str, str]] = []
+
+    if len(positive) < 3:
+        _add_issue(
+            issues,
+            "warning",
+            "few_positive_prompts",
+            "Use at least three positive prompts for a first-pass discovery assay.",
+            "positive_prompts",
+        )
+    if len(negative) < 3:
+        _add_issue(
+            issues,
+            "warning",
+            "few_negative_prompts",
+            "Use at least three negative/control prompts for a first-pass discovery assay.",
+            "negative_prompts",
+        )
+    if _word_count(data["criterion"]) < 4:
+        _add_issue(
+            issues,
+            "warning",
+            "short_criterion",
+            "The criterion is very short; add enough detail for humans and agents to understand the intended behavior.",
+            "criterion",
+        )
+
+    positive_duplicates = _duplicate_prompts(positive)
+    negative_duplicates = _duplicate_prompts(negative)
+    if positive_duplicates:
+        _add_issue(
+            issues,
+            "warning",
+            "duplicate_positive_prompts",
+            f"{len(positive_duplicates)} positive prompt(s) are duplicated.",
+            "positive_prompts",
+        )
+    if negative_duplicates:
+        _add_issue(
+            issues,
+            "warning",
+            "duplicate_negative_prompts",
+            f"{len(negative_duplicates)} negative prompt(s) are duplicated.",
+            "negative_prompts",
+        )
+    overlap = sorted(set(_canonical_prompt(text) for text in positive) & set(_canonical_prompt(text) for text in negative))
+    if overlap:
+        _add_issue(
+            issues,
+            "error",
+            "positive_negative_overlap",
+            f"{len(overlap)} prompt(s) appear in both positive and negative sets.",
+            "positive_prompts,negative_prompts",
+        )
+
+    length_ratio = _mean_length_ratio(positive, negative)
+    if length_ratio is not None and length_ratio > 3.5:
+        _add_issue(
+            issues,
+            "warning",
+            "prompt_length_imbalance",
+            f"Mean positive/negative prompt lengths differ by {length_ratio:.2f}x.",
+            "positive_prompts,negative_prompts",
+        )
+
+    workflow = str(defaults.get("workflow", "discovery"))
+    if workflow not in {"discovery", "hf-records", "sae", "sae-paths"}:
+        _add_issue(
+            issues,
+            "error",
+            "invalid_default_workflow",
+            "defaults.workflow must be one of discovery, hf-records, sae, or sae-paths.",
+            "defaults.workflow",
+        )
+    if workflow in {"discovery", "hf-records"} and str(defaults.get("layers", "all")) != "all":
+        _add_issue(
+            issues,
+            "info",
+            "bounded_discovery_layers",
+            "This assay starts discovery on selected layers rather than all layers.",
+            "defaults.layers",
+        )
+    if target_hints:
+        _add_issue(
+            issues,
+            "info",
+            "target_token_hints_present",
+            "Target-token hints are recorded as hints and are only used when explicitly requested.",
+            "target_token_hints",
+        )
+
+    status = _validation_status(issues)
+    return {
+        "schema_version": "interp-lab.criterion_assay_validation.v1",
+        "status": status,
+        "preset": data["name"],
+        "label": data.get("label", data["name"]),
+        "source": data.get("source", ""),
+        "criterion": data["criterion"],
+        "summary": {
+            "positive_prompt_count": len(positive),
+            "negative_prompt_count": len(negative),
+            "target_token_hint_count": len(target_hints),
+            "workflow": workflow,
+            "layers": defaults.get("layers", "all" if workflow in {"discovery", "hf-records"} else None),
+            "prompt_length_ratio": length_ratio,
+            "issue_count": len(issues),
+            "error_count": sum(1 for issue in issues if issue["severity"] == "error"),
+            "warning_count": sum(1 for issue in issues if issue["severity"] == "warning"),
+            "info_count": sum(1 for issue in issues if issue["severity"] == "info"),
+        },
+        "issues": issues,
+        "agent_next_actions": _assay_validation_next_actions(status),
+    }
+
+
+def write_criterion_assay_validation_report(
+    *,
+    out: str | Path | None = None,
+    **kwargs: Any,
+) -> CriterionAssayValidationResult:
+    report = build_criterion_assay_validation_report(**kwargs)
+    path = Path(out) if out is not None else None
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    return CriterionAssayValidationResult(report=report, json_path=path)
+
+
+def render_criterion_assay_validation_text(report: dict[str, Any]) -> str:
+    summary = report.get("summary", {})
+    lines = [
+        f"Criterion assay validation: {report.get('status', 'unknown')}",
+        f"Preset: {report.get('preset', '<unknown>')} ({report.get('source', '')})",
+        f"Criterion: {report.get('criterion', '')}",
+        (
+            "Prompts: "
+            f"{summary.get('positive_prompt_count', 0)} positive, "
+            f"{summary.get('negative_prompt_count', 0)} negative"
+        ),
+    ]
+    issues = list(report.get("issues", []))
+    if issues:
+        lines.append("Issues:")
+        for issue in issues:
+            lines.append(f"- [{issue['severity']}] {issue['code']}: {issue['message']}")
+    else:
+        lines.append("Issues: none")
+    return "\n".join(lines)
+
+
 def build_criterion_lab_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Write an editable Criterion Lab run config.")
     parser.add_argument("--out", default="reports/criterion-lab/run.json", help="Output run config JSON path.")
@@ -287,6 +468,20 @@ def build_criterion_lab_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_criterion_assay_validation_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Validate a user-authored Criterion Lab assay JSON file.")
+    parser.add_argument("--preset", help="Preset name or JSON path.")
+    parser.add_argument("--preset-file", help="Explicit assay/preset JSON path.")
+    parser.add_argument("--preset-dir", action="append", default=[], help="Directory of preset JSON files. Repeatable.")
+    parser.add_argument("--out", help="Optional JSON validation report path.")
+    parser.add_argument(
+        "--fail-on-warning",
+        action="store_true",
+        help="Return a non-zero exit code when warnings are present.",
+    )
+    return parser
+
+
 def run_criterion_lab_from_args(args: argparse.Namespace) -> CriterionLabWriteResult:
     if not args.model:
         raise SystemExit("--model is required unless --list-presets is used")
@@ -326,6 +521,16 @@ def run_criterion_lab_from_args(args: argparse.Namespace) -> CriterionLabWriteRe
         )
     except (FileExistsError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
+
+
+def run_criterion_assay_validation_from_args(args: argparse.Namespace) -> CriterionAssayValidationResult:
+    result = write_criterion_assay_validation_report(
+        out=args.out,
+        preset=args.preset,
+        preset_file=args.preset_file,
+        preset_dirs=args.preset_dir,
+    )
+    return result
 
 
 def _load_preset_path(path: Path) -> dict[str, Any]:
@@ -408,6 +613,95 @@ def _recommended_next_actions(preset_data: dict[str, Any] | None) -> list[str]:
         "Treat activation-ranked features as candidates until intervention rows or path validation support them.",
         "Edit the prompt set toward your domain before larger runs.",
     ]
+
+
+def _assay_validation_failure(message: str, *, source: str) -> dict[str, Any]:
+    return {
+        "schema_version": "interp-lab.criterion_assay_validation.v1",
+        "status": "fail",
+        "preset": "",
+        "label": "",
+        "source": source,
+        "criterion": "",
+        "summary": {
+            "positive_prompt_count": 0,
+            "negative_prompt_count": 0,
+            "target_token_hint_count": 0,
+            "issue_count": 1,
+            "error_count": 1,
+            "warning_count": 0,
+            "info_count": 0,
+        },
+        "issues": [
+            {
+                "severity": "error",
+                "code": "invalid_assay",
+                "message": message,
+                "field": "preset",
+            }
+        ],
+        "agent_next_actions": _assay_validation_next_actions("fail"),
+    }
+
+
+def _add_issue(issues: list[dict[str, str]], severity: str, code: str, message: str, field: str) -> None:
+    issues.append(
+        {
+            "severity": severity,
+            "code": code,
+            "message": message,
+            "field": field,
+        }
+    )
+
+
+def _validation_status(issues: list[dict[str, str]]) -> str:
+    if any(issue["severity"] == "error" for issue in issues):
+        return "fail"
+    if any(issue["severity"] == "warning" for issue in issues):
+        return "warn"
+    return "pass"
+
+
+def _assay_validation_next_actions(status: str) -> list[str]:
+    if status == "fail":
+        return ["Fix validation errors before launching discovery."]
+    if status == "warn":
+        return ["Review warnings, then run `interp-lab criterion-lab` when the assay matches your intent."]
+    return ["Run `interp-lab criterion-lab` with this assay, then inspect discovered layers before SAE causal tests."]
+
+
+def _duplicate_prompts(prompts: list[str]) -> list[str]:
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for prompt in prompts:
+        key = _canonical_prompt(prompt)
+        if key in seen:
+            duplicates.append(prompt)
+        seen.add(key)
+    return duplicates
+
+
+def _canonical_prompt(prompt: str) -> str:
+    return " ".join(prompt.lower().split())
+
+
+def _word_count(text: str) -> int:
+    return len([part for part in text.split() if part.strip()])
+
+
+def _mean_length_ratio(positive: list[str], negative: list[str]) -> float | None:
+    positive_mean = _mean([_word_count(prompt) for prompt in positive])
+    negative_mean = _mean([_word_count(prompt) for prompt in negative])
+    if positive_mean is None or negative_mean is None or min(positive_mean, negative_mean) <= 0:
+        return None
+    return max(positive_mean, negative_mean) / min(positive_mean, negative_mean)
+
+
+def _mean(values: list[int]) -> float | None:
+    if not values:
+        return None
+    return sum(values) / len(values)
 
 
 def _string_list(value: Any, label: str) -> list[str]:

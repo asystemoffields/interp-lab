@@ -71,6 +71,19 @@ COMMAND_SPECS: list[dict[str, Any]] = [
         ],
     },
     {
+        "id": "validate-assay",
+        "group": "Guided Labs",
+        "label": "Validate Assay",
+        "description": "Check a user-authored Criterion Lab assay before launching discovery.",
+        "fields": [
+            {"key": "preset", "flag": "--preset", "label": "Preset name or JSON path", "placeholder": "overconfidence or presets/refusal.json"},
+            {"key": "preset_file", "flag": "--preset-file", "label": "Assay JSON file", "placeholder": "examples/presets/math-reasoning.json"},
+            {"key": "preset_dir", "flag": "--preset-dir", "label": "Preset directories", "type": "repeat", "placeholder": "presets"},
+            {"key": "out", "flag": "--out", "label": "Validation JSON", "default": "reports/assay-validation.json"},
+            {"key": "fail_on_warning", "flag": "--fail-on-warning", "label": "Fail on warnings", "type": "boolean"},
+        ],
+    },
+    {
         "id": "export-hf-records",
         "group": "Data",
         "label": "Export HF Records",
@@ -722,6 +735,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     const commandSpecs = JSON.parse(document.getElementById("command-specs").textContent);
     const workflows = [
       {{ title: "Start with a toy tour", command: "demo", values: {{ out: "reports/demo" }} }},
+      {{ title: "Validate an assay", command: "validate-assay", values: {{ preset_file: "examples/presets/math-reasoning.json", out: "reports/assay-validation.json" }} }},
       {{ title: "Discovery-first Criterion Lab", command: "criterion-lab", values: {{ model: "distilgpt2", preset: "overconfidence", workflow: "discovery", layers: "all", training_preset: "minimal", run_dir: "reports/criterion-lab", out: "reports/criterion-lab/run.json", execute: false, force: true }} }},
       {{ title: "Inspect a local/open model", command: "inspect", values: {{ backend: "records", out: "reports/inspection", html_out: "reports/inspection/report.html" }} }},
       {{ title: "Train and inspect an SAE", command: "train-sae", values: {{ preset: "production", out: "reports/sae/sae.json", records_out: "reports/sae/records.jsonl" }} }},
@@ -911,6 +925,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
         match: "Run validate-matches on the match report before treating pairs as equivalents.",
         "validate-matches": "Use validated pairs in graph review; collect interventions for pairs that need evidence.",
         "export-attribution-graph": "Open graph.html, then validate candidate paths with held-out path records.",
+        "validate-assay": "Fix any assay errors, then launch Criterion Lab discovery with the validated preset file.",
         "criterion-lab": "Run the generated config, then open the inspection report and graph artifacts from Reports And Graphs.",
         demo: "Open the generated HTML reports in the output folder for a quick product tour.",
       }};

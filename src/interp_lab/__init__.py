@@ -10,7 +10,11 @@ from oracle_sae.schema import (
     MatchReport,
 )
 from oracle_sae.hf_records import PromptDatasetSummary
-from oracle_sae.criterion_lab import CriterionLabPresetInfo, CriterionLabWriteResult
+from oracle_sae.criterion_lab import (
+    CriterionAssayValidationResult,
+    CriterionLabPresetInfo,
+    CriterionLabWriteResult,
+)
 from oracle_sae.workflows import RunTemplateWriteResult
 
 from interp_lab.api import (
@@ -39,12 +43,14 @@ from interp_lab.api import (
     scaffold_run,
     train_sae,
     validate_attribution_graph,
+    validate_criterion_assay,
     validate_hf_sae_paths,
     validate_matches,
 )
 
 __all__ = [
     "CandidateMatch",
+    "CriterionAssayValidationResult",
     "CriterionLabPresetInfo",
     "CriterionLabWriteResult",
     "Criterion",
@@ -80,6 +86,7 @@ __all__ = [
     "scaffold_run",
     "train_sae",
     "validate_attribution_graph",
+    "validate_criterion_assay",
     "validate_hf_sae_paths",
     "validate_matches",
 ]
