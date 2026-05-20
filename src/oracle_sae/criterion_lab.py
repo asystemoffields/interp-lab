@@ -4,7 +4,6 @@ import argparse
 import json
 from dataclasses import dataclass
 from importlib import resources
-from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any
 
@@ -339,7 +338,7 @@ def _load_preset_path(path: Path) -> dict[str, Any]:
     return _normalize_preset(raw, source=str(path), fallback_name=path.stem)
 
 
-def _load_preset_resource(resource: Traversable) -> dict[str, Any]:
+def _load_preset_resource(resource: Any) -> dict[str, Any]:
     try:
         raw = json.loads(resource.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -451,7 +450,7 @@ def _iter_preset_dir_files(preset_dirs: list[str | Path]):
         yield from sorted(path.glob("*.json"))
 
 
-def _iter_bundled_preset_files() -> list[Traversable]:
+def _iter_bundled_preset_files() -> list[Any]:
     try:
         root = resources.files(PRESET_PACKAGE)
     except ModuleNotFoundError:
