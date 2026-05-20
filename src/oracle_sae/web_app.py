@@ -558,6 +558,20 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
       flex-wrap: wrap;
       gap: 8px;
     }}
+    .runner-tools {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 190px;
+      gap: 8px;
+      align-items: start;
+      margin-top: 10px;
+    }}
+    .runner-tools textarea {{
+      min-height: 104px;
+    }}
+    .runner-actions {{
+      display: grid;
+      gap: 8px;
+    }}
     button.action {{
       border: 1px solid var(--line);
       border-radius: 7px;
@@ -681,7 +695,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     }}
     @media (max-width: 900px) {{
       main {{ width: min(100vw - 20px, 1220px); }}
-      .shell, .output-grid, .grid, .workflow, .artifact-layout {{ grid-template-columns: 1fr; }}
+      .shell, .output-grid, .grid, .workflow, .artifact-layout, .runner-tools {{ grid-template-columns: 1fr; }}
       .sidebar {{ position: static; }}
       .command-list {{ max-height: none; }}
     }}
@@ -754,6 +768,16 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
             <button class="action primary" id="start-job" type="button">Run Command</button>
             <button class="action" id="start-config-job" type="button">Run Config</button>
             <button class="action" id="refresh-jobs" type="button">Refresh Jobs</button>
+          </div>
+          <div class="runner-tools">
+            <label>
+              Imported run config JSON
+              <textarea id="run-config-import" placeholder='{{"schema_version":"interp-lab.run.v1","steps":[...]}}'></textarea>
+            </label>
+            <div class="runner-actions">
+              <button class="action" id="load-current-config" type="button">Load Current Config</button>
+              <button class="action primary" id="start-imported-config" type="button">Run Imported Config</button>
+            </div>
           </div>
           <div class="history-list" id="job-list" style="margin-top:10px"></div>
         </section>
@@ -985,7 +1009,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
         const response = await fetch("/api/health", {{ cache: "no-store" }});
         if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
         const health = await response.json();
-        setServerState(true, `Workspace: ${{health.workspace}}`);
+        setServerState(true, `Workspace: ${{health.workspace}} · history: ${{health.history_path || "in memory"}}`);
         await Promise.all([refreshJobs(), refreshArtifacts()]);
       }} catch (error) {{
         setServerState(false, "Static HTML mode. Run `interp-lab studio --serve` to launch commands and browse artifacts here.");
@@ -1000,6 +1024,7 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
       byId("artifact-panel").classList.toggle("server-disabled", !available);
       byId("start-job").disabled = !available;
       byId("start-config-job").disabled = !available;
+      byId("start-imported-config").disabled = !available;
       byId("refresh-jobs").disabled = !available;
       byId("refresh-artifacts").disabled = !available;
       if (!available) {{
@@ -1014,6 +1039,30 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
       const payload = useConfig
         ? {{ run_config: buildRunConfig(selected, data) }}
         : {{ argv: buildArgv(selected, data, false) }};
+      await submitJobPayload(payload);
+    }}
+
+    async function startImportedConfig() {{
+      if (!serverAvailable) return;
+      const raw = byId("run-config-import").value.trim();
+      if (!raw) {{
+        renderJobError("Paste a run config JSON object before launching it.");
+        return;
+      }}
+      let config = null;
+      try {{
+        config = JSON.parse(raw);
+        if (!config || Array.isArray(config) || typeof config !== "object") {{
+          throw new Error("run config must be a JSON object");
+        }}
+      }} catch (error) {{
+        renderJobError(`Invalid run config JSON: ${{error.message}}`);
+        return;
+      }}
+      await submitJobPayload({{ run_config: config }});
+    }}
+
+    async function submitJobPayload(payload) {{
       const response = await fetch("/api/jobs", {{
         method: "POST",
         headers: {{ "Content-Type": "application/json" }},
@@ -1021,13 +1070,17 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
       }});
       if (!response.ok) {{
         const error = await response.json().catch(() => ({{ error: response.statusText }}));
-        byId("job-list").innerHTML = `<div class="history-item"><strong>Job rejected</strong><span class="item-meta">${{escapeHtml(error.error || "Unknown error")}}</span></div>`;
+        renderJobError(error.error || "Unknown error");
         return;
       }}
       const payloadJson = await response.json();
       jobs = [payloadJson.job, ...jobs.filter((job) => job.id !== payloadJson.job.id)];
       renderJobs();
       pollJob(payloadJson.job.id);
+    }}
+
+    function renderJobError(message) {{
+      byId("job-list").innerHTML = `<div class="history-item"><strong>Job rejected</strong><span class="item-meta">${{escapeHtml(message)}}</span></div>`;
     }}
 
     async function pollJob(jobId) {{
@@ -1068,7 +1121,8 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
         item.innerHTML = `
           <strong>${{escapeHtml(job.command || job.id)}} <span class="pill">${{escapeHtml(job.status)}}</span></strong>
           <span class="item-meta">${{escapeHtml((job.argv || []).join(" "))}}</span>
-          <span class="item-meta">${{job.exit_code === null || job.exit_code === undefined ? "" : `exit ${{job.exit_code}}`}} ${{escapeHtml(job.finished_at || job.started_at || job.created_at || "")}}</span>
+          <span class="item-meta">${{escapeHtml(job.source || "job")}} ${{job.run_config_path ? "· " + escapeHtml(job.run_config_path) : ""}}</span>
+          <span class="item-meta">${{job.exit_code === null || job.exit_code === undefined ? "" : `exit ${{job.exit_code}}`}} ${{escapeHtml(job.finished_at || job.started_at || job.created_at || "")}} ${{job.captured_output_truncated ? "· output truncated" : ""}}</span>
           ${{output ? `<pre>${{escapeHtml(output)}}</pre>` : ""}}
         `;
         list.appendChild(item);
@@ -1222,6 +1276,10 @@ def render_web_app_html(command_specs: Sequence[dict[str, Any]] | None = None) -
     byId("copy-config").addEventListener("click", async () => navigator.clipboard?.writeText(byId("run-config-output").textContent));
     byId("start-job").addEventListener("click", () => startJob(false));
     byId("start-config-job").addEventListener("click", () => startJob(true));
+    byId("load-current-config").addEventListener("click", () => {{
+      byId("run-config-import").value = byId("run-config-output").textContent;
+    }});
+    byId("start-imported-config").addEventListener("click", startImportedConfig);
     byId("refresh-jobs").addEventListener("click", refreshJobs);
     byId("refresh-artifacts").addEventListener("click", refreshArtifacts);
     renderWorkflows();

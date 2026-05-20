@@ -18,6 +18,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 from oracle_sae.web_app import COMMAND_SPECS, render_web_app_html
 
 CommandRunner = Callable[[list[str], Path], tuple[int, str, str]]
+STUDIO_HISTORY_SCHEMA = "interp-lab.studio_history.v1"
+MAX_CAPTURED_OUTPUT_CHARS = 20000
 
 
 @dataclass
@@ -117,26 +119,38 @@ class _ServerState:
         self.command_specs = command_specs
         self.allowed_commands = allowed_commands
         self.command_runner = command_runner
-        self.jobs: dict[str, dict[str, Any]] = {}
+        self.history_path = self.reports_dir / ".studio" / "jobs.json"
         self.lock = threading.Lock()
+        self.jobs: dict[str, dict[str, Any]] = self._load_jobs()
+        if self.jobs:
+            with self.lock:
+                self._persist_jobs_locked()
 
     def snapshot_jobs(self) -> list[dict[str, Any]]:
         with self.lock:
-            jobs = [dict(job) for job in self.jobs.values()]
-        return sorted(jobs, key=lambda item: str(item.get("created_at", "")), reverse=True)
+            return self.snapshot_jobs_locked()
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         with self.lock:
             job = self.jobs.get(job_id)
             return dict(job) if job is not None else None
 
-    def create_job(self, argv: list[str], *, job_id: str | None = None) -> dict[str, Any]:
+    def create_job(
+        self,
+        argv: list[str],
+        *,
+        job_id: str | None = None,
+        source: str = "argv",
+        run_config_path: Path | None = None,
+    ) -> dict[str, Any]:
         self._validate_argv(argv)
         job_id = job_id or uuid.uuid4().hex[:12]
         job = {
+            "schema_version": STUDIO_HISTORY_SCHEMA,
             "id": job_id,
             "argv": argv,
             "command": argv[0],
+            "source": source,
             "status": "queued",
             "created_at": _utc_timestamp(),
             "started_at": None,
@@ -144,10 +158,13 @@ class _ServerState:
             "exit_code": None,
             "stdout": "",
             "stderr": "",
+            "captured_output_truncated": False,
             "workspace": str(self.workspace),
+            "run_config_path": str(run_config_path) if run_config_path else None,
         }
         with self.lock:
             self.jobs[job_id] = job
+            self._persist_jobs_locked()
         thread = threading.Thread(target=self._run_job, args=(job_id,), daemon=True)
         thread.start()
         return dict(job)
@@ -158,7 +175,7 @@ class _ServerState:
         run_dir.mkdir(parents=True, exist_ok=True)
         config_path = run_dir / "run-config.json"
         config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-        return self.create_job(["run", str(config_path)], job_id=job_id)
+        return self.create_job(["run", str(config_path)], job_id=job_id, source="run_config", run_config_path=config_path)
 
     def _validate_argv(self, argv: list[str]) -> None:
         if not argv:
@@ -177,6 +194,7 @@ class _ServerState:
             job["status"] = "running"
             job["started_at"] = _utc_timestamp()
             argv = list(job["argv"])
+            self._persist_jobs_locked()
         try:
             exit_code, stdout, stderr = self.command_runner(argv, self.workspace)
         except Exception as exc:  # pragma: no cover - defensive boundary.
@@ -188,8 +206,54 @@ class _ServerState:
             job["status"] = "succeeded" if exit_code == 0 else "failed"
             job["finished_at"] = _utc_timestamp()
             job["exit_code"] = exit_code
-            job["stdout"] = stdout
-            job["stderr"] = stderr
+            job["stdout"] = _truncate_output(stdout)
+            job["stderr"] = _truncate_output(stderr)
+            job["captured_output_truncated"] = stdout != job["stdout"] or stderr != job["stderr"]
+            self._persist_jobs_locked()
+
+    def _load_jobs(self) -> dict[str, dict[str, Any]]:
+        if not self.history_path.exists():
+            return {}
+        try:
+            payload = json.loads(self.history_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        jobs = payload.get("jobs", [])
+        if not isinstance(jobs, list):
+            return {}
+        loaded: dict[str, dict[str, Any]] = {}
+        for item in jobs:
+            if not isinstance(item, dict):
+                continue
+            job_id = item.get("id")
+            if not isinstance(job_id, str) or not job_id:
+                continue
+            job = _normalize_job_record(item, self.workspace)
+            loaded[job_id] = job
+        return loaded
+
+    def _persist_jobs_locked(self) -> None:
+        payload = {
+            "schema_version": STUDIO_HISTORY_SCHEMA,
+            "updated_at": _utc_timestamp(),
+            "workspace": str(self.workspace),
+            "reports_dir": str(self.reports_dir),
+            "jobs": self.snapshot_jobs_locked(limit=200),
+        }
+        try:
+            self.history_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = self.history_path.with_suffix(".tmp")
+            temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            temp_path.replace(self.history_path)
+        except OSError:
+            return
+
+    def snapshot_jobs_locked(self, *, limit: int | None = None) -> list[dict[str, Any]]:
+        jobs = [dict(job) for job in self.jobs.values()]
+        ordered = sorted(jobs, key=lambda item: str(item.get("created_at", "")), reverse=True)
+        return ordered if limit is None else ordered[:limit]
 
 
 class _StudioRequestHandler(BaseHTTPRequestHandler):
@@ -207,6 +271,8 @@ class _StudioRequestHandler(BaseHTTPRequestHandler):
                     "ok": True,
                     "workspace": str(self.server_state.workspace),
                     "reports_dir": str(self.server_state.reports_dir),
+                    "history_path": str(self.server_state.history_path),
+                    "history_schema_version": STUDIO_HISTORY_SCHEMA,
                     "command_count": len(self.server_state.command_specs),
                 }
             )
@@ -215,7 +281,7 @@ class _StudioRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"commands": self.server_state.command_specs})
             return
         if parsed.path == "/api/jobs":
-            self._send_json({"jobs": self.server_state.snapshot_jobs()})
+            self._send_json({"schema_version": STUDIO_HISTORY_SCHEMA, "jobs": self.server_state.snapshot_jobs()})
             return
         if parsed.path.startswith("/api/jobs/"):
             job_id = parsed.path.rsplit("/", 1)[-1]
@@ -223,7 +289,7 @@ class _StudioRequestHandler(BaseHTTPRequestHandler):
             if job is None:
                 self._send_error_json(HTTPStatus.NOT_FOUND, "job not found")
                 return
-            self._send_json({"job": job})
+            self._send_json({"schema_version": STUDIO_HISTORY_SCHEMA, "job": job})
             return
         if parsed.path == "/api/artifacts":
             self._send_json({"artifacts": _artifact_records(self.server_state.reports_dir)})
@@ -341,6 +407,43 @@ def _subprocess_runner(argv: list[str], workspace: Path) -> tuple[int, str, str]
         check=False,
     )
     return process.returncode, process.stdout, process.stderr
+
+
+def _normalize_job_record(item: dict[str, Any], workspace: Path) -> dict[str, Any]:
+    argv = item.get("argv")
+    if not isinstance(argv, list):
+        argv = []
+    argv = [str(value) for value in argv if value is not None]
+    command = str(item.get("command") or (argv[0] if argv else "unknown"))
+    status = str(item.get("status") or "unknown")
+    stderr = str(item.get("stderr") or "")
+    if status in {"queued", "running"}:
+        status = "interrupted"
+        note = "Studio server stopped before this job completed."
+        stderr = f"{stderr}\n{note}".strip()
+    return {
+        "schema_version": STUDIO_HISTORY_SCHEMA,
+        "id": str(item.get("id")),
+        "argv": argv,
+        "command": command,
+        "source": str(item.get("source") or "history"),
+        "status": status,
+        "created_at": item.get("created_at") or _utc_timestamp(),
+        "started_at": item.get("started_at"),
+        "finished_at": item.get("finished_at") if status != "interrupted" else item.get("finished_at") or _utc_timestamp(),
+        "exit_code": item.get("exit_code"),
+        "stdout": _truncate_output(str(item.get("stdout") or "")),
+        "stderr": _truncate_output(stderr),
+        "captured_output_truncated": bool(item.get("captured_output_truncated", False)),
+        "workspace": str(item.get("workspace") or workspace),
+        "run_config_path": item.get("run_config_path"),
+    }
+
+
+def _truncate_output(text: str) -> str:
+    if len(text) <= MAX_CAPTURED_OUTPUT_CHARS:
+        return text
+    return text[-MAX_CAPTURED_OUTPUT_CHARS:]
 
 
 def _artifact_records(reports_dir: Path, *, limit: int = 300) -> list[dict[str, Any]]:

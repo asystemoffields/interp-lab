@@ -31,7 +31,7 @@ For less technical users, run the local Studio server:
 interp-lab studio --serve --reports-dir reports
 ```
 
-Served Studio adds a local runner, session job history, artifact browsing, HTML report preview, and graph JSON summaries. It uses the same CLI command specs as the static page, only launches known interp-lab subcommands, and keeps artifacts inside the current workspace.
+Served Studio adds a local runner, persistent job history in `reports/.studio/jobs.json`, run-config import, artifact browsing, HTML report preview, and graph JSON summaries. It uses the same CLI command specs as the static page, only launches known interp-lab subcommands, and keeps artifacts inside the current workspace.
 
 For behavior-led work, start with Criterion Lab:
 

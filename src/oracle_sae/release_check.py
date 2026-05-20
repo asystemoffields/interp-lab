@@ -283,10 +283,23 @@ def _check_real_model_demo_coverage(root: Path) -> dict[str, str]:
 def _check_browser_app(root: Path) -> dict[str, str]:
     files = ["src/oracle_sae/web_app.py", "src/oracle_sae/web_server.py"]
     missing = [path for path in files if not (root / path).exists()]
+    web_app = (root / "src/oracle_sae/web_app.py").read_text(encoding="utf-8") if not missing else ""
+    web_server = (root / "src/oracle_sae/web_server.py").read_text(encoding="utf-8") if not missing else ""
     readme = (root / "README.md").read_text(encoding="utf-8") if (root / "README.md").exists() else ""
-    documented = "studio --serve" in readme and "reports-dir" in readme
-    status = "pass" if not missing and documented else "warn"
-    detail = "Studio server files and README served-mode docs are present." if status == "pass" else "Studio exists, but docs or server files need review."
+    documented = "studio --serve" in readme and "reports-dir" in readme and "persistent job history" in readme.lower()
+    required_surfaces = {
+        "run-config import": "run-config-import" in web_app and "startImportedConfig" in web_app,
+        "persistent history schema": "STUDIO_HISTORY_SCHEMA" in web_server,
+        "history path API": "history_path" in web_server,
+        "artifact API": "/api/artifacts" in web_server,
+    }
+    missing_surfaces = [name for name, present in required_surfaces.items() if not present]
+    status = "pass" if not missing and documented and not missing_surfaces else "warn"
+    detail = (
+        "Studio supports served jobs, persistent history, run-config import, and artifact browsing."
+        if status == "pass"
+        else "Missing browser-app polish: " + ", ".join(missing + missing_surfaces + ([] if documented else ["README served-mode docs"]))
+    )
     return _check(
         "browser_app_workflow",
         "Browser app workflow is present",
