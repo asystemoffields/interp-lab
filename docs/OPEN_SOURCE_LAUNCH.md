@@ -8,6 +8,7 @@ This checklist is for publishing interp-lab as a useful public tool.
 - Keep source, tests, examples, docs, and small fixtures in git.
 - Keep generated reports, model caches, and large SAE artifacts out of git.
 - Add a release tag after CI is green.
+- Run `interp-lab release-check --strict --out reports/release-check.json` before any stable release tag.
 
 ## Quality Bar
 

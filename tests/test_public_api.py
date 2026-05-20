@@ -14,6 +14,7 @@ from interp_lab import (
     prepare_sae_prompts,
     profile_environment,
     publish_hf_artifact,
+    release_check,
     run,
     scale_plan,
     scaffold_run,
@@ -326,6 +327,14 @@ def test_run_and_doctor_api(tmp_path: Path):
     assert (run_dir / "manifest.json").exists()
     assert doctor()["tool"] == "interp-lab"
     assert profile_environment(tmp_path)["schema_version"] == "interp-lab.env_profile.v1"
+
+
+def test_release_check_public_api_reports_not_ready():
+    report = release_check(Path.cwd())
+
+    assert report["schema_version"] == "interp-lab.release_check.v1"
+    assert report["ready_for_stable_release"] is False
+    assert any(check["id"] == "development_classifier" for check in report["checks"])
 
 
 def test_graph_publish_and_scale_public_apis(tmp_path: Path):

@@ -6,6 +6,8 @@ from typing import Any
 
 
 NumberVector = list[float]
+INSPECTION_REPORT_SCHEMA = "interp-lab.inspection_report.v1"
+MATCH_REPORT_SCHEMA = "interp-lab.match_report.v1"
 
 
 def utc_now_iso() -> str:
@@ -232,6 +234,7 @@ class InspectionReport:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schema_version": INSPECTION_REPORT_SCHEMA,
             "model": self.model,
             "criterion": self.criterion.to_dict(),
             "cards": [card.to_dict() for card in self.cards],
@@ -259,6 +262,7 @@ class MatchReport:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schema_version": MATCH_REPORT_SCHEMA,
             "left_model": self.left_model,
             "right_model": self.right_model,
             "matches": [match.to_dict() for match in self.matches],

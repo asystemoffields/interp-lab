@@ -80,6 +80,7 @@ from oracle_sae.reporting import (
     write_match_markdown,
     write_match_report,
 )
+from oracle_sae.release_check import build_release_readiness_report
 from oracle_sae.runs import RunOptions, run_config_file
 from oracle_sae.sae_training import (
     TRAINING_PRESETS,
@@ -846,6 +847,11 @@ def doctor() -> dict[str, Any]:
 def profile_environment(path: str | Path = ".") -> dict[str, Any]:
     """Return a sanitized compute, storage, and route profile for an environment."""
     return collect_environment_profile(path=path)
+
+
+def release_check(repo_root: str | Path = ".") -> dict[str, Any]:
+    """Return the stable-release readiness report for a repository checkout."""
+    return build_release_readiness_report(repo_root)
 
 
 def attribution_graph(

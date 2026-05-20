@@ -55,6 +55,12 @@ Check your local environment:
 interp-lab doctor
 ```
 
+Check stable-release readiness:
+
+```bash
+interp-lab release-check --strict --out reports/release-check.json
+```
+
 Profile the current machine and route options:
 
 ```bash

@@ -180,7 +180,10 @@ python -m twine check dist/*
 interp-lab doctor
 interp-lab profile-env --out reports/env-profile.json --json
 interp-lab run examples/run_records.json
+interp-lab release-check --strict --out reports/release-check.json
 ```
+
+`release-check --strict` is the stable-release gate. It should fail while the project is still classified as alpha or has unresolved stable-release blockers. The release bar is documented in `docs/STABLE_RELEASE.md`.
 
 For model-backed release examples:
 

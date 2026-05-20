@@ -23,7 +23,11 @@ def test_demo_command_writes_reports(tmp_path: Path):
     assert (tmp_path / "graph.html").exists()
     assert (tmp_path / "graph-summary.json").exists()
     assert (tmp_path / "studio.html").exists()
+    report = json.loads((tmp_path / "model-a" / "report.json").read_text(encoding="utf-8"))
+    matches = json.loads((tmp_path / "matches.json").read_text(encoding="utf-8"))
     graph_summary = json.loads((tmp_path / "graph-summary.json").read_text(encoding="utf-8"))
+    assert report["schema_version"] == "interp-lab.inspection_report.v1"
+    assert matches["schema_version"] == "interp-lab.match_report.v1"
     assert graph_summary["schema_version"] == "interp-lab.attribution_graph_summary.v1"
 
 

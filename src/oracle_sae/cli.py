@@ -67,6 +67,11 @@ from oracle_sae.reporting import (
     write_match_markdown,
     write_match_report,
 )
+from oracle_sae.release_check import (
+    build_release_check_parser,
+    render_release_check_text,
+    run_release_check_from_args,
+)
 from oracle_sae.runs import RunOptions, run_config_file
 from oracle_sae.sae_training import build_train_sae_parser, run_train_sae_from_args
 from oracle_sae.scaling import build_scale_plan_parser, run_scale_plan_from_args
@@ -392,6 +397,14 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     scale_plan.set_defaults(func=run_plan_scale)
+
+    release_check = subparsers.add_parser(
+        "release-check",
+        help="Assess whether interp-lab is ready for a stable public release.",
+        parents=[build_release_check_parser()],
+        add_help=False,
+    )
+    release_check.set_defaults(func=run_release_check)
 
     return parser
 
@@ -725,6 +738,19 @@ def run_validate_attribution_graph(args: argparse.Namespace) -> int:
 
 def run_plan_scale(args: argparse.Namespace) -> int:
     run_scale_plan_from_args(args)
+    return 0
+
+
+def run_release_check(args: argparse.Namespace) -> int:
+    result = run_release_check_from_args(args)
+    if args.json:
+        print(json.dumps(result.report, indent=2, sort_keys=True))
+    else:
+        print(render_release_check_text(result.report))
+    if result.path is not None:
+        print(f"Wrote {result.path}")
+    if args.strict and not result.report["ready_for_stable_release"]:
+        return 1
     return 0
 
 

@@ -251,6 +251,16 @@ plan = scale_plan(
 
 Use `env_profile="reports/env-profile.json"` to plan against a saved profile from another machine.
 
+## Release Readiness
+
+```python
+from interp_lab import release_check
+
+report = release_check(".")
+print(report["ready_for_stable_release"])
+print(report["agent_next_actions"])
+```
+
 ## Graphs, Publishing, And Scale Plans
 
 ```python
