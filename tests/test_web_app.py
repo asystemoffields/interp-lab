@@ -20,6 +20,9 @@ def test_command_specs_cover_cli_subcommands():
         "export-transformerlens-records",
         "export-nnsight-records",
         "validate-matches",
+        "check-explanation-consistency",
+        "search-features",
+        "compare-model-families",
         "export-attribution-graph",
         "validate-attribution-graph",
         "validate-assay",
@@ -42,6 +45,10 @@ def test_render_web_app_contains_required_surfaces():
     assert "validate-hf-sae-paths" in html
     assert "validate-assay" in html
     assert "criterion-lab" in html
+    assert "check-explanation-consistency" in html
+    assert "search-features" in html
+    assert "compare-model-families" in html
+    assert "--nla-explanations" in html
     assert "Discovery-first Criterion Lab" in html
     assert "Validate an assay" in html
     assert "--preset-file" in html

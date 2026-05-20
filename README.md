@@ -139,7 +139,8 @@ Check explanation consistency across paraphrased criteria:
 interp-lab check-explanation-consistency \
   --report reports/tool-calls/report.json \
   --report reports/successful-tool-use/report.json \
-  --out reports/explanation-consistency.json
+  --out reports/explanation-consistency.json \
+  --html-out reports/explanation-consistency.html
 ```
 
 Search reports by a natural-language feature description:
@@ -148,7 +149,8 @@ Search reports by a natural-language feature description:
 interp-lab search-features \
   --report reports/tool-calls/report.json \
   --query "features that represent valid tool-call arguments" \
-  --out reports/feature-search.json
+  --out reports/feature-search.json \
+  --html-out reports/feature-search.html
 ```
 
 Compare feature patterns across model families:
@@ -157,8 +159,11 @@ Compare feature patterns across model families:
 interp-lab compare-model-families \
   --member gemma=reports/gemma/report.json \
   --member qwen=reports/qwen/report.json \
-  --out reports/model-family-comparison.json
+  --out reports/model-family-comparison.json \
+  --html-out reports/model-family-comparison.html
 ```
+
+For these report-analysis commands, `--report` and `--member family=...` accept either a `report.json` path or a report directory containing `report.json`.
 
 Create a demo run:
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import itertools
 import json
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ class WrittenJsonMarkdown:
     report: dict[str, Any]
     json_path: Path
     markdown_path: Path
+    html_path: Path | None = None
 
 
 def build_explanation_consistency_parser() -> argparse.ArgumentParser:
@@ -31,6 +33,7 @@ def build_explanation_consistency_parser() -> argparse.ArgumentParser:
     parser.add_argument("--report", action="append", required=True, help="Inspection report JSON. Repeat for paraphrases.")
     parser.add_argument("--out", default="reports/explanation-consistency.json", help="Output JSON path.")
     parser.add_argument("--markdown-out", help="Output Markdown path. Defaults to --out with .md suffix.")
+    parser.add_argument("--html-out", help="Optional self-contained HTML report path.")
     parser.add_argument("--min-similarity", type=float, default=0.72, help="Minimum explanation similarity for consistency.")
     parser.add_argument("--max-rank-span", type=int, default=5, help="Maximum rank span before a shared feature is marked as rank drift.")
     parser.add_argument("--top-k", type=int, help="Only compare the first N cards from each report.")
@@ -43,6 +46,7 @@ def build_feature_search_parser() -> argparse.ArgumentParser:
     parser.add_argument("--query", required=True, help="Natural-language feature description to search for.")
     parser.add_argument("--out", default="reports/feature-search.json", help="Output JSON path.")
     parser.add_argument("--markdown-out", help="Output Markdown path. Defaults to --out with .md suffix.")
+    parser.add_argument("--html-out", help="Optional self-contained HTML report path.")
     parser.add_argument("--top-k", type=int, default=10, help="Number of feature hits to keep.")
     parser.add_argument("--min-score", type=float, default=0.0, help="Minimum search score to include.")
     return parser
@@ -58,6 +62,7 @@ def build_model_family_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--out", default="reports/model-family-comparison.json", help="Output JSON path.")
     parser.add_argument("--markdown-out", help="Output Markdown path. Defaults to --out with .md suffix.")
+    parser.add_argument("--html-out", help="Optional self-contained HTML report path.")
     parser.add_argument("--top-k", type=int, default=5, help="Number of pairwise feature matches to keep per model pair.")
     parser.add_argument("--min-score", type=float, default=0.65, help="Score threshold for strong pairwise matches.")
     return parser
@@ -68,6 +73,7 @@ def run_explanation_consistency_from_args(args: argparse.Namespace) -> WrittenJs
         reports=args.report,
         out=args.out,
         markdown_out=args.markdown_out,
+        html_out=args.html_out,
         min_similarity=args.min_similarity,
         max_rank_span=args.max_rank_span,
         top_k=args.top_k,
@@ -80,6 +86,7 @@ def run_feature_search_from_args(args: argparse.Namespace) -> WrittenJsonMarkdow
         query=args.query,
         out=args.out,
         markdown_out=args.markdown_out,
+        html_out=args.html_out,
         top_k=args.top_k,
         min_score=args.min_score,
     )
@@ -90,6 +97,7 @@ def run_model_family_from_args(args: argparse.Namespace) -> WrittenJsonMarkdown:
         members=[parse_family_member(item) for item in args.member],
         out=args.out,
         markdown_out=args.markdown_out,
+        html_out=args.html_out,
         top_k=args.top_k,
         min_score=args.min_score,
     )
@@ -100,6 +108,7 @@ def export_explanation_consistency_report(
     reports: list[str | Path],
     out: str | Path,
     markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
     min_similarity: float = 0.72,
     max_rank_span: int = 5,
     top_k: int | None = None,
@@ -110,7 +119,14 @@ def export_explanation_consistency_report(
         max_rank_span=max_rank_span,
         top_k=top_k,
     )
-    return _write_json_markdown(report, out, markdown_out, render_explanation_consistency_markdown(report))
+    return _write_json_markdown(
+        report,
+        out,
+        markdown_out,
+        render_explanation_consistency_markdown(report),
+        html_out=html_out,
+        html=render_explanation_consistency_html(report),
+    )
 
 
 def build_explanation_consistency_report(
@@ -175,7 +191,12 @@ def build_explanation_consistency_report(
         "explanation_drift_count": sum(1 for item in checks if item["status"] == "explanation_drift"),
         "rank_drift_count": sum(1 for item in checks if item["status"] == "rank_drift"),
         "missing_count": sum(1 for item in checks if item["status"] == "missing_in_some_reports"),
+        "shared_feature_count": sum(1 for item in checks if item["occurrence_count"] == len(loaded)),
     }
+    summary["shared_feature_fraction"] = round(
+        summary["shared_feature_count"] / summary["feature_count"],
+        6,
+    ) if summary["feature_count"] else 0.0
     return {
         "schema_version": EXPLANATION_CONSISTENCY_SCHEMA,
         "created_at": utc_now_iso(),
@@ -196,11 +217,19 @@ def export_feature_search_report(
     query: str,
     out: str | Path,
     markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
     top_k: int = 10,
     min_score: float = 0.0,
 ) -> WrittenJsonMarkdown:
     report = build_feature_search_report(reports=reports, query=query, top_k=top_k, min_score=min_score)
-    return _write_json_markdown(report, out, markdown_out, render_feature_search_markdown(report))
+    return _write_json_markdown(
+        report,
+        out,
+        markdown_out,
+        render_feature_search_markdown(report),
+        html_out=html_out,
+        html=render_feature_search_html(report),
+    )
 
 
 def build_feature_search_report(
@@ -277,11 +306,19 @@ def export_model_family_comparison_report(
     members: list[dict[str, str]],
     out: str | Path,
     markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
     top_k: int = 5,
     min_score: float = 0.65,
 ) -> WrittenJsonMarkdown:
     report = build_model_family_comparison_report(members=members, top_k=top_k, min_score=min_score)
-    return _write_json_markdown(report, out, markdown_out, render_model_family_markdown(report))
+    return _write_json_markdown(
+        report,
+        out,
+        markdown_out,
+        render_model_family_markdown(report),
+        html_out=html_out,
+        html=render_model_family_html(report),
+    )
 
 
 def build_model_family_comparison_report(
@@ -292,8 +329,9 @@ def build_model_family_comparison_report(
 ) -> dict[str, Any]:
     loaded = []
     for member in members:
-        report = load_inspection_report(member["report"])
-        loaded.append({"family": member["family"], "path": str(member["report"]), "report": report})
+        report_path = _resolve_report_path(member["report"])
+        report = load_inspection_report(report_path)
+        loaded.append({"family": member["family"], "path": str(report_path), "report": report})
     pairwise = []
     for left, right in itertools.combinations(loaded, 2):
         matches = match_feature_cards(left["report"].cards, right["report"].cards, top_k=top_k, min_score=0.0)
@@ -326,6 +364,7 @@ def build_model_family_comparison_report(
         )
     cross_pairs = [item for item in pairwise if item["relation"] == "cross_family"]
     within_pairs = [item for item in pairwise if item["relation"] == "within_family"]
+    family_pairs = _family_pair_summaries(pairwise)
     summary = {
         "family_count": len(family_rows),
         "report_count": len(loaded),
@@ -341,6 +380,7 @@ def build_model_family_comparison_report(
         "created_at": utc_now_iso(),
         "summary": summary,
         "families": family_rows,
+        "family_pairs": family_pairs,
         "pairwise": pairwise,
         "thresholds": {"top_k": top_k, "min_score": min_score},
         "agent_next_actions": _family_actions(pairwise),
@@ -364,6 +404,7 @@ def render_explanation_consistency_markdown(report: dict[str, Any]) -> str:
         "",
         f"Reports: {report['summary']['report_count']}",
         f"Consistent features: {report['summary']['consistent_count']}",
+        f"Shared feature fraction: {report['summary']['shared_feature_fraction']:.3f}",
         f"Explanation drift: {report['summary']['explanation_drift_count']}",
         f"Rank drift: {report['summary']['rank_drift_count']}",
         f"Missing in some reports: {report['summary']['missing_count']}",
@@ -424,6 +465,14 @@ def render_model_family_markdown(report: dict[str, Any]) -> str:
     ]
     for family in report["families"]:
         lines.append(f"- {family['family']}: {family['report_count']} report(s), {family['feature_count']} feature(s)")
+    if report.get("family_pairs"):
+        lines.append("")
+        lines.append("## Family Pairs")
+        for pair in report["family_pairs"]:
+            lines.append(
+                f"- {pair['left_family']} -> {pair['right_family']}: "
+                f"mean top score {pair['mean_top_score']:.3f}, strong pairs {pair['strong_pair_count']}/{pair['pair_count']}"
+            )
     lines.append("")
     lines.append("## Pairwise")
     for pair in report["pairwise"]:
@@ -441,8 +490,110 @@ def render_model_family_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_explanation_consistency_html(report: dict[str, Any]) -> str:
+    summary = report["summary"]
+    rows = "".join(
+        "<tr>"
+        f"<td>{_h(item['feature_id'])}</td>"
+        f"<td><span class=\"pill {item['status']}\">{_h(item['status'])}</span></td>"
+        f"<td>{item['mean_explanation_similarity']:.3f}</td>"
+        f"<td>{item['rank_span']}</td>"
+        f"<td>{item['occurrence_count']}/{item['report_count']}</td>"
+        f"<td>{_h(', '.join(item['labels']))}</td>"
+        "</tr>"
+        for item in report["checks"][:200]
+    )
+    body = f"""
+      <section class="metrics">
+        {_metric('Reports', summary['report_count'])}
+        {_metric('Features', summary['feature_count'])}
+        {_metric('Consistent', summary['consistent_count'])}
+        {_metric('Shared Fraction', f"{summary['shared_feature_fraction']:.3f}")}
+      </section>
+      <table>
+        <thead><tr><th>Feature</th><th>Status</th><th>Similarity</th><th>Rank Span</th><th>Seen</th><th>Labels</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    """
+    return _analysis_html("Explanation Consistency", body, report)
+
+
+def render_feature_search_html(report: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{_h(item['feature_id'])}</td>"
+        f"<td>{_h(item['model'])}</td>"
+        f"<td>{item['score']:.3f}</td>"
+        f"<td>{item['importance']:.3f}</td>"
+        f"<td>{item['causal_effect']:.3f}</td>"
+        f"<td>{_h(item['label'])}</td>"
+        f"<td>{_h(', '.join(item['matched_terms']) or 'semantic match')}</td>"
+        "</tr>"
+        for item in report["results"]
+    )
+    summary = report["summary"]
+    body = f"""
+      <p class="lede">Query: <strong>{_h(report['query'])}</strong></p>
+      <section class="metrics">
+        {_metric('Reports', summary['report_count'])}
+        {_metric('Searched Features', summary['searched_feature_count'])}
+        {_metric('Results', summary['result_count'])}
+      </section>
+      <table>
+        <thead><tr><th>Feature</th><th>Model</th><th>Score</th><th>Importance</th><th>Effect</th><th>Label</th><th>Terms</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    """
+    return _analysis_html("Feature Search", body, report)
+
+
+def render_model_family_html(report: dict[str, Any]) -> str:
+    summary = report["summary"]
+    family_rows = "".join(
+        "<tr>"
+        f"<td>{_h(item['family'])}</td>"
+        f"<td>{item['report_count']}</td>"
+        f"<td>{item['feature_count']}</td>"
+        f"<td>{_h(', '.join(item['models']))}</td>"
+        "</tr>"
+        for item in report["families"]
+    )
+    pair_rows = "".join(
+        "<tr>"
+        f"<td>{_h(item['left_family'])} -> {_h(item['right_family'])}</td>"
+        f"<td>{item['pair_count']}</td>"
+        f"<td>{item['mean_top_score']:.3f}</td>"
+        f"<td>{item['strong_pair_count']}</td>"
+        "</tr>"
+        for item in report.get("family_pairs", [])
+    )
+    body = f"""
+      <section class="metrics">
+        {_metric('Families', summary['family_count'])}
+        {_metric('Reports', summary['report_count'])}
+        {_metric('Cross-Family Pairs', summary['cross_family_pair_count'])}
+        {_metric('Mean Cross Top', f"{summary['mean_cross_family_top_score']:.3f}")}
+      </section>
+      <h2>Families</h2>
+      <table>
+        <thead><tr><th>Family</th><th>Reports</th><th>Features</th><th>Models</th></tr></thead>
+        <tbody>{family_rows}</tbody>
+      </table>
+      <h2>Family Pairs</h2>
+      <table>
+        <thead><tr><th>Families</th><th>Pairs</th><th>Mean Top Score</th><th>Strong Pairs</th></tr></thead>
+        <tbody>{pair_rows}</tbody>
+      </table>
+    """
+    return _analysis_html("Model-Family Comparison", body, report)
+
+
 def _load_reports(paths: list[str | Path]) -> list[dict[str, Any]]:
-    return [{"path": str(path), "report": load_inspection_report(path)} for path in paths]
+    loaded = []
+    for path in paths:
+        report_path = _resolve_report_path(path)
+        loaded.append({"path": str(report_path), "report": load_inspection_report(report_path)})
+    return loaded
 
 
 def _occurrences_with_report_indexes(
@@ -496,6 +647,28 @@ def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def _family_pair_summaries(pairwise: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for item in pairwise:
+        key = (item["left_family"], item["right_family"])
+        if item["relation"] == "within_family":
+            key = (item["left_family"], item["left_family"])
+        buckets.setdefault(key, []).append(item)
+    rows = []
+    for (left_family, right_family), items in sorted(buckets.items()):
+        rows.append(
+            {
+                "left_family": left_family,
+                "right_family": right_family,
+                "relation": "within_family" if left_family == right_family else "cross_family",
+                "pair_count": len(items),
+                "mean_top_score": round(_mean([item["top_score"] for item in items]), 6),
+                "strong_pair_count": sum(1 for item in items if item["strong_match_count"] > 0),
+            }
+        )
+    return rows
+
+
 def _consistency_actions(summary: dict[str, Any]) -> list[dict[str, str]]:
     if summary["explanation_drift_count"] or summary["rank_drift_count"]:
         return [
@@ -542,11 +715,75 @@ def _actions_markdown(actions: list[dict[str, str]]) -> list[str]:
     return lines
 
 
+def _analysis_html(title: str, body: str, report: dict[str, Any]) -> str:
+    actions = "".join(
+        f"<li><strong>{_h(action['id'])}</strong>: {_h(action['description'])}</li>"
+        for action in report.get("agent_next_actions", [])
+    )
+    payload = _h(json.dumps(report, indent=2, sort_keys=True))
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{_h(title)}</title>
+  <style>
+    body {{ margin: 0; background: #f7f7f4; color: #1c2528; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+    main {{ max-width: 1180px; margin: 0 auto; padding: 32px 20px 48px; }}
+    h1 {{ margin: 0 0 8px; font-size: 28px; }}
+    h2 {{ margin-top: 28px; font-size: 18px; }}
+    .lede {{ color: #4b585d; }}
+    .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 20px 0; }}
+    .metric {{ background: white; border: 1px solid #d9dedb; border-radius: 8px; padding: 14px; }}
+    .metric span {{ display: block; color: #5c686d; font-size: 12px; text-transform: uppercase; letter-spacing: 0; }}
+    .metric strong {{ display: block; margin-top: 6px; font-size: 22px; }}
+    table {{ width: 100%; border-collapse: collapse; background: white; border: 1px solid #d9dedb; border-radius: 8px; overflow: hidden; }}
+    th, td {{ padding: 10px 12px; border-bottom: 1px solid #e4e8e5; text-align: left; vertical-align: top; font-size: 14px; }}
+    th {{ background: #edf3f0; color: #314045; }}
+    .pill {{ display: inline-block; padding: 3px 8px; border-radius: 999px; background: #e7f5f1; color: #0f766e; font-size: 12px; }}
+    .explanation_drift {{ background: #fff1f2; color: #be123c; }}
+    .rank_drift {{ background: #fff7ed; color: #c2410c; }}
+    .missing_in_some_reports {{ background: #f1f5f9; color: #475569; }}
+    pre {{ overflow: auto; background: #101820; color: #e5f2ee; border-radius: 8px; padding: 16px; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{_h(title)}</h1>
+    {body}
+    <h2>Agent Next Actions</h2>
+    <ul>{actions}</ul>
+    <h2>JSON</h2>
+    <pre>{payload}</pre>
+  </main>
+</body>
+</html>
+"""
+
+
+def _metric(label: str, value: object) -> str:
+    return f"<div class=\"metric\"><span>{_h(label)}</span><strong>{_h(str(value))}</strong></div>"
+
+
+def _h(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _resolve_report_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    if candidate.is_dir():
+        return candidate / "report.json"
+    return candidate
+
+
 def _write_json_markdown(
     report: dict[str, Any],
     out: str | Path,
     markdown_out: str | Path | None,
     markdown: str,
+    *,
+    html_out: str | Path | None = None,
+    html: str | None = None,
 ) -> WrittenJsonMarkdown:
     json_path = Path(out)
     json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -554,4 +791,9 @@ def _write_json_markdown(
     markdown_path = Path(markdown_out) if markdown_out is not None else json_path.with_suffix(".md")
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path.write_text(markdown, encoding="utf-8")
-    return WrittenJsonMarkdown(report=report, json_path=json_path, markdown_path=markdown_path)
+    html_path = None
+    if html_out is not None:
+        html_path = Path(html_out)
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(html or _analysis_html("interp-lab Analysis", f"<pre>{_h(markdown)}</pre>", report), encoding="utf-8")
+    return WrittenJsonMarkdown(report=report, json_path=json_path, markdown_path=markdown_path, html_path=html_path)

@@ -519,6 +519,8 @@ def run_check_explanation_consistency(args: argparse.Namespace) -> int:
     result = run_explanation_consistency_from_args(args)
     print(f"Wrote {result.json_path}")
     print(f"Wrote {result.markdown_path}")
+    if result.html_path is not None:
+        print(f"Wrote {result.html_path}")
     return 0
 
 
@@ -526,6 +528,8 @@ def run_search_features(args: argparse.Namespace) -> int:
     result = run_feature_search_from_args(args)
     print(f"Wrote {result.json_path}")
     print(f"Wrote {result.markdown_path}")
+    if result.html_path is not None:
+        print(f"Wrote {result.html_path}")
     return 0
 
 
@@ -533,6 +537,8 @@ def run_compare_model_families(args: argparse.Namespace) -> int:
     result = run_model_family_from_args(args)
     print(f"Wrote {result.json_path}")
     print(f"Wrote {result.markdown_path}")
+    if result.html_path is not None:
+        print(f"Wrote {result.html_path}")
     return 0
 
 

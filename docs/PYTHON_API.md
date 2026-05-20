@@ -87,12 +87,14 @@ from interp_lab import (
 consistency = check_explanation_consistency(
     ["reports/tool-calls/report.json", "reports/successful-tool-use/report.json"],
     out="reports/explanation-consistency.json",
+    html_out="reports/explanation-consistency.html",
 )
 
 hits = search_features(
     "features that represent valid tool-call arguments",
     "reports/tool-calls/report.json",
     out="reports/feature-search.json",
+    html_out="reports/feature-search.html",
 )
 
 families = compare_model_families(
@@ -101,10 +103,11 @@ families = compare_model_families(
         {"family": "qwen", "report": "reports/qwen/report.json"},
     ],
     out="reports/model-family-comparison.json",
+    html_out="reports/model-family-comparison.html",
 )
 ```
 
-Each function returns machine-readable JSON when `out` is omitted, or a `WrittenAnalysis` with JSON and Markdown paths when `out` is supplied.
+Each function returns machine-readable JSON when `out` is omitted, or a `WrittenAnalysis` with JSON, Markdown, and optional HTML paths when `out` is supplied.
 
 ## Build Prompts
 

@@ -122,18 +122,50 @@ def test_new_report_commands_write_json_and_markdown(tmp_path: Path):
     search = tmp_path / "search.json"
     family = tmp_path / "family.json"
 
-    assert main(["check-explanation-consistency", "--report", str(left), "--report", str(right), "--out", str(consistency)]) == 0
-    assert main(["search-features", "--report", str(left), "--query", "tool calls", "--out", str(search)]) == 0
+    assert (
+        main(
+            [
+                "check-explanation-consistency",
+                "--report",
+                str(left.parent),
+                "--report",
+                str(right),
+                "--out",
+                str(consistency),
+                "--html-out",
+                str(tmp_path / "consistency.html"),
+            ]
+        )
+        == 0
+    )
+    assert (
+        main(
+            [
+                "search-features",
+                "--report",
+                str(left.parent),
+                "--query",
+                "tool calls",
+                "--out",
+                str(search),
+                "--html-out",
+                str(tmp_path / "search.html"),
+            ]
+        )
+        == 0
+    )
     assert (
         main(
             [
                 "compare-model-families",
                 "--member",
-                f"family-a={left}",
+                f"family-a={left.parent}",
                 "--member",
                 f"family-b={right}",
                 "--out",
                 str(family),
+                "--html-out",
+                str(tmp_path / "family.html"),
             ]
         )
         == 0
@@ -142,6 +174,62 @@ def test_new_report_commands_write_json_and_markdown(tmp_path: Path):
     assert json.loads(consistency.read_text(encoding="utf-8"))["schema_version"] == "interp-lab.explanation_consistency.v1"
     assert search.with_suffix(".md").exists()
     assert family.with_suffix(".md").exists()
+    assert "Feature Search" in (tmp_path / "search.html").read_text(encoding="utf-8")
+    assert "Model-Family Comparison" in (tmp_path / "family.html").read_text(encoding="utf-8")
+
+
+def test_inspect_cli_uses_nla_verbalizer_records(tmp_path: Path):
+    features = tmp_path / "features.jsonl"
+    evidence = FeatureEvidence(
+        feature_id="L1:F7",
+        model="m",
+        layer=1,
+        label="tool call arguments",
+        examples=["assistant emits a valid tool call"],
+        activation_signature=[1.0, 0.0],
+        decoder_signature=[0.0, 1.0],
+        causal_effects={"criterion": 0.7, "specificity": 0.8},
+        source="test",
+    )
+    features.write_text(json.dumps(evidence.to_dict()) + "\n", encoding="utf-8")
+    explanations = tmp_path / "nla.jsonl"
+    explanations.write_text(
+        json.dumps(
+            {
+                "feature_id": "L1:F7",
+                "explanation": "Represents valid tool-call argument construction.",
+                "confidence": 0.93,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "report"
+
+    exit_code = main(
+        [
+            "inspect",
+            "--model",
+            "m",
+            "--criterion",
+            "successful tool calls",
+            "--backend",
+            "jsonl",
+            "--features",
+            str(features),
+            "--verbalizer",
+            "nla",
+            "--nla-explanations",
+            str(explanations),
+            "--out",
+            str(out),
+        ]
+    )
+
+    report = json.loads((out / "report.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["cards"][0]["explanation"] == "Represents valid tool-call argument construction."
+    assert report["cards"][0]["metadata"]["verbalizer"]["confidence"] == 0.93
 
 
 class _SingleFeatureProvider:

@@ -70,6 +70,8 @@ Explanation reports operate on existing inspection artifacts:
 - `search-features` ranks report features against a natural-language explanation query.
 - `compare-model-families` groups inspection reports by model family and summarizes within-family and cross-family feature matches.
 
+Each explanation report writes JSON and Markdown, with optional self-contained HTML for review. Report inputs can be exact `report.json` paths or report directories.
+
 ## Intervention Runners
 
 An intervention runner estimates the behavioral effect of changing a feature.

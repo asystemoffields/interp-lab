@@ -81,11 +81,13 @@ def test_explanation_report_public_apis_accept_paths(tmp_path: Path):
     consistency = check_explanation_consistency(
         [left.json_path, right.json_path],
         out=tmp_path / "consistency.json",
+        html_out=tmp_path / "consistency.html",
     )
     hits = search_features(
         "tool calls",
         left.json_path,
         out=tmp_path / "search.json",
+        html_out=tmp_path / "search.html",
     )
     families = compare_model_families(
         [
@@ -93,11 +95,15 @@ def test_explanation_report_public_apis_accept_paths(tmp_path: Path):
             {"family": "toy-b", "report": str(right.json_path)},
         ],
         out=tmp_path / "families.json",
+        html_out=tmp_path / "families.html",
     )
 
     assert consistency.report["schema_version"] == "interp-lab.explanation_consistency.v1"
     assert hits.report["schema_version"] == "interp-lab.feature_search.v1"
     assert families.report["schema_version"] == "interp-lab.model_family_comparison.v1"
+    assert consistency.html_path == tmp_path / "consistency.html"
+    assert hits.html_path == tmp_path / "search.html"
+    assert families.html_path == tmp_path / "families.html"
 
 
 def test_validate_matches_public_api_accepts_report_and_path(tmp_path: Path):

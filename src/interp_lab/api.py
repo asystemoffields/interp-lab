@@ -529,6 +529,7 @@ def check_explanation_consistency(
     *,
     out: str | Path | None = None,
     markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
     min_similarity: float = 0.72,
     max_rank_span: int = 5,
     top_k: int | None = None,
@@ -546,6 +547,7 @@ def check_explanation_consistency(
         reports=report_paths,
         out=out,
         markdown_out=markdown_out,
+        html_out=html_out,
         min_similarity=min_similarity,
         max_rank_span=max_rank_span,
         top_k=top_k,
@@ -558,6 +560,7 @@ def search_features(
     *,
     out: str | Path | None = None,
     markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
     top_k: int = 10,
     min_score: float = 0.0,
 ) -> dict[str, Any] | WrittenAnalysis:
@@ -575,6 +578,7 @@ def search_features(
         query=query,
         out=out,
         markdown_out=markdown_out,
+        html_out=html_out,
         top_k=top_k,
         min_score=min_score,
     )
@@ -585,6 +589,7 @@ def compare_model_families(
     *,
     out: str | Path | None = None,
     markdown_out: str | Path | None = None,
+    html_out: str | Path | None = None,
     top_k: int = 5,
     min_score: float = 0.65,
 ) -> dict[str, Any] | WrittenAnalysis:
@@ -600,6 +605,7 @@ def compare_model_families(
         members=parsed_members,
         out=out,
         markdown_out=markdown_out,
+        html_out=html_out,
         top_k=top_k,
         min_score=min_score,
     )
