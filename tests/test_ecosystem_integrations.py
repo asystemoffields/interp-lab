@@ -1,15 +1,15 @@
 import json
 from pathlib import Path
 
-from oracle_sae.adapters.goodfire import GoodfireFeatureProvider
-from oracle_sae.adapters.scope import ScopeFeatureProvider
-from oracle_sae.criteria import HeuristicCriterionCompiler
-from oracle_sae.graphs import build_attribution_graph, export_attribution_graph
-from oracle_sae.hf_publish import publish_hf_artifact, render_hf_card
-from oracle_sae.nnsight_records import _resolve_activation_path, parse_activation_paths
-from oracle_sae.reporting import write_inspection_report
-from oracle_sae.scaling import ScalePlan, parse_bytes, parse_count_float, parse_count_int
-from oracle_sae.transformerlens_records import parse_hook_names
+from interp_lab.adapters.goodfire import GoodfireFeatureProvider
+from interp_lab.adapters.scope import ScopeFeatureProvider
+from interp_lab.criteria import HeuristicCriterionCompiler
+from interp_lab.graphs import build_attribution_graph, export_attribution_graph
+from interp_lab.hf_publish import publish_hf_artifact, render_hf_card
+from interp_lab.nnsight_records import _resolve_activation_path, parse_activation_paths
+from interp_lab.reporting import write_inspection_report
+from interp_lab.scaling import ScalePlan, parse_bytes, parse_count_float, parse_count_int
+from interp_lab.transformerlens_records import parse_hook_names
 
 
 def test_goodfire_provider_uses_feature_search():
@@ -185,8 +185,8 @@ class _Layer:
 
 
 def _toy_report():
-    from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
-    from oracle_sae.pipeline import inspect_model
+    from interp_lab.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
+    from interp_lab.pipeline import inspect_model
 
     return inspect_model(
         model="toy/model-a",

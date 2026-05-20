@@ -53,7 +53,7 @@ python -c "from interp_lab import inspect, compare, train_sae, doctor; print(doc
 ## Release
 
 1. Update `version` in `pyproject.toml`.
-2. Update `__version__` in `src/oracle_sae/__init__.py` and `src/interp_lab/__init__.py`.
+2. Update `__version__` in `src/interp_lab/__init__.py` and `src/interp_lab/__init__.py`.
 3. Commit the version bump.
 4. Tag the release:
 
@@ -82,5 +82,5 @@ python -c "from interp_lab import inspect; print(inspect('toy/a', 'benchmark awa
 The wheel should include:
 
 - `interp_lab`: public Python API
-- `oracle_sae`: internal engine package
+- `interp_lab`: internal engine package
 - `interp-lab`: console script

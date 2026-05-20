@@ -1,13 +1,13 @@
 import json
 from pathlib import Path
 
-from oracle_sae.graphs import (
+from interp_lab.graphs import (
     build_attribution_graph,
     render_attribution_graph_html,
     render_attribution_graph_markdown,
     summarize_attribution_graph,
 )
-from oracle_sae.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
+from interp_lab.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
 
 
 def test_attribution_graph_includes_candidate_mechanism_paths_and_groups():
@@ -140,7 +140,7 @@ def test_load_graph_report_rejects_mixed_criteria(tmp_path: Path):
     _write_report(left, model="m1", criterion="criterion one", feature_id="F1")
     _write_report(right, model="m2", criterion="criterion two", feature_id="F1")
 
-    from oracle_sae.graphs import load_graph_report
+    from interp_lab.graphs import load_graph_report
 
     import pytest
 
@@ -154,7 +154,7 @@ def test_multi_report_graph_namespaces_same_feature_ids(tmp_path: Path):
     _write_report(left, model="m1", criterion="same criterion", feature_id="F1")
     _write_report(right, model="m2", criterion="same criterion", feature_id="F1")
 
-    from oracle_sae.graphs import load_graph_report
+    from interp_lab.graphs import load_graph_report
 
     graph = build_attribution_graph(
         load_graph_report([left, right]),

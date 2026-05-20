@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from oracle_sae.adapters.records import ActivationRecordFeatureProvider
-from oracle_sae.criteria import HeuristicCriterionCompiler
+from interp_lab.adapters.records import ActivationRecordFeatureProvider
+from interp_lab.criteria import HeuristicCriterionCompiler
 
 
 def test_records_provider_aggregates_ranked_feature_evidence(tmp_path: Path):

@@ -4,9 +4,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from oracle_sae.adapters.records import ActivationRecordFeatureProvider
-from oracle_sae.criteria import HeuristicCriterionCompiler
-from oracle_sae.sae_training import (
+from interp_lab.adapters.records import ActivationRecordFeatureProvider
+from interp_lab.criteria import HeuristicCriterionCompiler
+from interp_lab.sae_training import (
     _sae_training_summary,
     _split_prompt_indexes,
     _select_latents,

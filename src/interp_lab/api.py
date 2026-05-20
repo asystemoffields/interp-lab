@@ -5,25 +5,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from oracle_sae.adapters.goodfire import GoodfireFeatureProvider
-from oracle_sae.adapters.interventions import InterventionRecordRunner
-from oracle_sae.adapters.jsonl import JsonlFeatureProvider
-from oracle_sae.adapters.neuronpedia import (
+from interp_lab.adapters.goodfire import GoodfireFeatureProvider
+from interp_lab.adapters.interventions import InterventionRecordRunner
+from interp_lab.adapters.jsonl import JsonlFeatureProvider
+from interp_lab.adapters.neuronpedia import (
     NeuronpediaClient,
     NeuronpediaFeatureProvider,
     load_neuronpedia_feature_refs,
 )
-from oracle_sae.adapters.nla import NlaVerbalizer
-from oracle_sae.adapters.records import ActivationRecordFeatureProvider
-from oracle_sae.adapters.saelens import (
+from interp_lab.adapters.nla import NlaVerbalizer
+from interp_lab.adapters.records import ActivationRecordFeatureProvider
+from interp_lab.adapters.saelens import (
     SAELensFeatureProvider,
     load_saelens_feature_metadata,
     parse_feature_indices,
 )
-from oracle_sae.adapters.scope import ScopeFeatureProvider
-from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
-from oracle_sae.cli import main as _cli_main
-from oracle_sae.criterion_lab import (
+from interp_lab.adapters.scope import ScopeFeatureProvider
+from interp_lab.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
+from interp_lab.cli import main as _cli_main
+from interp_lab.criterion_lab import (
     CriterionAssayValidationResult,
     CriterionLabPresetInfo,
     CriterionLabWriteResult,
@@ -31,10 +31,10 @@ from oracle_sae.criterion_lab import (
     write_criterion_assay_validation_report,
     write_criterion_lab_config,
 )
-from oracle_sae.demo_sweep import build_demo_sweep_report
-from oracle_sae.doctor import collect_diagnostics
-from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
-from oracle_sae.explanation_reports import (
+from interp_lab.demo_sweep import build_demo_sweep_report
+from interp_lab.doctor import collect_diagnostics
+from interp_lab.env_profile import collect_environment_profile, load_environment_profile
+from interp_lab.explanation_reports import (
     WrittenJsonMarkdown,
     build_explanation_consistency_report,
     build_feature_search_report,
@@ -46,11 +46,11 @@ from oracle_sae.explanation_reports import (
     export_text_pivot_match_report,
     parse_family_member,
 )
-from oracle_sae.feature_interventions import (
+from interp_lab.feature_interventions import (
     FeatureInterventionResult,
     intervene_on_features,
 )
-from oracle_sae.graphs import (
+from interp_lab.graphs import (
     build_attribution_graph,
     export_attribution_graph,
     export_attribution_graph_summary,
@@ -60,22 +60,22 @@ from oracle_sae.graphs import (
     summarize_attribution_graph,
     write_attribution_graph_markdown,
 )
-from oracle_sae.graph_validation import (
+from interp_lab.graph_validation import (
     annotate_graph_with_validation,
     build_graph_validation_report,
     export_graph_validation_report,
     render_graph_validation_markdown,
 )
-from oracle_sae.hf_publish import PublishResult, publish_hf_artifact as _publish_hf_artifact
-from oracle_sae.hf_records import (
+from interp_lab.hf_publish import PublishResult, publish_hf_artifact as _publish_hf_artifact
+from interp_lab.hf_records import (
     PromptDatasetSplitSummary,
     PromptDatasetSummary,
     build_prompt_dataset,
     prepare_sae_prompt_datasets,
 )
-from oracle_sae.hf_sae_paths import export_hf_sae_path_records
-from oracle_sae.hf_sae_validation import export_hf_sae_path_validation
-from oracle_sae.match_validation import (
+from interp_lab.hf_sae_paths import export_hf_sae_path_records
+from interp_lab.hf_sae_validation import export_hf_sae_path_validation
+from interp_lab.match_validation import (
     DEFAULT_MAX_SIGNED_EFFECT_DELTA,
     DEFAULT_MIN_ABS_SIGNED_EFFECT,
     DEFAULT_MIN_CAUSAL_COMPONENT,
@@ -85,8 +85,8 @@ from oracle_sae.match_validation import (
     render_match_validation_markdown,
     write_match_validation_html,
 )
-from oracle_sae.pipeline import inspect_model, match_reports
-from oracle_sae.reporting import (
+from interp_lab.pipeline import inspect_model, match_reports
+from interp_lab.reporting import (
     load_inspection_report,
     load_match_report,
     write_inspection_html,
@@ -94,16 +94,16 @@ from oracle_sae.reporting import (
     write_match_markdown,
     write_match_report,
 )
-from oracle_sae.release_check import build_release_readiness_report
-from oracle_sae.runs import RunOptions, run_config_file
-from oracle_sae.sae_training import (
+from interp_lab.release_check import build_release_readiness_report
+from interp_lab.runs import RunOptions, run_config_file
+from interp_lab.sae_training import (
     TRAINING_PRESETS,
     train_sae_from_hf,
     train_sae_from_records,
 )
-from oracle_sae.schema import InspectionReport, MatchReport
-from oracle_sae.scaling import ScalePlan
-from oracle_sae.workflows import RunTemplateWriteResult, write_run_template
+from interp_lab.schema import InspectionReport, MatchReport
+from interp_lab.scaling import ScalePlan
+from interp_lab.workflows import RunTemplateWriteResult, write_run_template
 
 
 @dataclass(frozen=True)

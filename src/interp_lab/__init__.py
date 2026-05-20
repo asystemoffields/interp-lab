@@ -1,6 +1,8 @@
 """Public Python API for interp-lab."""
 
-from oracle_sae.schema import (
+__version__ = "2.0.0"
+
+from interp_lab.schema import (
     CandidateMatch,
     Criterion,
     FeatureCard,
@@ -9,13 +11,13 @@ from oracle_sae.schema import (
     InspectionReport,
     MatchReport,
 )
-from oracle_sae.hf_records import PromptDatasetSplitSummary, PromptDatasetSummary
-from oracle_sae.criterion_lab import (
+from interp_lab.hf_records import PromptDatasetSplitSummary, PromptDatasetSummary
+from interp_lab.criterion_lab import (
     CriterionAssayValidationResult,
     CriterionLabPresetInfo,
     CriterionLabWriteResult,
 )
-from oracle_sae.workflows import RunTemplateWriteResult
+from interp_lab.workflows import RunTemplateWriteResult
 from interp_lab.contracts import public_api_contract
 
 from interp_lab.api import (
@@ -113,5 +115,3 @@ __all__ = [
     "validate_hf_sae_paths",
     "validate_matches",
 ]
-
-__version__ = "1.0.0"

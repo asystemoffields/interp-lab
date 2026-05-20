@@ -1,7 +1,7 @@
 import pytest
 
-from oracle_sae.adapters.saelens import SAELensFeatureProvider, parse_feature_indices
-from oracle_sae.criteria import HeuristicCriterionCompiler
+from interp_lab.adapters.saelens import SAELensFeatureProvider, parse_feature_indices
+from interp_lab.criteria import HeuristicCriterionCompiler
 
 
 class FakeSAE:
@@ -68,7 +68,7 @@ def test_saelens_provider_defaults_to_high_sparsity_features():
 
 
 def test_saelens_provider_reports_missing_dependency(monkeypatch):
-    from oracle_sae.adapters import saelens as saelens_adapter
+    from interp_lab.adapters import saelens as saelens_adapter
 
     def missing_module(name):
         raise ImportError("missing")

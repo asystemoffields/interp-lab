@@ -2,8 +2,8 @@ import json
 from pathlib import Path
 
 import interp_lab
-from oracle_sae.cli import main
-from oracle_sae.demo_sweep import build_demo_sweep_report, render_demo_sweep_text
+from interp_lab.cli import main
+from interp_lab.demo_sweep import build_demo_sweep_report, render_demo_sweep_text
 
 
 def test_demo_sweep_reports_missing_artifacts(tmp_path: Path):

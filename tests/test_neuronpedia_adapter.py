@@ -1,14 +1,14 @@
 import json
 from pathlib import Path
 
-from oracle_sae.adapters.neuronpedia import (
+from interp_lab.adapters.neuronpedia import (
     NeuronpediaClient,
     NeuronpediaFeatureProvider,
     NeuronpediaFeatureRef,
     load_neuronpedia_feature_refs,
     neuronpedia_payload_to_evidence,
 )
-from oracle_sae.criteria import HeuristicCriterionCompiler
+from interp_lab.criteria import HeuristicCriterionCompiler
 
 
 def test_neuronpedia_ref_parses_feature_ids_and_urls():

@@ -1,6 +1,6 @@
 """Artifact helpers and schemas exposed for API users."""
 
-from oracle_sae.reporting import (
+from interp_lab.reporting import (
     load_inspection_report,
     load_match_report,
     render_inspection_html,
@@ -11,13 +11,13 @@ from oracle_sae.reporting import (
     write_match_markdown,
     write_match_report,
 )
-from oracle_sae.match_validation import (
+from interp_lab.match_validation import (
     build_match_validation_report,
     render_match_validation_html,
     render_match_validation_markdown,
     write_match_validation_html,
 )
-from oracle_sae.schema import (
+from interp_lab.schema import (
     CandidateMatch,
     Criterion,
     FeatureCard,

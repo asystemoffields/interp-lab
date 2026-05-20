@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from oracle_sae.hf_records import (
+from interp_lab.hf_records import (
     PromptRecord,
     build_prompt_dataset,
     build_prompt_records,
@@ -12,13 +12,13 @@ from oracle_sae.hf_records import (
     prepare_sae_prompt_datasets,
     split_prompt_record_indexes,
 )
-from oracle_sae.hf_contrast import (
+from interp_lab.hf_contrast import (
     _contrast_direction,
     _register_gpt2_steering,
     _select_best_strength,
     parse_strength_sweep,
 )
-from oracle_sae.hf_interventions import (
+from interp_lab.hf_interventions import (
     _register_gpt2_hidden_ablations,
     append_hf_group_activation_record,
     parse_target_tokens,

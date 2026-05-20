@@ -1,4 +1,4 @@
-from oracle_sae.hf_hooks import _direction_for_hidden, register_hidden_ablations, register_hidden_steering
+from interp_lab.hf_hooks import _direction_for_hidden, register_hidden_ablations, register_hidden_steering
 
 
 def test_hidden_hooks_find_gemma_style_decoder_stack():

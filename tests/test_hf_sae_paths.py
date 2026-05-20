@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from oracle_sae.hf_sae_paths import (
+from interp_lab.hf_sae_paths import (
     build_hf_sae_paths_parser,
     parse_path_pair,
     parse_path_pairs,
@@ -10,8 +10,8 @@ from oracle_sae.hf_sae_paths import (
     _random_source_control_refs,
     resolve_sae_feature_refs,
 )
-from oracle_sae.reporting import write_inspection_report
-from oracle_sae.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
+from interp_lab.reporting import write_inspection_report
+from interp_lab.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
 
 
 def test_parse_sae_feature_ref_validates_layer_and_latent_bounds():

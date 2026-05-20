@@ -28,8 +28,8 @@ from interp_lab import (
     validate_hf_sae_paths,
     validate_matches,
 )
-from oracle_sae.graph_validation import GraphValidationWriteResult
-from oracle_sae.hf_sae_validation import HfSaePathValidationResult
+from interp_lab.graph_validation import GraphValidationWriteResult
+from interp_lab.hf_sae_validation import HfSaePathValidationResult
 from interp_lab.artifacts import InspectionReport, load_inspection_report
 
 

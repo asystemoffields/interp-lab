@@ -1,4 +1,4 @@
-from oracle_sae.modal_workflows import (
+from interp_lab.modal_workflows import (
     ModalGemmaWorkflow,
     ModalSaeWorkflow,
     build_modal_gemma_commands,
@@ -15,11 +15,11 @@ def test_modal_gemma_contrast_commands_are_agent_friendly():
     commands = build_modal_gemma_commands(config)
 
     assert len(commands) == 2
-    assert commands[0][:4] == ["python", "-m", "oracle_sae", "export-hf-contrast"]
+    assert commands[0][:4] == ["python", "-m", "interp_lab", "export-hf-contrast"]
     assert "--model-class" in commands[0]
     assert "gemma4-conditional" in commands[0]
     assert "--layer" in commands[0]
-    assert commands[1][:4] == ["python", "-m", "oracle_sae", "inspect"]
+    assert commands[1][:4] == ["python", "-m", "interp_lab", "inspect"]
     assert "contrast-report/report.md" in expected_modal_gemma_outputs("contrast")
 
 
@@ -29,8 +29,8 @@ def test_modal_gemma_hidden_commands_include_causal_validation():
     commands = build_modal_gemma_commands(config)
 
     assert len(commands) == 4
-    assert commands[0][:4] == ["python", "-m", "oracle_sae", "export-hf-records"]
-    assert commands[2][:4] == ["python", "-m", "oracle_sae", "export-hf-interventions"]
+    assert commands[0][:4] == ["python", "-m", "interp_lab", "export-hf-records"]
+    assert commands[2][:4] == ["python", "-m", "interp_lab", "export-hf-interventions"]
     assert "--append-group-records" in commands[2]
     assert "--require-interventions" in commands[3]
     assert "hidden-causal/report.md" in expected_modal_gemma_outputs("hidden")
@@ -49,7 +49,7 @@ def test_modal_sae_commands_train_and_inspect_each_layer():
     commands = build_modal_sae_commands(config)
 
     assert len(commands) == 4
-    assert commands[0][:4] == ["python", "-m", "oracle_sae", "train-sae"]
+    assert commands[0][:4] == ["python", "-m", "interp_lab", "train-sae"]
     assert "--preset" in commands[0]
     assert "production" in commands[0]
     assert "--causal-dataset" in commands[0]
@@ -63,7 +63,7 @@ def test_modal_sae_commands_train_and_inspect_each_layer():
     assert "--l1" in commands[0]
     assert commands[0][commands[0].index("--layer") + 1] == "12"
     assert commands[2][commands[2].index("--layer") + 1] == "24"
-    assert commands[1][:4] == ["python", "-m", "oracle_sae", "inspect"]
+    assert commands[1][:4] == ["python", "-m", "interp_lab", "inspect"]
     assert "--require-interventions" in commands[1]
     assert "layer-12/sae.json" in expected_modal_sae_outputs(config)
     assert "layer-24/report/report.md" in expected_modal_sae_outputs(config)

@@ -1,5 +1,5 @@
-from oracle_sae.schema import Criterion, FeatureEvidence
-from oracle_sae.scoring import score_feature
+from interp_lab.schema import Criterion, FeatureEvidence
+from interp_lab.scoring import score_feature
 
 
 def test_score_feature_prefers_activation_association_when_available():

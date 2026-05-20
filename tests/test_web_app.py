@@ -5,9 +5,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from oracle_sae.cli import build_parser
-from oracle_sae.web_server import build_studio_server
-from oracle_sae.web_app import command_specs_from_parser, render_web_app_html, write_web_app
+from interp_lab.cli import build_parser
+from interp_lab.web_server import build_studio_server
+from interp_lab.web_app import command_specs_from_parser, render_web_app_html, write_web_app
 
 
 def test_command_specs_cover_cli_subcommands():

@@ -1,7 +1,7 @@
-from oracle_sae.criteria import HeuristicCriterionCompiler
-from oracle_sae.fingerprints import build_fingerprint
-from oracle_sae.matching import fingerprint_similarity
-from oracle_sae.schema import FeatureEvidence
+from interp_lab.criteria import HeuristicCriterionCompiler
+from interp_lab.fingerprints import build_fingerprint
+from interp_lab.matching import fingerprint_similarity
+from interp_lab.schema import FeatureEvidence
 
 
 def test_similar_feature_fingerprints_score_highly():

@@ -1,7 +1,7 @@
-from oracle_sae.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
-from oracle_sae.matching import match_feature_cards
-from oracle_sae.pipeline import inspect_model, match_reports
-from oracle_sae.schema import Criterion, FeatureCard, FeatureEvidence, FeatureFingerprint
+from interp_lab.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
+from interp_lab.matching import match_feature_cards
+from interp_lab.pipeline import inspect_model, match_reports
+from interp_lab.schema import Criterion, FeatureCard, FeatureEvidence, FeatureFingerprint
 
 
 def test_inspection_report_contains_ranked_feature_cards():

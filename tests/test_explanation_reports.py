@@ -3,19 +3,19 @@ from pathlib import Path
 
 import pytest
 
-from oracle_sae.adapters.nla import NlaVerbalizer
-from oracle_sae.adapters.toy import ToyInterventionRunner, ToyVerbalizer
-from oracle_sae.cli import main
-from oracle_sae.explanation_reports import (
+from interp_lab.adapters.nla import NlaVerbalizer
+from interp_lab.adapters.toy import ToyInterventionRunner, ToyVerbalizer
+from interp_lab.cli import main
+from interp_lab.explanation_reports import (
     build_explanation_consistency_report,
     build_feature_search_report,
     build_model_family_comparison_report,
     build_text_pivot_match_report,
 )
-from oracle_sae.fingerprints import build_fingerprint
-from oracle_sae.pipeline import inspect_model
-from oracle_sae.reporting import write_inspection_report
-from oracle_sae.schema import Criterion, FeatureCard, FeatureEvidence, InspectionReport
+from interp_lab.fingerprints import build_fingerprint
+from interp_lab.pipeline import inspect_model
+from interp_lab.reporting import write_inspection_report
+from interp_lab.schema import Criterion, FeatureCard, FeatureEvidence, InspectionReport
 
 
 def test_nla_verbalizer_uses_external_feature_explanations():
@@ -337,7 +337,7 @@ def test_text_pivot_rejects_unbounded_pairwise_work(tmp_path: Path, monkeypatch:
         cards=[_card("L1:F2", "tool call syntax", "Tracks tool calls.", 0.9)],
     )
 
-    monkeypatch.setattr("oracle_sae.explanation_reports.DEFAULT_MAX_PAIRWISE_COMPARISONS", 0)
+    monkeypatch.setattr("interp_lab.explanation_reports.DEFAULT_MAX_PAIRWISE_COMPARISONS", 0)
     with pytest.raises(ValueError, match="text-pivot matching would compare"):
         build_text_pivot_match_report(left_reports=[left], right_reports=[right])
 

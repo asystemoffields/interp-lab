@@ -14,13 +14,13 @@ for stream in (sys.stdout, sys.stderr):
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from oracle_sae.modal_workflows import (  # noqa: E402
+from interp_lab.modal_workflows import (  # noqa: E402
     ModalSaeWorkflow,
     build_modal_sae_commands,
     expected_modal_sae_outputs,
     summarize_modal_result,
 )
-from oracle_sae.reporting import load_inspection_report, write_inspection_html
+from interp_lab.reporting import load_inspection_report, write_inspection_html
 
 
 APP_NAME = "interp-lab-sae-train"

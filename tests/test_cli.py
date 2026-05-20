@@ -1,8 +1,8 @@
 from pathlib import Path
 import json
 
-from oracle_sae.cli import main
-from oracle_sae.runs import _input_file_records
+from interp_lab.cli import main
+from interp_lab.runs import _input_file_records
 
 
 def test_demo_command_writes_reports(tmp_path: Path):

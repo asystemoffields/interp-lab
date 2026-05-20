@@ -1,5 +1,5 @@
-from oracle_sae.reporting import render_inspection_html, render_inspection_markdown, write_inspection_html
-from oracle_sae.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
+from interp_lab.reporting import render_inspection_html, render_inspection_markdown, write_inspection_html
+from interp_lab.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
 
 
 def test_inspection_markdown_includes_mechanism_sketch_without_boilerplate():

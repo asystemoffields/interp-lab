@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from oracle_sae.cli import main
-from oracle_sae.release_check import build_release_readiness_report, render_release_check_text
+from interp_lab.cli import main
+from interp_lab.release_check import build_release_readiness_report, render_release_check_text
 
 
 def test_release_check_reports_stable_gate_status():

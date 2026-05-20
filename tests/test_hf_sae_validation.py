@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from oracle_sae.graph_validation import GraphValidationWriteResult
-from oracle_sae.hf_sae_validation import export_hf_sae_path_validation
+from interp_lab.graph_validation import GraphValidationWriteResult
+from interp_lab.hf_sae_validation import export_hf_sae_path_validation
 
 
 def test_hf_sae_path_validation_reruns_selected_graph_pairs(tmp_path: Path, monkeypatch):
@@ -51,8 +51,8 @@ def test_hf_sae_path_validation_reruns_selected_graph_pairs(tmp_path: Path, monk
             annotated_graph_html_path=Path(kwargs["graph_html_out_path"]) if kwargs.get("graph_html_out_path") else None,
         )
 
-    monkeypatch.setattr("oracle_sae.hf_sae_validation.export_hf_sae_path_records", fake_export_paths)
-    monkeypatch.setattr("oracle_sae.hf_sae_validation.export_graph_validation_report", fake_export_validation)
+    monkeypatch.setattr("interp_lab.hf_sae_validation.export_hf_sae_path_records", fake_export_paths)
+    monkeypatch.setattr("interp_lab.hf_sae_validation.export_graph_validation_report", fake_export_validation)
 
     result = export_hf_sae_path_validation(
         graph_path=graph_path,

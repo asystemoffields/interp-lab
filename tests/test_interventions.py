@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from oracle_sae.adapters.interventions import InterventionRecordRunner, summarize_intervention_file
-from oracle_sae.criteria import HeuristicCriterionCompiler
-from oracle_sae.reporting import _intervention_lines, _sae_training_lines
-from oracle_sae.schema import FeatureEvidence
+from interp_lab.adapters.interventions import InterventionRecordRunner, summarize_intervention_file
+from interp_lab.criteria import HeuristicCriterionCompiler
+from interp_lab.reporting import _intervention_lines, _sae_training_lines
+from interp_lab.schema import FeatureEvidence
 
 
 def test_intervention_runner_aggregates_causal_effects(tmp_path: Path):

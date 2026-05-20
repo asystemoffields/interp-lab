@@ -5,20 +5,20 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from oracle_sae import __version__
-from oracle_sae.criterion_lab import PRESET_SCHEMA_VERSION
-from oracle_sae.demo_sweep import REAL_MODEL_DEMO_SWEEP_SCHEMA
-from oracle_sae.env_profile import SCHEMA_VERSION as ENV_PROFILE_SCHEMA
-from oracle_sae.explanation_reports import (
+from interp_lab import __version__
+from interp_lab.criterion_lab import PRESET_SCHEMA_VERSION
+from interp_lab.demo_sweep import REAL_MODEL_DEMO_SWEEP_SCHEMA
+from interp_lab.env_profile import SCHEMA_VERSION as ENV_PROFILE_SCHEMA
+from interp_lab.explanation_reports import (
     EXPLANATION_CONSISTENCY_SCHEMA,
     FEATURE_SEARCH_SCHEMA,
     MODEL_FAMILY_COMPARISON_SCHEMA,
     TEXT_PIVOT_MATCH_SCHEMA,
 )
-from oracle_sae.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
-from oracle_sae.release_check import REAL_MODEL_DEMO_SCHEMA, RELEASE_CHECK_SCHEMA
-from oracle_sae.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA
-from oracle_sae.web_server import STUDIO_HISTORY_SCHEMA
+from interp_lab.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
+from interp_lab.release_check import REAL_MODEL_DEMO_SCHEMA, RELEASE_CHECK_SCHEMA
+from interp_lab.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA
+from interp_lab.web_server import STUDIO_HISTORY_SCHEMA
 
 PUBLIC_API_CONTRACT_SCHEMA = "interp-lab.public_api_contract.v1"
 

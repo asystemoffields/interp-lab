@@ -1,14 +1,14 @@
 import json
 from pathlib import Path
 
-from oracle_sae.cli import main
-from oracle_sae.match_validation import (
+from interp_lab.cli import main
+from interp_lab.match_validation import (
     build_match_validation_report,
     export_match_validation_report,
     render_match_validation_html,
     render_match_validation_markdown,
 )
-from oracle_sae.schema import CandidateMatch, MatchReport
+from interp_lab.schema import CandidateMatch, MatchReport
 
 
 def test_match_validation_grades_cross_model_equivalence_claims():

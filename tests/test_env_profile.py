@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from oracle_sae.cli import main
-from oracle_sae.env_profile import build_environment_routing, collect_environment_profile
-from oracle_sae.scaling import ScalePlan
+from interp_lab.cli import main
+from interp_lab.env_profile import build_environment_routing, collect_environment_profile
+from interp_lab.scaling import ScalePlan
 
 
 def test_collect_environment_profile_is_sanitized_and_routable(tmp_path: Path):

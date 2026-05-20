@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from oracle_sae.graph_validation import (
+from interp_lab.graph_validation import (
     annotate_graph_with_validation,
     build_graph_validation_report,
     export_graph_validation_report,
