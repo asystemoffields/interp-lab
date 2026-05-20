@@ -14,6 +14,20 @@ Open the manifest for the model family and workflow you want, then run the `comm
 
 After a run, compare the produced files with `expected_artifacts`. The `why_it_matters` field explains what each artifact proves about the workflow. The `interpretation_notes` field is the first-pass review checklist for deciding whether a result is a publishable claim, a useful pilot signal, or only a plumbing check.
 
+Agents and release maintainers can verify the whole suite with:
+
+```bash
+interp-lab demo-sweep --out reports/real-model-demo-sweep.json
+```
+
+That default mode validates manifests and checks whether expected artifacts exist. To execute commands as part of the sweep, add `--run`. External launchers such as Modal are skipped unless `--allow-external` is present:
+
+```bash
+interp-lab demo-sweep --run --allow-external --out reports/real-model-demo-sweep.json
+```
+
+Use `--demo <id>` to run one manifest at a time, and `--strict` when the sweep is acting as a release gate.
+
 ## Evidence Standard
 
 For stable-release demos, a run should preserve:

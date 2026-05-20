@@ -125,6 +125,14 @@ The demo writes a complete tour: feature reports for two toy models, cross-model
 
 For a compact real-model release check, follow `docs/GOLDEN_REAL_MODEL_DEMO.md`. It trains a small DistilGPT-2 SAE, suppresses selected SAE latents, re-inspects with intervention evidence, and exports an HTML attribution graph. The broader stable-demo suite is cataloged in `docs/REAL_MODEL_DEMOS.md` and `examples/real_model_demos/`.
 
+Verify or run the cataloged real-model demos with:
+
+```bash
+interp-lab demo-sweep --out reports/real-model-demo-sweep.json
+```
+
+Use `--run` to execute the manifest commands and `--demo <id>` to focus on one walkthrough.
+
 Open the browser Studio command builder:
 
 ```bash

@@ -61,6 +61,7 @@ def build_release_readiness_report(root: str | Path = ".") -> dict[str, Any]:
         _check_known_stable_blockers(repo_root),
         _check_golden_demo_doc(repo_root),
         _check_real_model_demo_coverage(repo_root),
+        _check_real_model_demo_sweep(repo_root),
         _check_browser_app(repo_root),
         _check_ci_matrix(repo_root),
         _check_publish_workflow(repo_root),
@@ -302,6 +303,50 @@ def _check_real_model_demo_coverage(root: Path) -> dict[str, str]:
     )
 
 
+def _check_real_model_demo_sweep(root: Path) -> dict[str, str]:
+    path = root / "reports/real-model-demo-sweep.json"
+    if not path.exists():
+        return _check(
+            "real_model_demo_sweep",
+            "Real-model demo sweep is archived",
+            "blocker",
+            "reports/real-model-demo-sweep.json is missing.",
+            "Run interp-lab demo-sweep --run --out reports/real-model-demo-sweep.json after installing demo dependencies.",
+        )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return _check(
+            "real_model_demo_sweep",
+            "Real-model demo sweep is archived",
+            "blocker",
+            f"Invalid sweep JSON: {exc.msg}",
+            "Regenerate reports/real-model-demo-sweep.json with interp-lab demo-sweep --run.",
+        )
+    problems = []
+    if payload.get("schema_version") != "interp-lab.real_model_demo_sweep.v1":
+        problems.append("schema_version")
+    if payload.get("status") != "passed":
+        problems.append(f"status={payload.get('status', '<missing>')}")
+    if not payload.get("run_commands"):
+        problems.append("run_commands=false")
+    try:
+        selected_demo_count = int(payload.get("selected_demo_count", 0) or 0)
+    except (TypeError, ValueError):
+        selected_demo_count = 0
+    if selected_demo_count < 3:
+        problems.append("selected_demo_count<3")
+    return _check(
+        "real_model_demo_sweep",
+        "Real-model demo sweep is archived",
+        "pass" if not problems else "blocker",
+        "Full demo sweep passed with command execution evidence."
+        if not problems
+        else "Sweep report is incomplete: " + ", ".join(problems),
+        "Run the full real-model demo sweep with command execution and archive the generated report before stable release.",
+    )
+
+
 def _validate_real_model_demo_manifest(path: Path, root: Path) -> tuple[bool, str]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -425,6 +470,7 @@ def _check_schema_contracts(root: Path) -> dict[str, str]:
         "public_api_contract": "interp-lab.public_api_contract.v1",
         "release_check": RELEASE_CHECK_SCHEMA,
         "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
+        "real_model_demo_sweep": "interp-lab.real_model_demo_sweep.v1",
     }
     contract_tests = (root / "tests/test_contracts.py").exists()
     missing = [key for key, value in required.items() if not value.endswith(".v1")]

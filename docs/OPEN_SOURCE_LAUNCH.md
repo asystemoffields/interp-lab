@@ -8,6 +8,7 @@ This checklist is for publishing interp-lab as a useful public tool.
 - Keep source, tests, examples, docs, and small fixtures in git.
 - Keep generated reports, model caches, and large SAE artifacts out of git.
 - Add a release tag after CI is green.
+- Run `interp-lab demo-sweep --run --out reports/real-model-demo-sweep.json` and archive the sweep packet.
 - Run `interp-lab release-check --strict --out reports/release-check.json` before any stable release tag.
 
 ## Quality Bar
@@ -36,6 +37,7 @@ For outreach, send:
 - repository link;
 - one-page technical summary;
 - command transcript or manifest from a real small-model run;
+- `reports/real-model-demo-sweep.json`;
 - generated causal report;
 - generated attribution graph, validation report, and compact graph summary;
 - short description of the feedback or collaboration wanted.

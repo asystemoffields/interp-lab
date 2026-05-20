@@ -7,6 +7,7 @@ from typing import Any
 
 from oracle_sae import __version__
 from oracle_sae.criterion_lab import PRESET_SCHEMA_VERSION
+from oracle_sae.demo_sweep import REAL_MODEL_DEMO_SWEEP_SCHEMA
 from oracle_sae.env_profile import SCHEMA_VERSION as ENV_PROFILE_SCHEMA
 from oracle_sae.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
 from oracle_sae.release_check import REAL_MODEL_DEMO_SCHEMA, RELEASE_CHECK_SCHEMA
@@ -45,6 +46,7 @@ PUBLIC_API_EXPORTS = [
     "compare",
     "criterion_lab",
     "criterion_lab_presets",
+    "demo_sweep",
     "doctor",
     "inspect",
     "intervene",
@@ -81,6 +83,7 @@ SCHEMA_CONTRACTS = {
     "path_patch": "interp-lab.path_patch.v1",
     "public_api_contract": PUBLIC_API_CONTRACT_SCHEMA,
     "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
+    "real_model_demo_sweep": REAL_MODEL_DEMO_SWEEP_SCHEMA,
     "release_check": RELEASE_CHECK_SCHEMA,
     "run_manifest": "interp-lab.run.v1",
     "sae": "interp-lab.sae.v1",
@@ -95,6 +98,7 @@ PUBLIC_API_SIGNATURES = {
     "build_prompts": ["out", "positive", "negative", "positive_prompt", "negative_prompt"],
     "compare": ["left", "right", "out", "top_k"],
     "criterion_lab": ["out", "model", "preset", "preset_file", "criterion", "workflow", "run_dir"],
+    "demo_sweep": ["repo_root", "manifest_dir", "demos", "out", "run", "allow_external"],
     "inspect": ["model", "criterion", "backend", "records", "interventions", "out", "html_out", "top_k"],
     "intervene": ["model", "dataset", "criterion", "features", "report", "records", "out", "plan_out", "dry_run"],
     "path_patch": ["model", "dataset", "source_sae", "target_sae", "out", "criterion"],

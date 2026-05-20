@@ -198,6 +198,14 @@ interp-lab publish-hf-artifact --help
 
 The reproducible real-model demo suite is cataloged in `docs/REAL_MODEL_DEMOS.md`. Each demo has a JSON manifest under `examples/real_model_demos/` with ordered commands, expected artifacts, and interpretation notes for reviewers and agents.
 
+Use the sweep command before a stable release or a public outreach packet:
+
+```bash
+interp-lab demo-sweep --out reports/real-model-demo-sweep.json
+```
+
+Add `--run` to execute the manifest commands, `--demo <id>` to narrow the run, and `--allow-external` when a selected workflow intentionally launches Modal or another trusted external runner.
+
 PyPI release details live in `docs/RELEASE.md`.
 
 ## Large Runs

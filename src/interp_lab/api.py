@@ -30,6 +30,7 @@ from oracle_sae.criterion_lab import (
     write_criterion_assay_validation_report,
     write_criterion_lab_config,
 )
+from oracle_sae.demo_sweep import build_demo_sweep_report
 from oracle_sae.doctor import collect_diagnostics
 from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
 from oracle_sae.feature_interventions import (
@@ -852,6 +853,33 @@ def profile_environment(path: str | Path = ".") -> dict[str, Any]:
 def release_check(repo_root: str | Path = ".") -> dict[str, Any]:
     """Return the stable-release readiness report for a repository checkout."""
     return build_release_readiness_report(repo_root)
+
+
+def demo_sweep(
+    *,
+    repo_root: str | Path = ".",
+    manifest_dir: str | Path = "examples/real_model_demos",
+    demos: list[str] | None = None,
+    out: str | Path | None = None,
+    run: bool = False,
+    allow_external: bool = False,
+    stop_on_failure: bool = False,
+) -> dict[str, Any]:
+    """Verify or execute real-model demo manifests and optionally write an archival report."""
+    report = build_demo_sweep_report(
+        repo_root=repo_root,
+        manifest_dir=manifest_dir,
+        demos=demos,
+        run=run,
+        allow_external=allow_external,
+        stop_on_failure=stop_on_failure,
+        command_runner=_cli_main if run else None,
+    )
+    if out is not None:
+        path = Path(out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report
 
 
 def attribution_graph(

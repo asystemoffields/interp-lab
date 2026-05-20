@@ -366,6 +366,21 @@ COMMAND_SPECS: list[dict[str, Any]] = [
         "description": "Write a complete toy demo with reports, HTML, matches, graph, and summary.",
         "fields": [{"key": "out", "flag": "--out", "label": "Output directory", "default": "reports/demo"}],
     },
+    {
+        "id": "demo-sweep",
+        "group": "Utility",
+        "label": "Real-Model Demo Sweep",
+        "description": "Verify or run the real-model demo suite and write an archival sweep report.",
+        "fields": [
+            {"key": "repo_root", "flag": "--repo-root", "label": "Repo root", "default": "."},
+            {"key": "manifest_dir", "flag": "--manifest-dir", "label": "Manifest directory", "default": "examples/real_model_demos"},
+            {"key": "demo", "flag": "--demo", "label": "Demo id", "type": "repeat"},
+            {"key": "run", "flag": "--run", "label": "Run commands", "type": "boolean"},
+            {"key": "allow_external", "flag": "--allow-external", "label": "Allow external launchers", "type": "boolean"},
+            {"key": "strict", "flag": "--strict", "label": "Require all artifacts", "type": "boolean"},
+            {"key": "out", "flag": "--out", "label": "Sweep report", "default": "reports/real-model-demo-sweep.json"},
+        ],
+    },
 ]
 
 

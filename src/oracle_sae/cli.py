@@ -28,6 +28,11 @@ from oracle_sae.criterion_lab import (
     run_criterion_assay_validation_from_args,
     run_criterion_lab_from_args,
 )
+from oracle_sae.demo_sweep import (
+    build_demo_sweep_parser,
+    render_demo_sweep_text,
+    run_demo_sweep_from_args,
+)
 from oracle_sae.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
 from oracle_sae.env_profile import build_environment_profile_parser, run_environment_profile_from_args
 from oracle_sae.feature_interventions import build_intervene_parser, run_intervene_from_args
@@ -213,6 +218,14 @@ def build_parser() -> argparse.ArgumentParser:
     demo = subparsers.add_parser("demo", help="Run two toy inspections and match their features.")
     demo.add_argument("--out", default="reports/demo", help="Output directory.")
     demo.set_defaults(func=run_demo)
+
+    demo_sweep = subparsers.add_parser(
+        "demo-sweep",
+        help="Verify or execute the real-model demo suite and archive the sweep report.",
+        parents=[build_demo_sweep_parser()],
+        add_help=False,
+    )
+    demo_sweep.set_defaults(func=run_demo_sweep)
 
     studio = subparsers.add_parser(
         "studio",
@@ -513,6 +526,19 @@ def run_demo(args: argparse.Namespace) -> int:
     print(f"Wrote {graph_path.with_suffix('.html')}")
     print(f"Wrote {graph_summary_path}")
     print(f"Wrote {studio_path}")
+    return 0
+
+
+def run_demo_sweep(args: argparse.Namespace) -> int:
+    result = run_demo_sweep_from_args(args, command_runner=main)
+    if args.json:
+        print(json.dumps(result.report, indent=2, sort_keys=True))
+    else:
+        print(render_demo_sweep_text(result.report))
+    if result.path is not None:
+        print(f"Wrote {result.path}")
+    if args.strict and result.report["status"] != "passed":
+        return 1
     return 0
 
 

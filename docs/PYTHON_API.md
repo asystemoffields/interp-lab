@@ -254,11 +254,14 @@ Use `env_profile="reports/env-profile.json"` to plan against a saved profile fro
 ## Release Readiness
 
 ```python
-from interp_lab import public_api_contract, release_check
+from interp_lab import demo_sweep, public_api_contract, release_check
 
 report = release_check(".")
 print(report["ready_for_stable_release"])
 print(report["agent_next_actions"])
+
+sweep = demo_sweep(out="reports/real-model-demo-sweep.json")
+print(sweep["status"])
 
 contract = public_api_contract()
 print(contract["schema_version"])
