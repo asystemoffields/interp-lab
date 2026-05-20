@@ -86,6 +86,26 @@
       ]
     },
     {
+      "name": "re-inspect with causal evidence",
+      "argv": [
+        "inspect",
+        "--model",
+        "distilgpt2",
+        "--criterion",
+        "the next token should be a physical measurement unit",
+        "--backend",
+        "records",
+        "--records",
+        "reports/golden-real/distilgpt2-unit/sae/records.jsonl",
+        "--interventions",
+        "reports/golden-real/distilgpt2-unit/interventions.jsonl",
+        "--out",
+        "reports/golden-real/distilgpt2-unit/inspect-causal",
+        "--html-out",
+        "reports/golden-real/distilgpt2-unit/inspect-causal/report.html"
+      ]
+    },
+    {
       "name": "export attribution graph",
       "argv": [
         "export-attribution-graph",
@@ -97,6 +117,16 @@
         "reports/golden-real/distilgpt2-unit/graph.md",
         "--html-out",
         "reports/golden-real/distilgpt2-unit/graph.html"
+      ]
+    },
+    {
+      "name": "summarize attribution graph",
+      "argv": [
+        "summarize-attribution-graph",
+        "--graph",
+        "reports/golden-real/distilgpt2-unit/graph.json",
+        "--out",
+        "reports/golden-real/distilgpt2-unit/graph-summary.json"
       ]
     }
   ],

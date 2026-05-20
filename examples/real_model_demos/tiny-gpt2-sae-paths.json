@@ -66,6 +66,22 @@
       ]
     },
     {
+      "name": "inspect target SAE",
+      "argv": [
+        "inspect",
+        "--model",
+        "sshleifer/tiny-gpt2",
+        "--criterion",
+        "the next token should be a physical measurement unit",
+        "--backend",
+        "records",
+        "--records",
+        "reports/real-small/tiny-gpt2-unit/sae-layer2/records.jsonl",
+        "--out",
+        "reports/real-small/tiny-gpt2-unit/sae-layer2/report"
+      ]
+    },
+    {
       "name": "measure SAE paths",
       "argv": [
         "export-hf-sae-paths",
