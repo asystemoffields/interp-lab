@@ -93,6 +93,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 - **[Full command reference](docs/COMMANDS.md)** — every CLI command and the JSONL data formats (feature dumps, activation records, intervention records).
 - [`docs/PYTHON_API.md`](docs/PYTHON_API.md) — the Python API.
 - [`docs/GOLDEN_REAL_MODEL_DEMO.md`](docs/GOLDEN_REAL_MODEL_DEMO.md) — a compact real-model walkthrough (trains a small DistilGPT-2 SAE, suppresses latents, re-inspects with causal evidence, exports an attribution graph).
+- **[Archived DistilGPT-2 run](examples/real_model_demos/golden-distilgpt2-unit/)** — real committed artifacts from that walkthrough: a measured criterion-promoting SAE latent, an authentic suppression dose-response, and semantic (MiniLM) fingerprints. Open `inspect-causal/report.html` to see the numbers.
 - [`docs/REAL_MODEL_DEMOS.md`](docs/REAL_MODEL_DEMOS.md) and [`examples/real_model_demos/`](examples/real_model_demos) — the broader real-model suite.
 - [`docs/GEMMA4_WALKTHROUGH.md`](docs/GEMMA4_WALKTHROUGH.md) and [`docs/SCALING.md`](docs/SCALING.md) — large-model and 1T+ paths.
 
@@ -111,7 +112,7 @@ interp-lab release-check --strict             # stable-release readiness
 - Distributed SAE training manifests.
 - Remote causal validation workers.
 - Feature transfer tests across model families.
-- Public example gallery with archived real-model reports.
+- Public example gallery with archived real-model reports (started — see [`examples/real_model_demos/`](examples/real_model_demos)).
 
 ## Development
 
