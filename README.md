@@ -306,7 +306,7 @@ interp-lab train-sae \
   --criterion "the next token should be a physical measurement unit"
 ```
 
-Production mode uses token-level activation rows, top-k sparse codes, held-out reconstruction metrics, dead-latent reporting, and optional SAE-latent steering interventions when `--causal-out` is provided. You can override any preset choice, such as `--epochs`, `--batch-size`, `--top-k`, or `--max-records`.
+Production mode uses token-level activation rows, top-k sparse codes, held-out reconstruction metrics, dead-latent reporting, and optional SAE-latent steering interventions when `--causal-out` is provided. The exported SAE records include training diagnostics such as `rows_per_latent`, train/validation reconstruction MSE, validation/train MSE ratio, active-latent fraction, dead-latent count, and advisories for sparse data or validation drift. You can override any preset choice, such as `--epochs`, `--batch-size`, `--top-k`, or `--max-records`.
 
 Add `--target-token auto` when you want causal scoring tokens derived from the positive prompts. Prefix tokens with `raw:` for exact tokenizer text, which is often useful outside GPT-style leading-space tokenizers.
 

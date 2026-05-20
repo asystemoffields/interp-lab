@@ -564,10 +564,12 @@ def _sae_training_summary(artifact: dict[str, Any], *, sample_count: int) -> dic
     latent_dim = int(artifact.get("latent_dim", 0) or 0)
     dead_count = int(metrics.get("dead_latent_count", 0) or 0)
     active_fraction = float(metrics.get("active_latent_fraction", 0.0) or 0.0)
+    rows_per_latent = sample_count / latent_dim if latent_dim else 0.0
     summary: dict[str, Any] = {
         "method": str(artifact.get("method", "unknown")),
         "sample_count": int(sample_count),
         "latent_dim": latent_dim,
+        "rows_per_latent": round(rows_per_latent, 6),
         "active_latent_fraction": round(active_fraction, 6),
         "dead_latent_count": dead_count,
         "average_l0": _round_optional(metrics.get("average_l0")),
@@ -580,13 +582,20 @@ def _sae_training_summary(artifact: dict[str, Any], *, sample_count: int) -> dic
     dead_fraction = dead_count / latent_dim if latent_dim else 0.0
     if sample_count < latent_dim:
         advisories.append("Training rows are fewer than latents; collect more activations or reduce latent_dim.")
+    elif latent_dim and rows_per_latent < 4:
+        advisories.append(
+            "Training rows are sparse for this latent count; use a broader prompt corpus before relying on latent labels."
+        )
     if dead_fraction >= 0.5:
         advisories.append("Dead-latent fraction is high; increase data, lower latent_dim, or retune sparsity.")
     train_mse = _optional_float(metrics.get("train_reconstruction_mse"))
     validation_mse = _optional_float(metrics.get("validation_reconstruction_mse"))
     if train_mse is not None and validation_mse is not None and train_mse > 0:
+        summary["validation_train_mse_ratio"] = round(validation_mse / train_mse, 6)
         if validation_mse > train_mse * 1.5:
-            advisories.append("Validation reconstruction is much worse than train; use more held-out data.")
+            advisories.append(
+                "Validation reconstruction is much worse than train; broaden training prompts and keep a separate held-out eval set."
+            )
     if advisories:
         summary["advisories"] = advisories
     return summary

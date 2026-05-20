@@ -119,6 +119,27 @@ interp-lab summarize-attribution-graph \
   --out reports/gemma4-tool-calls/modal-hidden/graph-summary.json
 ```
 
+Train a behavior SAE on the discovered layer:
+
+```bash
+modal run examples/modal_train_sae.py \
+  --dataset prompts/broader-tool-call-training.jsonl \
+  --causal-dataset examples/gemma4_tool_call_prompts.jsonl \
+  --out-dir reports/gemma4-tool-calls/modal-sae-layer35 \
+  --model google/gemma-4-E2B-it \
+  --model-class gemma4-conditional \
+  --criterion "the assistant should produce a valid schema-following tool call that successfully executes the user's requested operation" \
+  --layers 35 \
+  --preset production \
+  --latent-dim 128 \
+  --top-k 12 \
+  --max-records 1024 \
+  --target-token auto \
+  --max-length 96
+```
+
+For behavior-specific SAEs, use a broader training corpus than the causal assay and keep the smaller assay as `--causal-dataset`. Review `rows_per_latent`, `validation_train_mse_ratio`, active-latent fraction, dead-latent count, and behavior-score diagnostics before treating labels as stable. In the tool-call pilot, a 128-latent layer-35 SAE surfaced `SAE:L35:F88` with association `0.236`, causal effect `+0.0495`, and specificity `0.0475`; the report also flagged validation reconstruction drift, so the next production run should add a broader held-out corpus.
+
 Set `INTERP_LAB_MODAL_GPU=L40S` or another Modal GPU name before `modal run` when you want a larger accelerator. The default is `A10G`.
 
 The Modal workflows default to `--target-token auto`. Read the causal report's behavior-score line after the run: if the baseline score is saturated, rerun with a narrower explicit target-token set for the behavior you care about. If the score is near zero even with auto targets, inspect the target-token sample in the report and pass explicit `raw:` or `space:` tokens for the behavior.

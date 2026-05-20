@@ -7,6 +7,7 @@ import pytest
 from oracle_sae.adapters.records import ActivationRecordFeatureProvider
 from oracle_sae.criteria import HeuristicCriterionCompiler
 from oracle_sae.sae_training import (
+    _sae_training_summary,
     _split_prompt_indexes,
     _select_latents,
     _training_settings,
@@ -159,6 +160,28 @@ def test_train_sae_reports_validation_and_dead_latents(tmp_path: Path):
     assert artifact["metrics"]["validation_reconstruction_mse"] is not None
     assert artifact["metrics"]["dead_latent_count"] == 4
     assert artifact["metrics"]["active_latent_fraction"] == 0.0
+
+
+def test_sae_training_summary_warns_on_sparse_rows_and_validation_drift():
+    artifact = {
+        "method": "torch",
+        "latent_dim": 256,
+        "config": {"sparsity": "topk", "top_k": 16},
+        "metrics": {
+            "active_latent_fraction": 0.9,
+            "dead_latent_count": 25,
+            "average_l0": 16,
+            "train_reconstruction_mse": 1.0,
+            "validation_reconstruction_mse": 3.0,
+        },
+    }
+
+    summary = _sae_training_summary(artifact, sample_count=512)
+
+    assert summary["rows_per_latent"] == 2.0
+    assert summary["validation_train_mse_ratio"] == 3.0
+    assert any("Training rows are sparse" in advisory for advisory in summary["advisories"])
+    assert any("broaden training prompts" in advisory for advisory in summary["advisories"])
 
 
 def test_training_presets_can_be_selected_and_overridden():
