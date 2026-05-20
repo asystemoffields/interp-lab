@@ -18,6 +18,7 @@ from oracle_sae.criterion_lab import (
 from oracle_sae.workflows import RunTemplateWriteResult
 
 from interp_lab.api import (
+    FeatureInterventionResult,
     PathPatchResult,
     HfSaePathValidation,
     SaeTrainingResult,
@@ -35,6 +36,7 @@ from interp_lab.api import (
     criterion_lab_presets,
     doctor,
     inspect,
+    intervene,
     path_patch,
     prepare_sae_prompts,
     publish_hf_artifact,
@@ -58,6 +60,7 @@ __all__ = [
     "FeatureCard",
     "FeatureEvidence",
     "FeatureFingerprint",
+    "FeatureInterventionResult",
     "InspectionReport",
     "MatchReport",
     "PathPatchResult",
@@ -80,6 +83,7 @@ __all__ = [
     "criterion_lab_presets",
     "doctor",
     "inspect",
+    "intervene",
     "path_patch",
     "prepare_sae_prompts",
     "publish_hf_artifact",

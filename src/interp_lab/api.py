@@ -32,6 +32,10 @@ from oracle_sae.criterion_lab import (
 )
 from oracle_sae.doctor import collect_diagnostics
 from oracle_sae.env_profile import collect_environment_profile, load_environment_profile
+from oracle_sae.feature_interventions import (
+    FeatureInterventionResult,
+    intervene_on_features,
+)
 from oracle_sae.graphs import (
     build_attribution_graph,
     export_attribution_graph,
@@ -763,6 +767,60 @@ def path_patch(
         tokenizer_kwargs=tokenizer_kwargs,
     )
     return PathPatchResult(path_records=path)
+
+
+def intervene(
+    *,
+    model: str,
+    dataset: str | Path,
+    criterion: str,
+    out: str | Path,
+    features: list[str] | None = None,
+    report: str | Path | None = None,
+    top_k: int = 8,
+    sae: str | Path | None = None,
+    mode: str = "suppress",
+    strength_sweep: list[float] | None = None,
+    ablate_value: float = 0.0,
+    target_tokens: list[str] | None = None,
+    device: str = "cpu",
+    max_length: int = 128,
+    plan_out: str | Path | None = None,
+    dry_run: bool = False,
+    model_class: str = "auto-causal-lm",
+    trust_remote_code: bool = False,
+    local_files_only: bool = False,
+    torch_dtype: str | None = None,
+    device_map: str | None = None,
+    model_kwargs: dict[str, Any] | None = None,
+    tokenizer_kwargs: dict[str, Any] | None = None,
+) -> FeatureInterventionResult:
+    """Amplify, suppress, or ablate selected features and write intervention records."""
+    return intervene_on_features(
+        model_name=model,
+        dataset_path=dataset,
+        criterion=criterion,
+        out_path=out,
+        features=features,
+        report_path=report,
+        top_k=top_k,
+        sae_path=sae,
+        mode=mode,
+        strength_sweep=strength_sweep,
+        ablate_value=ablate_value,
+        target_tokens=target_tokens,
+        device=device,
+        max_length=max_length,
+        plan_out=plan_out,
+        dry_run=dry_run,
+        model_class=model_class,
+        trust_remote_code=trust_remote_code,
+        local_files_only=local_files_only,
+        torch_dtype=torch_dtype,
+        device_map=device_map,
+        model_kwargs=model_kwargs,
+        tokenizer_kwargs=tokenizer_kwargs,
+    )
 
 
 def run(

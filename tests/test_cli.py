@@ -35,6 +35,7 @@ def test_studio_command_writes_web_app(tmp_path: Path):
     html = out.read_text(encoding="utf-8")
     assert exit_code == 0
     assert "Interp Lab Studio" in html
+    assert "intervene" in html
     assert "export-transformerlens-records" in html
     assert "export-nnsight-records" in html
     assert "generated-command" in html
@@ -234,6 +235,111 @@ def test_prepare_sae_prompts_command_writes_split_pack(tmp_path: Path, capsys):
     assert (out_dir / "causal.jsonl").exists()
     assert (out_dir / "validation.jsonl").exists()
     assert manifest["counts"]["total"]["record_count"] == 8
+
+
+def test_intervene_dry_run_writes_agent_plan(tmp_path: Path, capsys):
+    dataset = tmp_path / "prompts.jsonl"
+    dataset.write_text(
+        "\n".join(
+            [
+                json.dumps({"prompt_id": "pos-1", "text": "Use the tool now.", "criterion_score": 1.0}),
+                json.dumps({"prompt_id": "neg-1", "text": "Answer plainly.", "criterion_score": 0.0}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    plan_out = tmp_path / "plan.json"
+
+    exit_code = main(
+        [
+            "intervene",
+            "--model",
+            "distilgpt2",
+            "--dataset",
+            str(dataset),
+            "--criterion",
+            "successful tool calls",
+            "--feature",
+            "L6:D12",
+            "--mode",
+            "suppress",
+            "--strength-sweep",
+            "1,2",
+            "--out",
+            str(tmp_path / "interventions.jsonl"),
+            "--plan-out",
+            str(plan_out),
+            "--dry-run",
+            "--json",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    plan = json.loads(plan_out.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert output["dry_run"] is True
+    assert output["records_path"] is None
+    assert plan["schema_version"] == "interp-lab.intervention_plan.v1"
+    assert plan["features"][0]["feature_id"] == "L6:D12"
+    assert plan["features"][0]["type"] == "hidden"
+    assert plan["strengths"] == [1.0, 2.0]
+    assert plan["estimated_forward_passes"] == 6
+    assert plan["agent_actions"][0]["argv"][1] == "inspect"
+
+
+def test_intervene_dry_run_accepts_sae_latent(tmp_path: Path, capsys):
+    dataset = tmp_path / "prompts.jsonl"
+    dataset.write_text(
+        "\n".join(
+            [
+                json.dumps({"prompt_id": "pos-1", "text": "Use the tool now.", "criterion_score": 1.0}),
+                json.dumps({"prompt_id": "neg-1", "text": "Answer plainly.", "criterion_score": 0.0}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    sae = tmp_path / "sae.json"
+    sae.write_text(
+        json.dumps(
+            {
+                "format": "interp-lab.sae.v1",
+                "layer": 6,
+                "latent_dim": 2,
+                "decoder_weight": [[1.0, 0.0], [0.0, 1.0]],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "intervene",
+            "--model",
+            "distilgpt2",
+            "--dataset",
+            str(dataset),
+            "--criterion",
+            "successful tool calls",
+            "--feature",
+            "SAE:L6:F1",
+            "--sae",
+            str(sae),
+            "--mode",
+            "amplify",
+            "--out",
+            str(tmp_path / "interventions.jsonl"),
+            "--dry-run",
+            "--json",
+        ]
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["plan"]["features"][0]["feature_id"] == "SAE:L6:F1"
+    assert output["plan"]["features"][0]["type"] == "sae"
+    assert output["plan"]["advisories"]
 
 
 def test_publish_hf_artifact_dry_run_command(tmp_path: Path, capsys):

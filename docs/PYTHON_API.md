@@ -120,6 +120,30 @@ result = train_sae(
 )
 ```
 
+## Intervene On Features
+
+```python
+from interp_lab import intervene
+
+plan = intervene(
+    model="distilgpt2",
+    dataset="prompts/unit-sae-pack/causal.jsonl",
+    criterion="the next token should be a physical measurement unit",
+    features=["SAE:L6:F30"],
+    sae="reports/distilgpt2-sae/sae.json",
+    mode="suppress",
+    strength_sweep=[1.0, 3.0, 10.0],
+    target_tokens=["auto"],
+    out="reports/distilgpt2-sae/interventions.jsonl",
+    plan_out="reports/distilgpt2-sae/intervention-plan.json",
+    dry_run=True,
+)
+
+print(plan.plan["estimated_forward_passes"])
+```
+
+Set `dry_run=False` to write intervention records that can be passed into `inspect(..., interventions=...)`.
+
 ## Run Configs
 
 ```python

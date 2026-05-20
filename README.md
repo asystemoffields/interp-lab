@@ -263,6 +263,24 @@ interp-lab export-hf-interventions \
   --out reports/real-small/distilgpt2-unit/interventions.jsonl
 ```
 
+Amplify, suppress, or ablate specific discovered features with one agent-friendly command:
+
+```bash
+interp-lab intervene \
+  --model distilgpt2 \
+  --dataset prompts/unit-sae-pack/causal.jsonl \
+  --criterion "the next token should be a physical measurement unit" \
+  --feature SAE:L6:F30 \
+  --sae reports/production-sae/sae.json \
+  --mode suppress \
+  --strength-sweep "1,3,10" \
+  --target-token auto \
+  --out reports/production-sae/feature-interventions.jsonl \
+  --plan-out reports/production-sae/intervention-plan.json
+```
+
+Use `--dry-run --json` first when an agent should inspect the plan before spending model time. The plan includes selected features, expected forward passes, exact next-action commands, and advisories. The output JSONL can be passed back into `interp-lab inspect --interventions ...` so causal evidence updates the feature report.
+
 Export a contrast-direction feature and calibrate a causal steering strength:
 
 ```bash

@@ -10,6 +10,7 @@ from interp_lab import (
     criterion_lab_presets,
     doctor,
     inspect,
+    intervene,
     prepare_sae_prompts,
     profile_environment,
     publish_hf_artifact,
@@ -142,6 +143,33 @@ def test_prepare_sae_prompts_public_api_writes_manifest(tmp_path: Path):
     assert result.causal_path.exists()
     assert result.validation_path.exists()
     assert manifest["agent_next_actions"][0].startswith("Use train.jsonl")
+
+
+def test_intervene_public_api_can_plan_without_model_load(tmp_path: Path):
+    dataset = tmp_path / "prompts.jsonl"
+    rows = [
+        {"prompt_id": "p1", "text": "Call a tool successfully.", "criterion_score": 1.0},
+        {"prompt_id": "p2", "text": "Answer without tools.", "criterion_score": 0.0},
+    ]
+    dataset.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    result = intervene(
+        model="distilgpt2",
+        dataset=dataset,
+        criterion="successful tool calls",
+        features=["L6:D12"],
+        mode="suppress",
+        strength_sweep=[1.0, 2.0],
+        out=tmp_path / "interventions.jsonl",
+        plan_out=tmp_path / "plan.json",
+        dry_run=True,
+    )
+
+    assert result.dry_run is True
+    assert result.records_path is None
+    assert result.plan_path == tmp_path / "plan.json"
+    assert result.plan["features"][0]["feature_id"] == "L6:D12"
+    assert result.plan["estimated_forward_passes"] == 6
 
 
 def test_scaffold_run_public_api_writes_records_workflow(tmp_path: Path):

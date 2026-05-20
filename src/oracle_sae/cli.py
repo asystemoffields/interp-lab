@@ -30,6 +30,7 @@ from oracle_sae.criterion_lab import (
 )
 from oracle_sae.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
 from oracle_sae.env_profile import build_environment_profile_parser, run_environment_profile_from_args
+from oracle_sae.feature_interventions import build_intervene_parser, run_intervene_from_args
 from oracle_sae.graphs import (
     build_graph_export_parser,
     build_graph_summary_parser,
@@ -311,6 +312,14 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     hf_interventions.set_defaults(func=run_export_hf_interventions)
+
+    intervene = subparsers.add_parser(
+        "intervene",
+        help="Amplify, suppress, or ablate selected features and write intervention records.",
+        parents=[build_intervene_parser()],
+        add_help=False,
+    )
+    intervene.set_defaults(func=run_intervene)
 
     hf_contrast = subparsers.add_parser(
         "export-hf-contrast",
@@ -619,6 +628,22 @@ def run_export_nnsight_records(args: argparse.Namespace) -> int:
 def run_export_hf_interventions(args: argparse.Namespace) -> int:
     path = run_interventions_from_args(args)
     print(f"Wrote {path}")
+    return 0
+
+
+def run_intervene(args: argparse.Namespace) -> int:
+    result = run_intervene_from_args(args)
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+        return 0
+    if result.dry_run:
+        print("Planned feature interventions")
+    if result.records_path is not None:
+        print(f"Wrote {result.records_path}")
+    if result.plan_path is not None:
+        print(f"Wrote {result.plan_path}")
+    if result.records_path is None and result.plan_path is None:
+        print(json.dumps(result.plan, indent=2, sort_keys=True))
     return 0
 
 
