@@ -220,6 +220,7 @@ def render_demo_sweep_text(report: dict[str, Any]) -> str:
                 f"passed={command_summary.get('passed', 0)} "
                 f"planned={command_summary.get('planned', 0)} "
                 f"skipped={command_summary.get('skipped', 0)} "
+                f"blocked={command_summary.get('blocked', 0)} "
                 f"failed={command_summary.get('failed', 0)}"
             )
         detail = demo.get("detail")
@@ -255,8 +256,12 @@ def _build_single_demo_report(
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     commands = []
     command_failed = False
+    command_blocked = False
     if run:
         for command in payload.get("commands", []):
+            if command_blocked:
+                commands.append(_blocked_command(command))
+                continue
             command_report = _run_or_skip_command(
                 command,
                 repo_root=repo_root,
@@ -269,6 +274,8 @@ def _build_single_demo_report(
                 command_failed = True
                 if stop_on_failure:
                     break
+            if command_report["status"] == "skipped":
+                command_blocked = True
     else:
         commands = [_planned_command(command) for command in payload.get("commands", [])]
 
@@ -279,7 +286,7 @@ def _build_single_demo_report(
         "missing": sum(1 for artifact in artifacts if not artifact["exists"]),
     }
     command_summary = _command_summary(commands)
-    incomplete = artifact_summary["missing"] > 0 or command_summary["skipped"] > 0
+    incomplete = artifact_summary["missing"] > 0 or command_summary["skipped"] > 0 or command_summary["blocked"] > 0
     status = "passed"
     if command_failed:
         status = "failed"
@@ -434,6 +441,19 @@ def _planned_command(command: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _blocked_command(command: dict[str, Any]) -> dict[str, Any]:
+    raw_argv = list(command["argv"])
+    normalized = _normalize_argv(raw_argv)
+    return {
+        "name": command["name"],
+        "argv": raw_argv,
+        "normalized_argv": normalized,
+        "kind": "internal" if normalized and normalized[0] in INTERNAL_COMMANDS else "external",
+        "status": "blocked",
+        "detail": "Command was not run because an earlier command was skipped.",
+    }
+
+
 def _artifact_record(artifact: dict[str, Any], *, repo_root: Path) -> dict[str, Any]:
     path = _resolve_under_root(repo_root, artifact["path"])
     exists = path.exists()
@@ -511,6 +531,7 @@ def _command_summary(commands: list[dict[str, Any]]) -> dict[str, int]:
         "passed": sum(1 for command in commands if command.get("status") == "passed"),
         "planned": sum(1 for command in commands if command.get("status") == "planned"),
         "skipped": sum(1 for command in commands if command.get("status") == "skipped"),
+        "blocked": sum(1 for command in commands if command.get("status") == "blocked"),
         "failed": sum(1 for command in commands if command.get("status") == "failed"),
     }
 
@@ -529,6 +550,8 @@ def _demo_detail(
         return f"{artifact_summary['missing']} expected artifact(s) are missing."
     if run and command_summary["skipped"]:
         return f"{command_summary['skipped']} command(s) were skipped."
+    if run and command_summary["blocked"]:
+        return f"{command_summary['blocked']} command(s) were blocked by an earlier skipped command."
     return "Demo verification is incomplete."
 
 
@@ -549,6 +572,8 @@ def _demo_next_actions(
         actions.append("Re-run this sweep with --run when dependencies and credentials are ready.")
     if command_summary["skipped"]:
         actions.append("Use --allow-external for trusted external launchers such as Modal.")
+    if command_summary["blocked"]:
+        actions.append("Run blocked steps after the skipped launcher has produced its expected artifacts.")
     if artifact_summary["missing"]:
         actions.append("Generate the missing expected artifacts, then repeat the sweep.")
     actions.extend(payload.get("agent_next_actions", [])[:2])

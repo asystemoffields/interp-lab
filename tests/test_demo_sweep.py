@@ -74,9 +74,10 @@ def test_demo_sweep_runs_internal_commands_and_skips_external_by_default(tmp_pat
         command_runner=runner,
     )
 
-    assert seen == [["demo", "--out", "reports/toy"], ["inspect", "--model", "toy/model", "--criterion", "demo"]]
+    assert seen == [["demo", "--out", "reports/toy"]]
     assert report["status"] == "incomplete"
     assert report["demos"][0]["command_summary"]["skipped"] == 1
+    assert report["demos"][0]["command_summary"]["blocked"] == 1
 
 
 def test_public_api_demo_sweep_writes_report(tmp_path: Path):
