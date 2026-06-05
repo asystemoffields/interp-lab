@@ -7,9 +7,10 @@ Give it a model, a plain-language criterion, and feature evidence. It ranks the 
 ```bash
 python -m pip install interp-lab
 interp-lab doctor
+interp-lab quickstart        # a short guided walkthrough of the workflow and metrics
 
 # A complete tour on toy models in one command — no GPU, no downloads:
-interp-lab demo --out reports/demo
+interp-lab demo --out reports/demo   # then open reports/demo/index.html
 ```
 
 ```bash
@@ -30,7 +31,7 @@ interp-lab inspect \
 ## The workflow
 
 1. Compile a natural-language criterion into examples and scores.
-2. Collect candidate features from SAEs, crosscoders, NLA explanations, or feature dumps.
+2. Collect candidate features from SAEs, NLA explanations, or feature dumps — or feed any latents (crosscoders included) through the model-agnostic activation-records path.
 3. Rank features by criterion association, specificity, causal evidence, and stability.
 4. Build a feature fingerprint that can be compared across models.
 5. Validate cross-model equivalents with interventions.
@@ -98,7 +99,10 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 Common entry points:
 
 ```bash
-interp-lab demo --out reports/demo            # full toy tour
+interp-lab demo --out reports/demo            # full toy tour (open reports/demo/index.html)
+interp-lab quickstart                         # guided getting-started walkthrough
+interp-lab inspect ... --csv-out features.csv # ranked features as a spreadsheet
+interp-lab compare-runs --left a/report.json --right b/report.json --out diff.json  # rank/score drift
 interp-lab studio --serve --reports-dir reports   # local browser command-builder + runner
 interp-lab release-check --strict             # stable-release readiness
 ```

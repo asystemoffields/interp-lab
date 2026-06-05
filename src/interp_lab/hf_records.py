@@ -166,7 +166,7 @@ def export_hf_activation_records(
 def load_prompt_records(path: str | Path) -> list[PromptRecord]:
     records: list[PromptRecord] = []
     file_path = Path(path)
-    with file_path.open("r", encoding="utf-8") as handle:
+    with file_path.open("r", encoding="utf-8-sig") as handle:
         for line_number, line in enumerate(handle, start=1):
             stripped = line.strip()
             if not stripped:
@@ -503,7 +503,13 @@ def build_prepare_sae_prompt_datasets_parser() -> argparse.ArgumentParser:
         description="Split scored prompts into train, causal, and held-out SAE datasets."
     )
     parser.add_argument("--dataset", required=True, help="Scored prompt JSONL with text and criterion_score.")
-    parser.add_argument("--out-dir", required=True, help="Output directory for train/causal/validation JSONL.")
+    parser.add_argument(
+        "--out-dir",
+        "--out",
+        dest="out_dir",
+        required=True,
+        help="Output directory for train/causal/validation JSONL (--out is an accepted alias).",
+    )
     parser.add_argument("--train-ratio", type=float, default=0.7)
     parser.add_argument("--causal-ratio", type=float, default=0.15)
     parser.add_argument("--validation-ratio", type=float, default=0.15)
@@ -629,7 +635,7 @@ def _select_features(
 
 
 def _read_prompt_texts(path: str | Path, *, split: str, delimiter: str | None) -> list[str]:
-    raw = Path(path).read_text(encoding="utf-8")
+    raw = Path(path).read_text(encoding="utf-8-sig")
     if delimiter:
         chunks = raw.split(delimiter)
     elif split == "lines":

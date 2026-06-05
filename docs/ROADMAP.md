@@ -23,7 +23,7 @@ The north star:
 - Gemma Scope and Qwen-Scope wrappers.
 - TransformerLens activation export.
 - NNsight activation export.
-- Crosscoder feature import.
+- Crosscoder latent import via the model-agnostic activation-records path (a dedicated `CrosscoderFeatureProvider` is a planned provider — see `ARCHITECTURE.md`).
 - Intervention records import.
 - Hidden-dimension ablation export.
 - Contrast-direction steering export.
@@ -46,6 +46,15 @@ The north star:
 - Explanation-to-feature search.
 - Text-pivot cross-model matching.
 - Model-family comparison reports.
+
+## Shipped In 2.2 — usability, robustness & new tools
+
+- `compare-runs` — diff two inspection reports for rank drift and regressions.
+- `quickstart`/`tutorial` guided walkthrough; grouped `--help`; `--version`.
+- `inspect --csv-out` and an inline importance-by-layer chart in the HTML report.
+- Notebook-friendly, chainable Python API (`Written*` results chain into `compare`/`validate_matches`; `cards_table()`/`matches_table()`; top-level loaders; `py.typed`).
+- `match --min-score`/`--weights` matcher tuning.
+- Friendly CLI errors and real-world-file hardening (UTF-8 BOM, literal braces, non-finite rejection), plus a demo that demonstrates a measured causal claim end-to-end.
 
 ## Next Research And Engineering Milestones
 

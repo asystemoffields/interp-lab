@@ -21,6 +21,13 @@ def inspect_model(
     compiler: CriterionCompiler | None = None,
     top_k: int = 8,
 ) -> InspectionReport:
+    if not criterion_text or not criterion_text.strip():
+        raise ValueError(
+            "criterion must be a non-empty description of the behavior to find "
+            "(e.g. 'the model is aware it is being evaluated')"
+        )
+    if not model or not str(model).strip():
+        raise ValueError("model must be a non-empty identifier")
     compiler = compiler or HeuristicCriterionCompiler()
     criterion = compiler.compile(criterion_text)
     evidence_items = feature_provider.features_for(model, criterion)
@@ -69,11 +76,20 @@ def inspect_model(
     return add_inspection_agent_actions(report)
 
 
-def match_reports(left: InspectionReport, right: InspectionReport, *, top_k: int = 10) -> MatchReport:
+def match_reports(
+    left: InspectionReport,
+    right: InspectionReport,
+    *,
+    top_k: int = 10,
+    min_score: float = 0.0,
+    weights: dict[str, float] | None = None,
+) -> MatchReport:
     return MatchReport(
         left_model=left.model,
         right_model=right.model,
-        matches=match_feature_cards(left.cards, right.cards, top_k=top_k),
+        matches=match_feature_cards(
+            left.cards, right.cards, top_k=top_k, min_score=min_score, weights=weights
+        ),
     )
 
 

@@ -128,7 +128,7 @@ class NeuronpediaFeatureProvider:
 
 def load_neuronpedia_feature_refs(path: str | Path) -> list[str]:
     file_path = Path(path)
-    text = file_path.read_text(encoding="utf-8").strip()
+    text = file_path.read_text(encoding="utf-8-sig").strip()
     if not text:
         return []
     if file_path.suffix.lower() == ".json":

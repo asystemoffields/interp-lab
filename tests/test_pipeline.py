@@ -1,4 +1,8 @@
-from interp_lab.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
+from interp_lab.adapters.toy import (
+    ToyFeatureProvider,
+    ToyInterventionRunner,
+    ToyVerbalizer,
+)
 from interp_lab.matching import match_feature_cards
 from interp_lab.pipeline import inspect_model, match_reports
 from interp_lab.schema import Criterion, FeatureCard, FeatureEvidence, FeatureFingerprint
@@ -60,6 +64,37 @@ def test_match_reports_returns_candidates():
     assert len(matches.matches) == 3
     assert matches.matches[0].score >= matches.matches[-1].score
     assert matches.matches[0].left_label
+
+
+def test_toy_runner_measured_mode_adds_causal_evidence():
+    # Default (correlational) mode adds no causal score; measured mode does.
+    plain = inspect_model(
+        model="toy/m",
+        criterion_text="the model is aware it is being evaluated",
+        feature_provider=ToyFeatureProvider(feature_count=6),
+        verbalizer=ToyVerbalizer(),
+        intervention_runner=ToyInterventionRunner(),
+        top_k=3,
+    )
+    assert all(card.causal_effects.get("strong_causal_score", 0.0) == 0.0 for card in plain.cards)
+    assert all("interventions" not in card.metadata for card in plain.cards)
+
+    measured = inspect_model(
+        model="toy/m",
+        criterion_text="the model is aware it is being evaluated",
+        feature_provider=ToyFeatureProvider(feature_count=6),
+        verbalizer=ToyVerbalizer(),
+        intervention_runner=ToyInterventionRunner(measured=True),
+        top_k=3,
+    )
+    top = measured.cards[0]
+    assert top.causal_effects["strong_causal_score"] > 0.05
+    assert top.causal_effects["signed_causal_effect"] > 0.0
+    assert top.fingerprint.causal_provenance == "intervention"
+    interventions = top.metadata["interventions"]
+    assert interventions["count"] == 5
+    assert interventions["criterion_ci_low"] <= interventions["mean_directed_effect"] <= interventions["criterion_ci_high"]
+    assert interventions["controls"]["count"] == 2
 
 
 def test_match_ranking_penalizes_opposite_signed_effects():

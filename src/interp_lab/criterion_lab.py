@@ -482,6 +482,11 @@ def build_criterion_lab_parser() -> argparse.ArgumentParser:
 
 def build_criterion_assay_validation_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate a user-authored Criterion Lab assay JSON file.")
+    parser.add_argument(
+        "assay",
+        nargs="?",
+        help="Assay/preset JSON file to validate (shorthand for --preset-file).",
+    )
     parser.add_argument("--preset", help="Preset name or JSON path.")
     parser.add_argument("--preset-file", help="Explicit assay/preset JSON path.")
     parser.add_argument("--preset-dir", action="append", default=[], help="Directory of preset JSON files. Repeatable.")
@@ -541,7 +546,9 @@ def run_criterion_assay_validation_from_args(args: argparse.Namespace) -> Criter
     result = write_criterion_assay_validation_report(
         out=args.out,
         preset=args.preset,
-        preset_file=args.preset_file,
+        # The positional `assay` is a shorthand for --preset-file; an explicit
+        # --preset-file (or --preset) still wins if both are supplied.
+        preset_file=args.preset_file or getattr(args, "assay", None),
         preset_dirs=args.preset_dir,
     )
     return result

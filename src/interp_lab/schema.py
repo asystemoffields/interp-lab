@@ -132,9 +132,33 @@ class FeatureFingerprint:
             causal_provenance=str(data.get("causal_provenance", "none")),
         )
 
+    def __repr__(self) -> str:  # keep notebooks readable: summarize, don't dump vectors
+        return (
+            f"FeatureFingerprint(feature_id={self.feature_id!r}, model={self.model!r}, "
+            f"text_dims={len(self.text_vector)}, activation_dims={len(self.activation_signature)}, "
+            f"causal_provenance={self.causal_provenance!r})"
+        )
+
 
 @dataclass(frozen=True)
 class FeatureCard:
+    """A ranked feature with its scores.
+
+    Score fields (all in roughly [0, 1] unless noted):
+        importance     Overall rank score: a heuristic blend of association, causal
+                       effect, specificity, and stability. A ranking aid, not a probability.
+        association    How strongly the feature co-activates with the criterion (correlational).
+        causal_effect  Measured mean change in the criterion from interventions when causal
+                       records are attached; otherwise the correlational criterion score.
+                       Check ``fingerprint.causal_provenance`` to tell which.
+        specificity    The criterion effect minus measured side effects on unrelated behavior.
+        stability      How robust the activation signal is across the evidence.
+
+    ``causal_effects`` carries the raw signed/strong-causal numbers (e.g.
+    ``strong_causal_score``, ``signed_causal_effect``); ``metadata`` carries provenance
+    such as attached intervention summaries and agent next actions.
+    """
+
     feature_id: str
     model: str
     layer: int | None
@@ -150,6 +174,12 @@ class FeatureCard:
     fingerprint: FeatureFingerprint
     metadata: dict[str, Any] = field(default_factory=dict)
     causal_effects: dict[str, float] = field(default_factory=dict)
+
+    def __repr__(self) -> str:  # the default would dump the fingerprint's vectors
+        return (
+            f"FeatureCard(feature_id={self.feature_id!r}, layer={self.layer}, "
+            f"importance={self.importance:.3f}, label={self.label!r})"
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -262,6 +292,38 @@ class InspectionReport:
             metadata=dict(data.get("metadata", {})),
         )
 
+    def __repr__(self) -> str:
+        return (
+            f"InspectionReport(model={self.model!r}, criterion={self.criterion.text!r}, "
+            f"cards={len(self.cards)})"
+        )
+
+    def cards_table(self) -> list[dict[str, Any]]:
+        """One compact, vector-free row per ranked feature -- ready for a notebook table.
+
+        Pure stdlib: returns ``list[dict]`` you can hand straight to
+        ``pandas.DataFrame(report.cards_table())`` without interp-lab depending on pandas.
+        """
+        rows = []
+        for rank, card in enumerate(self.cards, start=1):
+            rows.append(
+                {
+                    "rank": rank,
+                    "feature_id": card.feature_id,
+                    "layer": card.layer,
+                    "label": card.label,
+                    "importance": card.importance,
+                    "association": card.association,
+                    "causal_effect": card.causal_effect,
+                    "specificity": card.specificity,
+                    "stability": card.stability,
+                    "strong_causal_score": float(card.causal_effects.get("strong_causal_score", 0.0)),
+                    "causal_provenance": card.fingerprint.causal_provenance,
+                    "source": card.source,
+                }
+            )
+        return rows
+
 
 @dataclass(frozen=True)
 class MatchReport:
@@ -287,6 +349,30 @@ class MatchReport:
             matches=[CandidateMatch.from_dict(item) for item in data.get("matches", [])],
             created_at=str(data.get("created_at", utc_now_iso())),
         )
+
+    def __repr__(self) -> str:
+        return (
+            f"MatchReport(left_model={self.left_model!r}, right_model={self.right_model!r}, "
+            f"matches={len(self.matches)})"
+        )
+
+    def matches_table(self) -> list[dict[str, Any]]:
+        """One compact row per candidate match -- ready for a notebook table."""
+        rows = []
+        for rank, match in enumerate(self.matches, start=1):
+            rows.append(
+                {
+                    "rank": rank,
+                    "left_feature_id": match.left_feature_id,
+                    "right_feature_id": match.right_feature_id,
+                    "score": match.score,
+                    "left_label": match.left_label,
+                    "right_label": match.right_label,
+                    "left_signed_effect": match.left_signed_effect,
+                    "right_signed_effect": match.right_signed_effect,
+                }
+            )
+        return rows
 
 
 def _optional_float(value: Any) -> float | None:

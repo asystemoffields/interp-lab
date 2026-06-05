@@ -1,6 +1,6 @@
 """Public Python API for interp-lab."""
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 
 from interp_lab.schema import (
     CandidateMatch,
@@ -19,6 +19,7 @@ from interp_lab.criterion_lab import (
 )
 from interp_lab.workflows import RunTemplateWriteResult
 from interp_lab.contracts import public_api_contract
+from interp_lab.reporting import load_inspection_report, load_match_report
 
 from interp_lab.api import (
     FeatureInterventionResult,
@@ -38,6 +39,7 @@ from interp_lab.api import (
     check_explanation_consistency,
     compare,
     compare_model_families,
+    compare_runs,
     criterion_lab,
     criterion_lab_presets,
     demo_sweep,
@@ -92,12 +94,15 @@ __all__ = [
     "check_explanation_consistency",
     "compare",
     "compare_model_families",
+    "compare_runs",
     "criterion_lab",
     "criterion_lab_presets",
     "demo_sweep",
     "doctor",
     "inspect",
     "intervene",
+    "load_inspection_report",
+    "load_match_report",
     "match_text_pivot",
     "path_patch",
     "prepare_sae_prompts",

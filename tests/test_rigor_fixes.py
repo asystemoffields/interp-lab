@@ -88,6 +88,46 @@ def test_matching_causal_compared_when_provenance_matches():
     assert "causal" in components
 
 
+# --- activation/decoder must be gated like text/causal (no free 0.5 "half match") ---
+
+def _sig_fp(activation, decoder):
+    return FeatureFingerprint(
+        feature_id="f",
+        model="m",
+        layer=0,
+        text="t",
+        text_vector=[1.0, 0.0],
+        activation_signature=activation,
+        decoder_signature=decoder,
+        causal_vector=[1.0, 0.0],
+        text_embedder="hash-v1",
+        causal_provenance="association",
+    )
+
+
+def test_absent_activation_signature_is_excluded_not_scored_half():
+    # One side has no activation signature (a common feature-dump / cross-model case).
+    left = _sig_fp([], [1.0, 0.0])
+    right = _sig_fp([1.0, 0.0], [1.0, 0.0])
+    score, components = fingerprint_similarity(left, right)
+    assert "activation" not in components
+    assert components["activation_absent"] == 1.0
+    # Every comparable axis is perfect, so excluding activation must yield 1.0 -- not a
+    # depressed score from a phantom cosine([],x)=0 -> 0.5 contribution at full weight.
+    assert score == pytest.approx(1.0)
+
+
+def test_mismatched_length_decoder_is_excluded():
+    # Two models with different hidden sizes: the decoder cosine is undefined, so the
+    # component must drop out rather than inject a misaligned 0.5.
+    left = _sig_fp([1.0, 0.0], [1.0, 0.0, 0.0])
+    right = _sig_fp([1.0, 0.0], [1.0, 0.0])
+    score, components = fingerprint_similarity(left, right)
+    assert "decoder" not in components
+    assert components["decoder_absent"] == 1.0
+    assert score == pytest.approx(1.0)
+
+
 # --- bug-3: matching and validation agree on what is a real signed effect ---
 
 def test_opposite_signed_effects_capped_at_shared_threshold():

@@ -60,7 +60,8 @@ def test_inspection_markdown_includes_mechanism_sketch_without_boilerplate():
     markdown = render_inspection_markdown(report)
 
     assert "## Mechanism Sketch" in markdown
-    assert "Metric notes: Association is activation/criterion correlation" in markdown
+    assert "Metric notes: Importance is the overall rank score" in markdown
+    assert "Strong causal score is the specificity-adjusted causal signal" in markdown
     assert "SAE:L24:F8 layer 24 (code planning latent) changes the behavior score by +0.073" in markdown
     assert "`Python` appears in high-activation examples" in markdown
     assert "Causal direction: promotes criterion (0.073)" in markdown

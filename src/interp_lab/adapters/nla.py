@@ -104,9 +104,9 @@ def _load_records(source: str | Path | dict[str, Any] | list[dict[str, Any]]) ->
         if not path.exists():
             raise FileNotFoundError(f"NLA explanation file not found: {path}")
         if path.suffix.lower() == ".jsonl":
-            rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            rows = [json.loads(line) for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
             return _records_from_rows(rows)
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
         return _load_records(payload)
     if isinstance(source, list):
         return _records_from_rows(source)

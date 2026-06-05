@@ -1,8 +1,37 @@
 from pathlib import Path
 import json
+import re
 
 from interp_lab.cli import main
 from interp_lab.runs import _input_file_records
+
+
+def test_quickstart_and_tutorial_alias_print_guide(capsys):
+    assert main(["quickstart"]) == 0
+    out = capsys.readouterr().out
+    assert "interp-lab quickstart" in out
+    assert "Causal effect" in out
+    assert main(["tutorial"]) == 0
+    assert "quickstart" in capsys.readouterr().out
+
+
+def test_demo_footer_points_to_index_and_next_steps(tmp_path: Path, capsys):
+    assert main(["demo", "--out", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "demo complete" in out
+    assert "index.html" in out
+    assert "interp-lab inspect" in out
+    assert "interp-lab quickstart" in out
+
+
+def test_demo_writes_clickable_index(tmp_path: Path):
+    assert main(["demo", "--out", str(tmp_path)]) == 0
+    index = tmp_path / "index.html"
+    assert index.exists()
+    html = index.read_text(encoding="utf-8")
+    # Every linked artifact the index advertises must actually exist on disk.
+    for href in re.findall(r'href="([^"]+)"', html):
+        assert (tmp_path / href).exists(), href
 
 
 def test_demo_command_writes_reports(tmp_path: Path):

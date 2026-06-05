@@ -14,7 +14,7 @@ report = inspect(
 )
 ```
 
-Write JSON and Markdown reports by passing `out`. Pass `html_out` for a self-contained searchable feature-card report:
+Write JSON and Markdown reports by passing `out`. Pass `html_out` for a self-contained searchable feature-card report, and `csv_out` for a spreadsheet/paper-friendly CSV of the ranked features:
 
 ```python
 result = inspect(
@@ -23,11 +23,29 @@ result = inspect(
     backend="toy",
     out="reports/model-a",
     html_out="reports/model-a/report.html",
+    csv_out="reports/model-a/features.csv",
 )
 
-print(result.json_path)
-print(result.markdown_path)
-print(result.html_path)
+print(result.json_path, result.markdown_path, result.html_path, result.csv_path)
+```
+
+### In a notebook
+
+The result objects and dataclasses are notebook-friendly: `repr()` is compact (no
+dumped float vectors), and you can get a table without depending on pandas:
+
+```python
+report = inspect("toy/model-a", "benchmark awareness", backend="toy")
+report                      # InspectionReport(model='toy/model-a', criterion='…', cards=8)
+report.cards_table()        # list[dict]: rank, feature_id, importance, causal_provenance, …
+# import pandas as pd; pd.DataFrame(report.cards_table())
+```
+
+Load a written report back with the top-level loaders:
+
+```python
+from interp_lab import load_inspection_report, load_match_report
+report = load_inspection_report("reports/model-a/report.json")
 ```
 
 ## Compare
@@ -41,7 +59,18 @@ right = inspect("toy/model-b", "benchmark awareness", backend="toy")
 matches = compare(left, right, out="reports/matches.json")
 ```
 
-`compare` accepts in-memory reports or `report.json` paths.
+`compare` accepts in-memory reports, `report.json` paths, or the `WrittenInspection`
+objects returned by `inspect(out=...)` — so the whole workflow chains:
+
+```python
+a = inspect("toy/model-a", "benchmark awareness", backend="toy", out="reports/a")
+b = inspect("toy/model-b", "benchmark awareness", backend="toy", out="reports/b")
+matches = compare(a, b, out="reports/matches.json")          # accepts WrittenInspection
+validation = validate_matches(matches, out="reports/validation.json")  # accepts WrittenMatch
+```
+
+Pass `min_score=` to drop weak pairs or `weights={"text": 0.4, "causal": 0.3, ...}` to
+tune the fingerprint components. `MatchReport.matches_table()` gives a notebook table.
 
 Validate candidate equivalents:
 
@@ -56,7 +85,22 @@ validation = validate_matches(
 print(validation.report["summary"]["overall_claim_grade"])
 ```
 
-`validate_matches` accepts an in-memory `MatchReport` or a `matches.json` path and writes JSON plus Markdown when `out` is supplied. Pass `html_out` for a self-contained searchable report.
+`validate_matches` accepts an in-memory `MatchReport`, a `matches.json` path, or the `WrittenMatch` from `compare(out=...)`, and writes JSON plus Markdown when `out` is supplied. Pass `html_out` for a self-contained searchable report.
+
+## Compare runs
+
+Diff two inspection reports to catch rank drift or regressions across seeds, checkpoints, or tool versions:
+
+```python
+from interp_lab import compare_runs
+
+diff = compare_runs("reports/baseline/report.json", "reports/candidate/report.json")
+print(diff["summary"]["rank_stability"], diff["interpretation"])
+for mover in diff["changed_features"][:5]:
+    print(mover["feature_id"], mover["importance_delta"], mover["rank_delta"])
+```
+
+Pass `out=` to write the diff as JSON plus a readable Markdown summary. `left` is the baseline, `right` the candidate.
 
 ## Explanation Workflows
 

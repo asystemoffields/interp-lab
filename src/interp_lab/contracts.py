@@ -17,6 +17,7 @@ from interp_lab.explanation_reports import (
 )
 from interp_lab.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
 from interp_lab.release_check import REAL_MODEL_DEMO_SCHEMA, RELEASE_CHECK_SCHEMA
+from interp_lab.run_diff import RUN_DIFF_SCHEMA
 from interp_lab.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA
 from interp_lab.web_server import STUDIO_HISTORY_SCHEMA
 
@@ -53,12 +54,15 @@ PUBLIC_API_EXPORTS = [
     "check_explanation_consistency",
     "compare",
     "compare_model_families",
+    "compare_runs",
     "criterion_lab",
     "criterion_lab_presets",
     "demo_sweep",
     "doctor",
     "inspect",
     "intervene",
+    "load_inspection_report",
+    "load_match_report",
     "match_text_pivot",
     "path_patch",
     "prepare_sae_prompts",
@@ -99,6 +103,7 @@ SCHEMA_CONTRACTS = {
     "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
     "real_model_demo_sweep": REAL_MODEL_DEMO_SWEEP_SCHEMA,
     "release_check": RELEASE_CHECK_SCHEMA,
+    "run_diff": RUN_DIFF_SCHEMA,
     "run_manifest": "interp-lab.run.v1",
     "sae": "interp-lab.sae.v1",
     "sae_prompt_pack": "interp-lab.sae_prompt_pack.v1",
@@ -114,6 +119,7 @@ PUBLIC_API_SIGNATURES = {
     "check_explanation_consistency": ["reports", "out", "markdown_out", "html_out", "min_similarity", "max_rank_span", "top_k"],
     "compare": ["left", "right", "out", "top_k"],
     "compare_model_families": ["members", "out", "markdown_out", "html_out", "top_k", "min_score"],
+    "compare_runs": ["left", "right", "out", "markdown_out"],
     "criterion_lab": ["out", "model", "preset", "preset_file", "criterion", "workflow", "run_dir"],
     "demo_sweep": ["repo_root", "manifest_dir", "demos", "out", "run", "allow_external"],
     "inspect": [
@@ -125,6 +131,7 @@ PUBLIC_API_SIGNATURES = {
         "interventions",
         "out",
         "html_out",
+        "csv_out",
         "top_k",
         "require_interventions",
         "allow_intervention_criterion_mismatch",

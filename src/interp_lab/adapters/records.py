@@ -49,7 +49,7 @@ class ActivationRecord:
             model=str(data["model"]),
             prompt_id=str(data.get("prompt_id", data.get("id", ""))),
             text=str(data.get("text", "")),
-            criterion_score=float(data["criterion_score"]),
+            criterion_score=_finite_float(data["criterion_score"], line_label=line_label, field="criterion_score"),
             features=features,
             feature_metadata=merged_metadata,
             metadata=dict(data.get("metadata", {})),
@@ -149,7 +149,7 @@ class ActivationRecordFeatureProvider:
         return {"evidence": dict(self._last_summary)} if self._last_summary else {}
 
     def _iter_records(self):
-        with self.path.open("r", encoding="utf-8") as handle:
+        with self.path.open("r", encoding="utf-8-sig") as handle:
             for line_number, line in enumerate(handle, start=1):
                 stripped = line.strip()
                 if not stripped:
@@ -162,9 +162,27 @@ class ActivationRecordFeatureProvider:
                 yield ActivationRecord.from_dict(data, line_label=line_label)
 
 
+def _finite_float(value: Any, *, line_label: str, field: str) -> float:
+    """Parse a number, rejecting NaN/Infinity (which json.loads accepts by default).
+
+    A non-finite activation or score silently corrupts every downstream mean, cosine,
+    and grade, so reject it at ingestion with the file:line and field that produced it.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{line_label}: {field} must be a number, got {value!r}") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{line_label}: {field} must be a finite number, got {value!r}")
+    return number
+
+
 def _parse_features(raw_features: Any, *, line_label: str) -> tuple[dict[str, float], dict[str, dict[str, Any]]]:
     if isinstance(raw_features, dict):
-        return {str(key): float(value) for key, value in raw_features.items()}, {}
+        return {
+            str(key): _finite_float(value, line_label=line_label, field=f"features[{key!r}]")
+            for key, value in raw_features.items()
+        }, {}
     if isinstance(raw_features, list):
         features: dict[str, float] = {}
         metadata: dict[str, dict[str, Any]] = {}
@@ -177,7 +195,9 @@ def _parse_features(raw_features: Any, *, line_label: str) -> tuple[dict[str, fl
             activation = item.get("activation", item.get("value"))
             if activation is None:
                 raise ValueError(f"{line_label}: features[{index}] is missing activation")
-            features[feature_id] = float(activation)
+            features[feature_id] = _finite_float(
+                activation, line_label=line_label, field=f"features[{index}].activation"
+            )
             metadata[feature_id] = {
                 key: value
                 for key, value in item.items()

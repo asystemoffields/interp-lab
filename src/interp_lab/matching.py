@@ -27,31 +27,41 @@ def fingerprint_similarity(
     weights: dict[str, float] | None = None,
 ) -> tuple[float, dict[str, float]]:
     weights = weights or DEFAULT_WEIGHTS
-    components: dict[str, float] = {
-        "activation": _to_unit(cosine(left.activation_signature, right.activation_signature)),
-        "decoder": _to_unit(cosine(left.decoder_signature, right.decoder_signature)),
-    }
-    active = {
-        "activation": weights.get("activation", 0.0),
-        "decoder": weights.get("decoder", 0.0),
-    }
+    components: dict[str, float] = {}
+    active: dict[str, float] = {}
+    # Activation and decoder signatures are only comparable when BOTH sides carry a
+    # vector of the SAME length. An absent or differently-sized signature (two models
+    # with different hidden sizes, or a feature dump with no decoder) would otherwise
+    # make cosine() return 0.0, which _to_unit maps to a free 0.5 "half match" credited
+    # at full weight. Exclude the component and renormalize the rest instead -- exactly
+    # like the text and causal gates below -- so an unmeasured axis adds no evidence.
+    if _vectors_comparable(left.activation_signature, right.activation_signature):
+        components["activation"] = _to_unit(cosine(left.activation_signature, right.activation_signature))
+        active["activation"] = weights.get("activation", 0.0)
+    else:
+        components["activation_absent"] = 1.0
+    if _vectors_comparable(left.decoder_signature, right.decoder_signature):
+        components["decoder"] = _to_unit(cosine(left.decoder_signature, right.decoder_signature))
+        active["decoder"] = weights.get("decoder", 0.0)
+    else:
+        components["decoder_absent"] = 1.0
     # Only compare text vectors produced by the same embedder; mixing a lexical-hash
     # fingerprint with a semantic one would silently cosine over truncated, unrelated axes.
-    if (
-        left.text_embedder == right.text_embedder
-        and left.text_vector
-        and right.text_vector
-        and len(left.text_vector) == len(right.text_vector)
-    ):
+    if left.text_embedder == right.text_embedder and _vectors_comparable(left.text_vector, right.text_vector):
         components["text"] = _to_unit(cosine(left.text_vector, right.text_vector))
         active["text"] = weights.get("text", 0.0)
     else:
         components["text_embedder_mismatch"] = 1.0
-    # Only credit causal similarity when BOTH sides carry a causal vector of the
-    # SAME provenance. An absent causal vector must not earn a free 0.5 "half match"
-    # (it is excluded and the remaining weights are renormalized), and a measured
-    # causal effect must never be cosine-compared against a correlational proxy.
-    if left.causal_vector and right.causal_vector and left.causal_provenance == right.causal_provenance:
+    # Only credit causal similarity when BOTH sides carry a comparable causal vector of
+    # the SAME, real provenance. An absent or provenance-"none" causal vector must not
+    # earn a free contribution (it is excluded and the remaining weights are
+    # renormalized), and a measured causal effect must never be cosine-compared against
+    # a correlational proxy.
+    if (
+        _vectors_comparable(left.causal_vector, right.causal_vector)
+        and left.causal_provenance == right.causal_provenance
+        and left.causal_provenance != "none"
+    ):
         components["causal"] = _causal_similarity(left.causal_vector, right.causal_vector)
         active["causal"] = weights.get("causal", 0.0)
     else:
@@ -67,6 +77,7 @@ def match_feature_cards(
     *,
     top_k: int = 10,
     min_score: float = 0.0,
+    weights: dict[str, float] | None = None,
 ) -> list[CandidateMatch]:
     if top_k <= 0:
         return []
@@ -74,7 +85,7 @@ def match_feature_cards(
     counter = 0
     for left in left_cards:
         for right in right_cards:
-            score, components = fingerprint_similarity(left.fingerprint, right.fingerprint)
+            score, components = fingerprint_similarity(left.fingerprint, right.fingerprint, weights=weights)
             left_signed = _signed_effect(left)
             right_signed = _signed_effect(right)
             if left_signed is not None and right_signed is not None:
@@ -101,6 +112,11 @@ def match_feature_cards(
                 elif match.score > heap[0][0]:
                     heapq.heapreplace(heap, item)
     return [item[2] for item in sorted(heap, key=lambda item: (-item[0], item[1]))]
+
+
+def _vectors_comparable(left: list[float], right: list[float]) -> bool:
+    """Both vectors present and the same length, so a cosine is meaningful."""
+    return bool(left) and bool(right) and len(left) == len(right)
 
 
 def _to_unit(value: float) -> float:

@@ -76,7 +76,13 @@ def diagnostics_to_text(diagnostics: dict[str, Any]) -> str:
     lines.append("")
     lines.append(f"Active text embedder: {diagnostics.get('text_embedder', 'hash (default, lexical)')}")
     lines.append("")
-    lines.append("Environment ready." if diagnostics["ok"] else "Required checks failed.")
+    if diagnostics["ok"]:
+        lines.append("Environment ready.")
+        lines.append("")
+        lines.append("Next: run `interp-lab demo --out reports/demo` for a no-download tour,")
+        lines.append("then open reports/demo/model-a/report.html. New here? `interp-lab quickstart`.")
+    else:
+        lines.append("Required checks failed.")
     return "\n".join(lines)
 
 

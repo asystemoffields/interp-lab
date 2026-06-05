@@ -398,7 +398,7 @@ def write_run_template(
     config = build_run_template(**kwargs)
     path = Path(out)
     if path.exists() and not force:
-        raise FileExistsError(f"{path} already exists; pass force=True to overwrite it")
+        raise FileExistsError(f"{path} already exists; pass --force to overwrite it")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, indent=2, sort_keys=True), encoding="utf-8")
     return RunTemplateWriteResult(path=path, config=config)

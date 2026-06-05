@@ -127,7 +127,7 @@ def render_match_validation_markdown(report: dict[str, Any]) -> str:
         f"Overall: `{assessment.get('overall_claim_grade', report['summary'].get('overall_claim_grade', ''))}`",
         f"Recommended next action: {assessment.get('recommended_next_action', report['summary'].get('recommended_next_action', ''))}",
         "",
-        "| Status | Claim | Match | Score | Causal | Signed effect delta |",
+        "| Status | Claim | Match | Score | Causal-vec sim | Signed effect delta |",
         "| --- | --- | --- | ---: | ---: | ---: |",
     ]
     for item in report.get("validations", []):
@@ -435,7 +435,7 @@ def render_match_validation_html(report: dict[str, Any]) -> str:
               <th>Claim</th>
               <th>Match</th>
               <th class="num">Score</th>
-              <th class="num">Causal</th>
+              <th class="num" title="Cosine similarity of the causal fingerprint axis -- a structural match, not a measured causal effect">Causal-vec sim</th>
               <th class="num">Signed Delta</th>
             </tr>
           </thead>

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import csv
 import html
 import json
+import platform
 import re
+import sys
 from pathlib import Path
 
+from interp_lab import __version__
 from interp_lab.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA, InspectionReport, MatchReport
 
 PROMOTING_THRESHOLD = 0.05
@@ -19,11 +23,64 @@ def write_inspection_report(report: InspectionReport, out_dir: str | Path) -> tu
     json_path = path / "report.json"
     markdown_path = path / "report.md"
     json_path.write_text(
-        json.dumps(report.to_dict(), indent=2, sort_keys=True),
+        json.dumps(_stamped_report_dict(report), indent=2, sort_keys=True),
         encoding="utf-8",
     )
     markdown_path.write_text(render_inspection_markdown(report), encoding="utf-8")
     return json_path, markdown_path
+
+
+def _stamped_report_dict(report: InspectionReport) -> dict:
+    """Serialize the report and stamp it with tool/runtime provenance for reproducibility.
+
+    Standalone ``inspect`` reports otherwise carry no record of which interp-lab built
+    them; this mirrors what the `run` manifest already captures. The stamp lives under
+    metadata.tool and never overwrites a stamp the report already carries.
+    """
+    data = report.to_dict()
+    metadata = data.get("metadata")
+    if isinstance(metadata, dict) and "tool" not in metadata:
+        # COPY before stamping. InspectionReport.to_dict() hands back the live
+        # report.metadata reference, so mutating it in place would contaminate the
+        # caller's frozen report (and break to_dict() idempotency across a write).
+        data["metadata"] = {
+            **metadata,
+            "tool": {
+                "name": "interp-lab",
+                "version": __version__,
+                "python": sys.version.split()[0],
+                "platform": platform.platform(),
+            },
+        }
+    return data
+
+
+CSV_COLUMNS = [
+    "rank",
+    "feature_id",
+    "layer",
+    "label",
+    "importance",
+    "association",
+    "causal_effect",
+    "specificity",
+    "stability",
+    "strong_causal_score",
+    "causal_provenance",
+    "source",
+]
+
+
+def write_inspection_csv(report: InspectionReport, out_path: str | Path) -> Path:
+    """Write the ranked features as a spreadsheet/paper-friendly CSV (pure stdlib)."""
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        for row in report.cards_table():
+            writer.writerow({key: row.get(key, "") for key in CSV_COLUMNS})
+    return path
 
 
 def write_match_report(report: MatchReport, out_path: str | Path) -> Path:
@@ -89,9 +146,7 @@ def render_inspection_markdown(report: InspectionReport) -> str:
         "",
         f"Criterion: {report.criterion.text}",
         "",
-        "Metric notes: Association is activation/criterion correlation in the evidence records. "
-        "Effect is mean causal change from interventions. Specificity subtracts measured side effects. "
-        "Strong causal score is the specificity-adjusted causal signal.",
+        _metric_legend(report.cards),
         "",
     ]
     evidence_summary = _evidence_summary_lines(report.metadata.get("evidence"))
@@ -218,6 +273,8 @@ def render_inspection_html(report: InspectionReport) -> str:
             ("Layers", len({card.layer for card in cards if card.layer is not None})),
         ]
     )
+    effect_header = _effect_column_label(cards)
+    layer_profile = _html_layer_profile(cards)
     table_rows = "\n".join(_feature_table_row(card, index) for index, card in enumerate(cards, start=1))
     detail_cards = "\n".join(_feature_detail_card(card, index) for index, card in enumerate(cards, start=1))
     return f"""<!doctype html>
@@ -392,6 +449,9 @@ def render_inspection_html(report: InspectionReport) -> str:
       background: #e8ecea;
     }}
     .fill {{ height: 100%; background: var(--accent); }}
+    .fill-strong {{ background: var(--good); }}
+    .fill-medium {{ background: var(--warn); }}
+    .fill-weak {{ background: var(--quiet); }}
     .examples {{
       display: grid;
       gap: 6px;
@@ -473,13 +533,14 @@ def render_inspection_html(report: InspectionReport) -> str:
       <div class="notes">
         {_html_note(scope)}
         {evidence_summary}
-        {_html_note("Metric notes: Association is activation/criterion correlation. Effect is mean causal change from interventions. Specificity subtracts measured side effects. Strong causal score is the specificity-adjusted causal signal.")}
+        {_html_note(_metric_legend(cards))}
       </div>
     </section>
     <section class="panel">
       <h2>Mechanism Sketch</h2>
       <div class="notes">{mechanism}</div>
     </section>
+    {layer_profile}
     {agent_actions}
     <section class="panel">
       <div class="toolbar">
@@ -510,7 +571,7 @@ def render_inspection_html(report: InspectionReport) -> str:
               <th>Evidence</th>
               <th class="num">Importance</th>
               <th class="num">Association</th>
-              <th class="num">Effect</th>
+              <th class="num">{effect_header}</th>
               <th class="num">Specificity</th>
               <th class="num">Strong Causal</th>
             </tr>
@@ -642,6 +703,37 @@ def _metric_line(card) -> str:
     return (
         f"Association: {card.association:.3f} | {effect_label}: {card.causal_effect:.3f} | "
         f"Specificity: {card.specificity:.3f} | Stability: {card.stability:.3f}"
+    )
+
+
+def _effect_column_label(cards) -> str:
+    """Honest header for the effect column: only say 'causal' when something was tested."""
+    return "Causal effect" if any(_has_measured_intervention(card) for card in cards) else "Criterion score"
+
+
+def _metric_legend(cards) -> str:
+    """A legend that defines every rendered metric and never claims causality that
+    wasn't measured. ``Effect`` is described as a correlational score unless at least
+    one feature carries real intervention records."""
+    if any(_has_measured_intervention(card) for card in cards):
+        effect = (
+            "Causal effect is the measured mean change in the criterion from interventions "
+            "(ablate / amplify / clamp / patch) for features with causal records; features without "
+            "records show their correlational criterion score in that column instead"
+        )
+    else:
+        effect = (
+            "Criterion score is the correlational association with the criterion -- no interventions "
+            "were attached, so nothing in this report is a causal claim"
+        )
+    return (
+        "Metric notes: Importance is the overall rank score -- a heuristic blend of association, causal "
+        "effect, specificity, and stability (treat it as an evidence-weighted ranking, not a probability). "
+        "Association is how strongly the feature co-activates with the criterion. "
+        f"{effect}. "
+        "Specificity is the criterion effect minus measured side effects on unrelated behavior. "
+        "Stability reflects how robust the activation signal is across the evidence. "
+        "Strong causal score is the specificity-adjusted causal signal used to flag genuine causal evidence."
     )
 
 
@@ -948,6 +1040,77 @@ def _target_token_sample(raw_value: dict) -> str:
     return ", ".join(f"`{token}`" for token in tokens)
 
 
+def _html_layer_profile(cards) -> str:
+    """A dependency-free inline-SVG scatter of importance vs layer.
+
+    Shows *where in the network* the criterion-tracking features sit, and colors each
+    point by whether it carries measured causal evidence (green) or is correlational
+    (blue) -- the same distinction the rest of the report makes. Returns "" when fewer
+    than two layered features are present (nothing to localize)."""
+    points = [(int(card.layer), float(card.importance), _has_measured_intervention(card)) for card in cards if card.layer is not None]
+    if len(points) < 2:
+        return ""
+    layers = [layer for layer, _imp, _m in points]
+    min_layer, max_layer = min(layers), max(layers)
+    max_importance = max((imp for _layer, imp, _m in points), default=1.0)
+    y_max = max(0.1, min(1.0, round(max_importance + 0.05, 2)))
+    width, height = 640, 220
+    left, right, top, bottom = 44, 14, 14, 30
+    plot_w = width - left - right
+    plot_h = height - top - bottom
+
+    def x_of(layer: int) -> float:
+        if max_layer == min_layer:
+            return left + plot_w / 2
+        return left + (layer - min_layer) / (max_layer - min_layer) * plot_w
+
+    def y_of(importance: float) -> float:
+        return top + (1 - min(importance, y_max) / y_max) * plot_h
+
+    grid = []
+    for frac in (0.0, 0.5, 1.0):
+        value = y_max * frac
+        y = top + (1 - frac) * plot_h
+        grid.append(f'<line x1="{left}" y1="{y:.1f}" x2="{width - right}" y2="{y:.1f}" stroke="#e8ecea"/>')
+        grid.append(f'<text x="{left - 6}" y="{y + 3:.1f}" text-anchor="end" font-size="10" fill="#5d686e">{value:.2f}</text>')
+    x_labels = []
+    seen_layers = sorted(set(layers))
+    label_layers = seen_layers if len(seen_layers) <= 8 else [seen_layers[0], seen_layers[len(seen_layers) // 2], seen_layers[-1]]
+    for layer in label_layers:
+        x = x_of(layer)
+        x_labels.append(f'<text x="{x:.1f}" y="{height - bottom + 16}" text-anchor="middle" font-size="10" fill="#5d686e">L{layer}</text>')
+    dots = []
+    for layer, importance, measured in sorted(points, key=lambda item: item[1]):
+        cx, cy = x_of(layer), y_of(importance)
+        color = "#147a3f" if measured else "#285e9e"
+        dots.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="{color}" fill-opacity="0.78"><title>L{layer} importance {importance:.3f}</title></circle>')
+    svg = (
+        f'<svg viewBox="0 0 {width} {height}" width="100%" role="img" '
+        f'aria-label="Feature importance by layer">'
+        f'<text x="{left}" y="11" font-size="10" fill="#5d686e">importance</text>'
+        + "".join(grid)
+        + f'<line x1="{left}" y1="{top}" x2="{left}" y2="{top + plot_h}" stroke="#d9dedb"/>'
+        + f'<line x1="{left}" y1="{top + plot_h}" x2="{width - right}" y2="{top + plot_h}" stroke="#d9dedb"/>'
+        + "".join(x_labels)
+        + "".join(dots)
+        + f'<text x="{width - right}" y="{height - 4}" text-anchor="end" font-size="10" fill="#5d686e">layer →</text>'
+        + "</svg>"
+    )
+    legend = (
+        '<div class="chip-row" style="margin-top:8px">'
+        '<span class="pill good">measured causal</span>'
+        '<span class="pill blue">correlational</span>'
+        "</div>"
+    )
+    return f"""
+    <section class="panel">
+      <h2>Importance by layer</h2>
+      {svg}
+      {legend}
+    </section>
+"""
+
+
 def _html_evidence_summary(raw_value: object) -> str:
     lines = _evidence_summary_lines(raw_value)
     if not lines:
@@ -1037,10 +1200,10 @@ def _feature_detail_card(card, index: int) -> str:
           <div class="meters">
             {_component_meter("importance", card.importance)}
             {_component_meter("association", card.association)}
-            {_component_meter("effect", card.causal_effect)}
+            {_component_meter("causal effect" if _has_measured_intervention(card) else "criterion score", card.causal_effect)}
             {_component_meter("specificity", card.specificity)}
             {_component_meter("stability", card.stability)}
-            {_component_meter("strong", strong)}
+            {_component_meter("strong causal", strong)}
           </div>
           {_html_note(direction)}
           {_html_note(evidence_line)}
@@ -1191,11 +1354,15 @@ def _causal_strength_pill(strong: float) -> str:
 
 def _component_meter(label: str, value: float) -> str:
     display = f"{float(value):.3f}"
-    width = min(1.0, abs(float(value))) * 100.0
+    magnitude = min(1.0, abs(float(value)))
+    width = magnitude * 100.0
+    # Color the fill by strength so a report is scannable at a glance: strong signals
+    # read green, middling amber, weak gray -- instead of one flat teal for every value.
+    tone = "strong" if magnitude >= 0.5 else "medium" if magnitude >= 0.2 else "weak"
     return f"""
             <div class="meter">
               <span>{_h(label)}</span>
-              <span class="bar"><span class="fill" style="width: {width:.1f}%"></span></span>
+              <span class="bar"><span class="fill fill-{tone}" style="width: {width:.1f}%"></span></span>
               <span>{_h(display)}</span>
             </div>
 """

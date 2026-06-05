@@ -89,6 +89,7 @@ from interp_lab.pipeline import inspect_model, match_reports
 from interp_lab.reporting import (
     load_inspection_report,
     load_match_report,
+    write_inspection_csv,
     write_inspection_html,
     write_inspection_report,
     write_match_markdown,
@@ -112,6 +113,7 @@ class WrittenInspection:
     json_path: Path
     markdown_path: Path
     html_path: Path | None = None
+    csv_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -434,6 +436,7 @@ def inspect(
     interventions: str | Path | None = None,
     out: str | Path | None = None,
     html_out: str | Path | None = None,
+    csv_out: str | Path | None = None,
     top_k: int = 8,
     require_interventions: bool = False,
     allow_intervention_criterion_mismatch: bool = False,
@@ -464,10 +467,10 @@ def inspect(
 ) -> InspectionReport | WrittenInspection:
     """Rank and explain features for a natural-language criterion.
 
-    When `out` is supplied, the report is written as JSON and Markdown and a
-    `WrittenInspection` is returned. Pass `html_out` to also write a
-    self-contained HTML report. Otherwise this returns the in-memory
-    `InspectionReport`.
+    When `out` (or `html_out`/`csv_out`) is supplied, the report is written and a
+    `WrittenInspection` is returned. Pass `html_out` for a self-contained HTML report
+    and `csv_out` for a spreadsheet-friendly CSV of the ranked features. With none of
+    them set, this returns the in-memory `InspectionReport`.
     """
     provider = _feature_provider(
         backend=backend,
@@ -512,17 +515,19 @@ def inspect(
         intervention_runner=intervention_runner,
         top_k=top_k,
     )
-    if out is None and html_out is None:
+    if out is None and html_out is None and csv_out is None:
         return report
     if out is None:
-        out = Path(html_out).parent
+        out = Path(html_out if html_out is not None else csv_out).parent
     json_path, markdown_path = write_inspection_report(report, out)
     html_path = write_inspection_html(report, html_out) if html_out is not None else None
+    csv_path = write_inspection_csv(report, csv_out) if csv_out is not None else None
     return WrittenInspection(
         report=report,
         json_path=json_path,
         markdown_path=markdown_path,
         html_path=html_path,
+        csv_path=csv_path,
     )
 
 
@@ -650,17 +655,45 @@ def match_text_pivot(
     )
 
 
+def compare_runs(
+    left: str | Path,
+    right: str | Path,
+    *,
+    out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+) -> "dict[str, Any] | WrittenAnalysis":
+    """Diff two inspection reports (rank drift, score deltas, added/dropped features).
+
+    ``left`` is the baseline and ``right`` the candidate -- e.g. two seeds, two
+    checkpoints, or two interp-lab versions. With ``out`` set the diff is written as
+    JSON plus a sibling Markdown summary; otherwise the diff dict is returned.
+    """
+    from interp_lab.run_diff import export_run_diff_report
+
+    return export_run_diff_report(left=left, right=right, out=out, markdown_out=markdown_out)
+
+
 def compare(
-    left: InspectionReport | str | Path,
-    right: InspectionReport | str | Path,
+    left: "InspectionReport | WrittenInspection | str | Path",
+    right: "InspectionReport | WrittenInspection | str | Path",
     *,
     top_k: int = 10,
+    min_score: float = 0.0,
+    weights: dict[str, float] | None = None,
     out: str | Path | None = None,
 ) -> MatchReport | WrittenMatch:
-    """Match candidate equivalent features across two inspection reports."""
+    """Match candidate equivalent features across two inspection reports.
+
+    ``left``/``right`` may be in-memory ``InspectionReport``\\ s, the
+    ``WrittenInspection`` objects returned by ``inspect(out=...)``, or paths to
+    ``report.json`` files. ``min_score`` drops weak candidates; ``weights`` overrides
+    the fingerprint component weights (keys: text, activation, decoder, causal) for
+    sensitivity analysis. With ``out`` set the result is written and a ``WrittenMatch``
+    (accepted directly by ``validate_matches``) is returned.
+    """
     left_report = _load_report(left)
     right_report = _load_report(right)
-    report = match_reports(left_report, right_report, top_k=top_k)
+    report = match_reports(left_report, right_report, top_k=top_k, min_score=min_score, weights=weights)
     if out is None:
         return report
     json_path = write_match_report(report, out)
@@ -669,7 +702,7 @@ def compare(
 
 
 def validate_matches(
-    matches: MatchReport | str | Path,
+    matches: "MatchReport | WrittenMatch | str | Path",
     *,
     out: str | Path | None = None,
     markdown_out: str | Path | None = None,
@@ -683,7 +716,11 @@ def validate_matches(
 ) -> dict[str, Any] | WrittenMatchValidation:
     """Validate cross-model candidate matches and grade equivalence evidence."""
     match_path = None
-    if isinstance(matches, MatchReport):
+    if isinstance(matches, WrittenMatch):
+        # Chain straight from compare(out=...): reuse the in-memory report and its path.
+        match_report = matches.report
+        match_path = str(matches.json_path)
+    elif isinstance(matches, MatchReport):
         match_report = matches
     else:
         match_path = str(matches)
@@ -1534,16 +1571,21 @@ def _verbalizer(
     raise ValueError("verbalizer must be one of: toy, nla")
 
 
-def _load_report(value: InspectionReport | str | Path) -> InspectionReport:
+def _load_report(value: "InspectionReport | WrittenInspection | str | Path") -> InspectionReport:
+    # Accept the WrittenInspection that inspect(out=...) returns, so results chain
+    # directly: compare(inspect(a, out=...), inspect(b, out=...)) just works.
+    if isinstance(value, WrittenInspection):
+        return value.report
     if isinstance(value, InspectionReport):
         return value
     return load_inspection_report(value)
 
 
-def _as_path_list(value: str | Path | list[str | Path]) -> list[str | Path]:
-    if isinstance(value, (str, Path)):
-        return [value]
-    return list(value)
+def _as_path_list(value) -> list[str | Path]:
+    items = [value] if isinstance(value, (str, Path, WrittenInspection)) else list(value)
+    # Unwrap WrittenInspection -> its report.json path, so the file-based analysis
+    # commands accept the objects inspect(out=...) returns.
+    return [item.json_path if isinstance(item, WrittenInspection) else item for item in items]
 
 
 def _family_members(value: str | dict[str, str] | list[str | dict[str, str]]) -> list[dict[str, str]]:
@@ -1566,10 +1608,9 @@ def _as_optional_list(value):
 
 
 def _match_markdown_path(out_path: str | Path) -> Path:
-    path = Path(out_path)
-    if path.suffix:
-        return path.with_suffix(".md")
-    return path / "matches.md"
+    # Always place the markdown next to the JSON with a .md suffix; a suffixless --out
+    # must not become a directory that then collides with the JSON file (FileExistsError).
+    return Path(out_path).with_suffix(".md")
 
 
 def _training_settings(preset: str, **overrides: Any) -> dict[str, Any]:

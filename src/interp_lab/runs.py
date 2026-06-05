@@ -114,7 +114,7 @@ def run_config_file(options: RunOptions, *, command_runner: CommandRunner) -> in
 def load_run_config(path: str | Path) -> dict[str, Any]:
     config_path = Path(path)
     suffix = config_path.suffix.lower()
-    text = config_path.read_text(encoding="utf-8")
+    text = config_path.read_text(encoding="utf-8-sig")
     if suffix == ".json":
         data = json.loads(text)
     elif suffix == ".toml":
@@ -474,9 +474,15 @@ def _sha256(path: Path) -> str:
 def _render_value(value: Any, variables: dict[str, str]) -> Any:
     if isinstance(value, str):
         rendered = value
+        # Substitute ONLY declared variables, as literal ${KEY} / {KEY} placeholders.
+        # We deliberately avoid str.format_map here: format_map treats EVERY brace as a
+        # field, so a perfectly valid config string -- a criterion describing JSON or set
+        # notation like '{"ok": true}' or 'the set {1, 2}' -- would crash. Unknown
+        # {placeholders} are left untouched, matching the old _SafeFormatMap behavior.
         for key, replacement in variables.items():
             rendered = rendered.replace("${" + key + "}", replacement)
-        return rendered.format_map(_SafeFormatMap(variables))
+            rendered = rendered.replace("{" + key + "}", replacement)
+        return rendered
     if isinstance(value, list):
         return [_render_value(item, variables) for item in value]
     if isinstance(value, dict):
@@ -498,8 +504,3 @@ def _system_exit_code(exc: SystemExit) -> int:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-class _SafeFormatMap(dict[str, str]):
-    def __missing__(self, key: str) -> str:
-        return "{" + key + "}"

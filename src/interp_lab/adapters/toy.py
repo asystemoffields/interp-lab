@@ -7,6 +7,9 @@ import random
 from interp_lab.schema import Criterion, FeatureEvidence
 from interp_lab.text_vectors import content_tokens
 
+# Simulated number of prompts behind each toy "measured" intervention summary.
+_MEASURED_RUN_COUNT = 5
+
 
 class ToyFeatureProvider:
     """Deterministic feature evidence for demos and tests."""
@@ -70,8 +73,62 @@ class ToyVerbalizer:
 
 
 class ToyInterventionRunner:
+    """Deterministic causal estimates for demos and tests.
+
+    By default this is purely correlational: ``estimate`` echoes the provider's
+    causal fields unchanged. Pass ``measured=True`` to simulate having run real
+    interventions -- it synthesizes a specificity-adjusted ``strong_causal_score``, a
+    signed directed effect, and per-feature intervention metadata (n, controls, a
+    confidence interval). The demo uses this so the toy tour actually *demonstrates*
+    the correlational-vs-causal distinction the toolkit exists to make, instead of
+    reporting "causal claims are untested".
+    """
+
+    def __init__(self, *, measured: bool = False):
+        self.measured = measured
+
     def estimate(self, evidence: FeatureEvidence, criterion: Criterion) -> dict[str, float]:
-        return dict(evidence.causal_effects)
+        effects = dict(evidence.causal_effects)
+        if not self.measured:
+            return effects
+        directed = float(effects.get("criterion", 0.0))
+        specificity = float(effects.get("specificity", 0.0))
+        # Specificity-adjusted causal signal: a strong, specific feature scores high; a
+        # feature that also moves unrelated behavior is discounted toward zero.
+        effects["signed_causal_effect"] = round(directed, 4)
+        effects["strong_causal_score"] = round(max(0.0, min(1.0, directed * specificity)), 4)
+        effects["intervention_record_count"] = float(_MEASURED_RUN_COUNT)
+        return effects
+
+    def metadata_for(self, evidence: FeatureEvidence, criterion: Criterion) -> dict:
+        if not self.measured:
+            return {}
+        effects = evidence.causal_effects
+        directed = float(effects.get("criterion", 0.0))
+        side = float(effects.get("side_effect", 0.0))
+        # A small deterministic half-width so a believable 95% CI accompanies the mean.
+        half_width = round(0.03 + 0.04 * (1.0 - directed), 4)
+        # Keep the worked example internally consistent: baseline - suppressed == directed.
+        baseline = round(min(1.0, directed + 0.05), 4)
+        suppressed = round(max(0.0, baseline - directed), 4)
+        return {
+            "interventions": {
+                "count": _MEASURED_RUN_COUNT,
+                "mean_directed_effect": round(directed, 4),
+                "mean_side_effect": round(side, 4),
+                "criterion_ci_low": round(max(0.0, directed - half_width), 4),
+                "criterion_ci_high": round(min(1.0, directed + half_width), 4),
+                "controls": {
+                    "count": 2,
+                    "mean_abs_directed_effect": round(0.5 * side, 4),
+                },
+                "examples": [
+                    f"suppress {evidence.feature_id}: criterion {baseline:.3f} -> {suppressed:.3f} "
+                    f"(directed +{directed:.3f})",
+                    f"random-feature control: criterion {baseline:.3f} -> {baseline:.3f} (directed +0.000)",
+                ],
+            }
+        }
 
 
 def _seed(*parts: str) -> int:

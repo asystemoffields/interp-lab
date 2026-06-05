@@ -35,6 +35,9 @@ def _fingerprint(text_vector, embedder):
         decoder_signature=[1.0, 0.0],
         causal_vector=[0.5, 0.5],
         text_embedder=embedder,
+        # A real causal vector always carries a real provenance; "none" is excluded
+        # from matching, so set it here to keep this test focused on the text drop.
+        causal_provenance="association",
     )
 
 

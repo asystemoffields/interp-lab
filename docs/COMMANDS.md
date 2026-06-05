@@ -14,7 +14,15 @@ Every subcommand accepts `--text-embedder NAME`, which selects how text is turne
 
 The `INTERP_LAB_TEXT_EMBEDDER` environment variable sets the same thing for a whole pipeline; the flag overrides it. Each fingerprint records its embedder id, and cross-model matching never compares vectors produced by different embedders. Run `interp-lab doctor` to see the active embedder.
 
+`interp-lab --version` prints the installed version; `interp-lab --help` groups the commands by purpose with a "start here" pointer.
+
 ## Commands
+
+New here? Get a short guided walkthrough of the workflow and what each metric means:
+
+```bash
+interp-lab quickstart   # alias: interp-lab tutorial
+```
 
 Check your local environment:
 
@@ -44,7 +52,7 @@ interp-lab inspect \
   --html-out reports/inspection/report.html
 ```
 
-This writes JSON and Markdown by default. `--html-out` adds a self-contained searchable feature-card report with layer/source/evidence filters and copyable next-action commands. Reports include `agent_next_actions` with exact follow-up command templates for intervention planning, causal re-inspection, and graph export.
+This writes JSON and Markdown by default. `--html-out` adds a self-contained searchable feature-card report with layer/source/evidence filters, an inline importance-by-layer chart, and copyable next-action commands. `--csv-out reports/inspection/features.csv` additionally writes the ranked features as a spreadsheet/paper-friendly CSV. Every `report.json` is stamped with the tool version and platform under `metadata.tool` for reproducibility. Reports include `agent_next_actions` with exact follow-up command templates for intervention planning, causal re-inspection, and graph export.
 
 Use external Natural Language Autoencoder or autointerp explanations as the verbalizer:
 
@@ -82,7 +90,7 @@ interp-lab match \
   --out reports/matches.json
 ```
 
-This writes both `matches.json` and a readable markdown report with labels, component scores, and signed effects when present.
+This writes both `matches.json` and a readable markdown report with labels, component scores, and signed effects when present. Add `--min-score 0.8` to drop weak candidate pairs, or `--weights text=0.4,causal=0.3,activation=0.2,decoder=0.1` to override the fingerprint component weights for sensitivity analysis (keys: `text`, `activation`, `decoder`, `causal`).
 
 Validate the match claims:
 
@@ -136,6 +144,17 @@ interp-lab compare-model-families \
 ```
 
 For these report-analysis commands, `--report`, `--left`, `--right`, and `--member family=...` accept either a `report.json` path or a report directory containing `report.json`.
+
+Diff two inspection reports to catch rank drift and regressions between seeds, checkpoints, or tool versions:
+
+```bash
+interp-lab compare-runs \
+  --left reports/baseline/report.json \
+  --right reports/candidate/report.json \
+  --out reports/run-diff.json
+```
+
+`--left` is the baseline and `--right` the candidate. The diff reports rank stability, per-score deltas for shared features (sorted by the biggest importance moves), and which features appeared or dropped out, with a plain-language interpretation. It writes JSON plus a sibling `.md`; omit `--out` to print the JSON. From Python: `interp_lab.compare_runs(left, right, out=...)`.
 
 Create a demo run:
 

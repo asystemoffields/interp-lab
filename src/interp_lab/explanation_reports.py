@@ -34,7 +34,7 @@ class WrittenJsonMarkdown:
 
 
 def build_explanation_consistency_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser()  # default add_help so `<cmd> --help` works as a subparser parent
     parser.add_argument("--report", action="append", required=True, help="Inspection report JSON. Repeat for paraphrases.")
     parser.add_argument("--out", default="reports/explanation-consistency.json", help="Output JSON path.")
     parser.add_argument("--markdown-out", help="Output Markdown path. Defaults to --out with .md suffix.")
@@ -46,7 +46,7 @@ def build_explanation_consistency_parser() -> argparse.ArgumentParser:
 
 
 def build_feature_search_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser()  # default add_help so `<cmd> --help` works as a subparser parent
     parser.add_argument("--report", action="append", required=True, help="Inspection report JSON. Repeat to search multiple reports.")
     parser.add_argument("--query", required=True, help="Natural-language feature description to search for.")
     parser.add_argument("--out", default="reports/feature-search.json", help="Output JSON path.")
@@ -58,7 +58,7 @@ def build_feature_search_parser() -> argparse.ArgumentParser:
 
 
 def build_model_family_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser()  # default add_help so `<cmd> --help` works as a subparser parent
     parser.add_argument(
         "--member",
         action="append",
@@ -74,7 +74,7 @@ def build_model_family_parser() -> argparse.ArgumentParser:
 
 
 def build_text_pivot_match_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser()  # default add_help so `<cmd> --help` works as a subparser parent
     parser.add_argument("--left", action="append", required=True, help="Left inspection report JSON or report directory. Repeat to merge reports.")
     parser.add_argument("--right", action="append", required=True, help="Right inspection report JSON or report directory. Repeat to merge reports.")
     parser.add_argument("--out", default="reports/text-pivot-matches.json", help="Output JSON path.")

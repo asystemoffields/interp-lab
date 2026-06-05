@@ -141,7 +141,7 @@ class SAELensFeatureProvider:
 def load_saelens_feature_metadata(path: str | Path | None) -> dict[int, dict[str, Any]]:
     if path is None:
         return {}
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     if not isinstance(data, dict):
         raise ValueError("SAELens feature metadata must be a JSON object keyed by feature index")
     return {int(key): dict(value) for key, value in data.items()}

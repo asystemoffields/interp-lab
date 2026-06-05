@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -41,6 +42,17 @@ FLOOR_BASELINE_MEAN = 0.02
 FLOOR_BASELINE_MAX = 0.05
 
 
+def _finite_float(value: Any, *, line_label: str, field: str) -> float:
+    """Parse a number, rejecting NaN/Infinity (which json.loads accepts by default)."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{line_label}: {field} must be a number, got {value!r}") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{line_label}: {field} must be a finite number, got {value!r}")
+    return number
+
+
 @dataclass(frozen=True)
 class InterventionRecord:
     model: str
@@ -74,11 +86,17 @@ class InterventionRecord:
             model=str(data["model"]),
             feature_id=str(data["feature_id"]),
             intervention=intervention,
-            baseline_score=float(data["baseline_score"]),
-            intervention_score=float(data["intervention_score"]),
+            baseline_score=_finite_float(data["baseline_score"], line_label=line_label, field="baseline_score"),
+            intervention_score=_finite_float(
+                data["intervention_score"], line_label=line_label, field="intervention_score"
+            ),
             criterion=str(data["criterion"]) if data.get("criterion") is not None else None,
             prompt_id=str(data.get("prompt_id", "")),
-            side_effect_score=float(side_effect_score) if side_effect_score is not None else None,
+            side_effect_score=(
+                _finite_float(side_effect_score, line_label=line_label, field="side_effect_score")
+                if side_effect_score is not None
+                else None
+            ),
             metadata=dict(data.get("metadata", {})),
         )
 
@@ -257,7 +275,7 @@ class InterventionRecordRunner:
         if self._records is not None:
             return self._records
         records: list[InterventionRecord] = []
-        with self.path.open("r", encoding="utf-8") as handle:
+        with self.path.open("r", encoding="utf-8-sig") as handle:
             for line_number, line in enumerate(handle, start=1):
                 stripped = line.strip()
                 if not stripped:
