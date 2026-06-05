@@ -34,9 +34,25 @@ def build_fingerprint(
         causal_vector=_causal_vector(evidence.causal_effects),
         neighbor_labels=[],
         text_embedder=active_embedder_id(),
+        causal_provenance=_causal_provenance(evidence.causal_effects),
     )
 
 
 def _causal_vector(causal_effects: dict[str, float]) -> list[float]:
     keys = INTERVENTION_CAUSAL_KEYS if "signed_causal_effect" in causal_effects else ASSOCIATION_CAUSAL_KEYS
     return [float(causal_effects.get(key, 0.0)) for key in keys]
+
+
+def _causal_provenance(causal_effects: dict[str, float]) -> str:
+    """Label the causal_vector's origin so matching never compares a measured
+    causal effect against a correlational proxy on the same axis (bug-9).
+
+    ``INTERVENTION_CAUSAL_KEYS`` and ``ASSOCIATION_CAUSAL_KEYS`` differ at index 1
+    (signed_causal_effect vs signed_association), so two vectors built from
+    different key sets are not on a common axis and must not be cosine-compared.
+    """
+    if "signed_causal_effect" in causal_effects:
+        return "intervention"
+    if "signed_association" in causal_effects or "criterion" in causal_effects:
+        return "association"
+    return "none"

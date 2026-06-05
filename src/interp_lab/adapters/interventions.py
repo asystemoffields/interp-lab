@@ -9,6 +9,7 @@ from typing import Any
 
 from interp_lab.math_utils import clamp, mean
 from interp_lab.schema import Criterion, FeatureEvidence
+from interp_lab import stats
 
 PROMOTING_WHEN_SCORE_DROPS = {
     "ablate",
@@ -61,11 +62,18 @@ class InterventionRecord:
         ]
         if missing:
             raise ValueError(f"{line_label}: missing required fields: {', '.join(missing)}")
+        intervention = str(data["intervention"]).lower()
+        if intervention not in PROMOTING_WHEN_SCORE_DROPS and intervention not in PROMOTING_WHEN_SCORE_RISES:
+            known = ", ".join(sorted(PROMOTING_WHEN_SCORE_DROPS | PROMOTING_WHEN_SCORE_RISES))
+            raise ValueError(
+                f"{line_label}: unknown intervention {intervention!r}; the effect direction is "
+                f"undefined for it. Expected one of: {known}."
+            )
         side_effect_score = data.get("side_effect_score")
         return cls(
             model=str(data["model"]),
             feature_id=str(data["feature_id"]),
-            intervention=str(data["intervention"]).lower(),
+            intervention=intervention,
             baseline_score=float(data["baseline_score"]),
             intervention_score=float(data["intervention_score"]),
             criterion=str(data["criterion"]) if data.get("criterion") is not None else None,
@@ -151,7 +159,7 @@ class InterventionRecordRunner:
             0.0,
             specificity - control_summary.get("mean_abs_directed_effect", 0.0),
         )
-        ci_low, ci_high = _mean_confidence_interval(directed)
+        ci = _mean_confidence_interval(directed)
 
         merged = dict(fallback)
         merged.update(
@@ -168,10 +176,9 @@ class InterventionRecordRunner:
                     clamp(control_summary.get("mean_abs_directed_effect", 0.0)),
                     6,
                 ),
-                "criterion_ci_low": round(ci_low, 6),
-                "criterion_ci_high": round(ci_high, 6),
             }
         )
+        merged.update(_ci_fields(ci))
         return merged
 
     def metadata_for(self, evidence: FeatureEvidence, criterion: Criterion) -> dict[str, Any]:
@@ -186,17 +193,20 @@ class InterventionRecordRunner:
             for record in effects
             if record.side_effect_score is not None
         ]
-        ci_low, ci_high = _mean_confidence_interval(directed)
+        ci = _mean_confidence_interval(directed)
+        ci_fields = _ci_fields(ci)
         control_summary = _summarize_control_records(controls)
         summary = {
             "count": len(effects),
             "mean_directed_effect": round(mean(directed), 6),
             "mean_abs_directed_effect": round(mean([abs(value) for value in directed]), 6),
-            "stdev_directed_effect": round(statistics.pstdev(directed), 6)
+            "stdev_directed_effect": round(statistics.stdev(directed), 6)
             if len(directed) > 1
             else 0.0,
-            "criterion_ci_low": round(ci_low, 6),
-            "criterion_ci_high": round(ci_high, 6),
+            "criterion_ci_low": ci_fields["criterion_ci_low"],
+            "criterion_ci_high": ci_fields["criterion_ci_high"],
+            "criterion_ci_method": ci_fields["criterion_ci_method"],
+            "criterion_ci_n": ci_fields["criterion_ci_n"],
             "mean_side_effect": round(mean(side_effects), 6) if side_effects else None,
             "controls": control_summary,
             "examples": [_render_record(record) for record in effects[:5]],
@@ -338,15 +348,32 @@ def _first_metadata(records: list[InterventionRecord], key: str) -> Any:
     return None
 
 
-def _mean_confidence_interval(values: list[float]) -> tuple[float, float]:
-    if not values:
-        return 0.0, 0.0
-    average = mean(values)
-    if len(values) == 1:
-        return average, average
-    stdev = statistics.pstdev(values)
-    half_width = 1.96 * stdev / (len(values) ** 0.5)
-    return average - half_width, average + half_width
+def _mean_confidence_interval(values: list[float]) -> dict | None:
+    """Student-t CI for the mean directed effect (see ``interp_lab.stats``).
+
+    A single intervention row no longer reports a (mean, mean) zero-width interval;
+    it reports ``None`` bounds with method ``insufficient_n`` so a one-prompt run is
+    never mistaken for a calibrated interval.
+    """
+    return stats.mean_confidence_interval(values)
+
+
+def _ci_fields(ci: dict | None) -> dict[str, Any]:
+    if not ci:
+        return {
+            "criterion_ci_low": None,
+            "criterion_ci_high": None,
+            "criterion_ci_method": "no_data",
+            "criterion_ci_n": 0,
+        }
+    low = ci.get("low")
+    high = ci.get("high")
+    return {
+        "criterion_ci_low": round(low, 6) if low is not None else None,
+        "criterion_ci_high": round(high, 6) if high is not None else None,
+        "criterion_ci_method": ci.get("method"),
+        "criterion_ci_n": ci.get("n"),
+    }
 
 
 def _summarize_control_records(records: list[InterventionRecord]) -> dict[str, Any]:

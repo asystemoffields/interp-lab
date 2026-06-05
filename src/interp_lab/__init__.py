@@ -1,6 +1,6 @@
 """Public Python API for interp-lab."""
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 from interp_lab.schema import (
     CandidateMatch,

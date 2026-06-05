@@ -108,6 +108,11 @@ class ActivationRecordFeatureProvider:
                     "signed_association": round(signed_association, 6),
                     "signed_separation": round(signed_separation, 6),
                     "criterion_score_mean": round(stats.mean_score(), 6),
+                    # The causal_effects below are a CORRELATIONAL proxy derived from
+                    # activation/criterion statistics, not measured interventions.
+                    # Flagged so reports and downstream tooling never present this as
+                    # measured causal evidence (run real interventions for that).
+                    "causal_evidence": "association_proxy",
                 }
             )
 

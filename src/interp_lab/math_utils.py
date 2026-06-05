@@ -15,13 +15,15 @@ def norm(values: Sequence[float]) -> float:
 def cosine(left: Sequence[float], right: Sequence[float]) -> float:
     if not left or not right:
         return 0.0
-    size = min(len(left), len(right))
-    left_trimmed = left[:size]
-    right_trimmed = right[:size]
-    denominator = norm(left_trimmed) * norm(right_trimmed)
+    # Vectors of different lengths are not comparable: silently trimming to the
+    # shared prefix would cosine over an arbitrary, misaligned subspace (e.g. two
+    # models with different hidden sizes). Treat that as "no evidence" instead.
+    if len(left) != len(right):
+        return 0.0
+    denominator = norm(left) * norm(right)
     if denominator == 0:
         return 0.0
-    return dot(left_trimmed, right_trimmed) / denominator
+    return dot(left, right) / denominator
 
 
 def clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
@@ -37,13 +39,14 @@ def mean(values: Sequence[float]) -> float:
 def pearson(left: Sequence[float], right: Sequence[float]) -> float:
     if len(left) < 2 or len(right) < 2:
         return 0.0
-    size = min(len(left), len(right))
-    left_trimmed = left[:size]
-    right_trimmed = right[:size]
-    left_mean = mean(left_trimmed)
-    right_mean = mean(right_trimmed)
-    centered_left = [value - left_mean for value in left_trimmed]
-    centered_right = [value - right_mean for value in right_trimmed]
+    # Paired statistic: mismatched lengths mean the pairs are misaligned, so the
+    # correlation is undefined rather than something to compute on a prefix.
+    if len(left) != len(right):
+        return 0.0
+    left_mean = mean(left)
+    right_mean = mean(right)
+    centered_left = [value - left_mean for value in left]
+    centered_right = [value - right_mean for value in right]
     denominator = norm(centered_left) * norm(centered_right)
     if denominator == 0:
         return 0.0

@@ -95,6 +95,11 @@ class FeatureFingerprint:
     causal_vector: NumberVector
     neighbor_labels: list[str] = field(default_factory=list)
     text_embedder: str = "hash-v1"
+    # How the causal_vector was produced: "intervention" (measured edits),
+    # "association" (correlational proxy, e.g. activation records), or "none".
+    # Matching refuses to compare causal vectors of different provenance so a
+    # measured causal effect is never scored against a mere correlation.
+    causal_provenance: str = "none"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -107,6 +112,7 @@ class FeatureFingerprint:
             "activation_signature": self.activation_signature,
             "decoder_signature": self.decoder_signature,
             "causal_vector": self.causal_vector,
+            "causal_provenance": self.causal_provenance,
             "neighbor_labels": self.neighbor_labels,
         }
 
@@ -123,6 +129,7 @@ class FeatureFingerprint:
             causal_vector=[float(item) for item in data.get("causal_vector", [])],
             neighbor_labels=[str(item) for item in data.get("neighbor_labels", [])],
             text_embedder=str(data.get("text_embedder", "hash-v1")),
+            causal_provenance=str(data.get("causal_provenance", "none")),
         )
 
 

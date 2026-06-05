@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 import copy
 import json
-import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from interp_lab import stats
 from interp_lab.graphs import load_path_patch_records, write_attribution_graph_html, write_attribution_graph_markdown
 
 
@@ -474,7 +474,10 @@ def _validation_status(
         and sign_consistency >= float(thresholds["min_sign_consistency"])
     ):
         return "robust"
-    if mean_abs_effect >= float(thresholds["min_effect"]) * 0.5 and sign_consistency >= 0.5:
+    # "suggestive" requires a *strict* majority sign agreement. A perfectly split
+    # two-record path scores sign_consistency == 0.5, which is no evidence of a
+    # consistent direction, so it must not clear this gate.
+    if mean_abs_effect >= float(thresholds["min_effect"]) * 0.5 and sign_consistency > 0.5:
         return "suggestive"
     return "weak"
 
@@ -703,15 +706,13 @@ def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
-def _mean_ci(values: list[float]) -> dict[str, float] | None:
-    if not values:
-        return None
-    mean = _mean(values)
-    if len(values) == 1:
-        return {"low": round(mean, 6), "high": round(mean, 6)}
-    variance = sum((value - mean) ** 2 for value in values) / (len(values) - 1)
-    half_width = 1.96 * math.sqrt(variance) / math.sqrt(len(values))
-    return {"low": round(mean - half_width, 6), "high": round(mean + half_width, 6)}
+def _mean_ci(values: list[float]) -> dict[str, Any] | None:
+    """Student-t CI for a path's target-latent deltas (see ``interp_lab.stats``).
+
+    Reports the sample size and method, and emits ``None`` bounds for a single
+    record instead of a misleading zero-width interval.
+    """
+    return stats.mean_confidence_interval(values)
 
 
 def _ratio(numerator: float, denominator: float) -> float | None:

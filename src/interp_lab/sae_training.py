@@ -1014,7 +1014,11 @@ def _train_torch_sae(
             )
             reconstruction = decoder(hidden)
             reconstruction_loss = torch.mean((reconstruction - batch) ** 2)
-            sparsity_loss = hidden.abs().mean()
+            # L1 = mean over the batch of the per-sample sum of |latent|. Summing
+            # over the latent axis (not averaging) keeps the sparsity pressure
+            # scale-stable: averaging would divide the penalty by latent_dim, so a
+            # wider SAE would silently get a weaker effective L1 for the same l1.
+            sparsity_loss = hidden.abs().sum(dim=1).mean()
             loss = reconstruction_loss + l1_coefficient * sparsity_loss
             optimizer.zero_grad()
             loss.backward()

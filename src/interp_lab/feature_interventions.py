@@ -710,22 +710,31 @@ def _select_intervention_strength(
     mode: str,
 ) -> tuple[float, list[dict[str, float]]]:
     summary = []
+    best_key: tuple[float, float] | None = None
+    best_strength: float | None = None
     for strength, rows in rows_by_strength.items():
         directed = [_directed_delta(row, mode) for row in rows]
         side_effect = _mean(side_effects_by_strength.get(strength, []))
         mean_directed_effect = _mean(directed)
+        specificity = mean_directed_effect - side_effect
         summary.append(
             {
                 "strength": round(float(strength), 8),
                 "mean_directed_effect": round(mean_directed_effect, 8),
                 "mean_side_effect": round(side_effect, 8),
-                "specificity": round(mean_directed_effect - side_effect, 8),
+                "specificity": round(specificity, 8),
             }
         )
-    if not summary:
+        # Select on the *raw* dict key, not the 8dp-rounded display value: the
+        # rows are keyed by the unrounded float, so returning the rounded value
+        # would KeyError when the two differ (e.g. a high-precision sweep value).
+        key = (specificity, mean_directed_effect)
+        if best_key is None or key > best_key:
+            best_key = key
+            best_strength = float(strength)
+    if best_strength is None:
         raise ValueError("No intervention strengths were evaluated")
-    selected = max(summary, key=lambda item: (item["specificity"], item["mean_directed_effect"]))
-    return float(selected["strength"]), summary
+    return best_strength, summary
 
 
 def _directed_delta(row: dict[str, Any], mode: str) -> float:

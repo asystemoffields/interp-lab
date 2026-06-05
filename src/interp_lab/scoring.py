@@ -8,8 +8,12 @@ from interp_lab.text_embedding import embed_text
 def score_feature(evidence: FeatureEvidence, criterion: Criterion) -> dict[str, float]:
     association = _association(evidence, criterion)
     causal_effect = clamp(float(evidence.causal_effects.get("criterion", 0.0)))
-    strong_causal_score = clamp(float(evidence.causal_effects.get("strong_causal_score", causal_effect)))
-    specificity = clamp(float(evidence.causal_effects.get("specificity", association)))
+    # When the side-effect/control-adjusted causal score is absent, it must default
+    # to 0.0 -- NOT to causal_effect -- or the same causal number would be counted
+    # twice (0.30 strong + 0.20 causal = 0.50). Likewise an absent specificity must
+    # not borrow association, which would double-count association (0.25 + 0.15).
+    strong_causal_score = clamp(float(evidence.causal_effects.get("strong_causal_score", 0.0)))
+    specificity = clamp(float(evidence.causal_effects.get("specificity", 0.0)))
     side_effect = clamp(float(evidence.causal_effects.get("side_effect", 0.0)))
     stability = _stability(evidence)
     importance = clamp(

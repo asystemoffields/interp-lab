@@ -13,6 +13,12 @@ DEFAULT_WEIGHTS = {
     "causal": 0.20,
 }
 
+# Magnitude floor for treating two signed effects as a genuine opposite-direction
+# conflict. Kept equal to match_validation.DEFAULT_MIN_ABS_SIGNED_EFFECT so the
+# ranking layer and the validation layer agree on what counts as a real signed
+# effect (otherwise a pair can score high here yet be graded "contradicted").
+SIGNED_EFFECT_DIRECTION_MIN = 0.02
+
 
 def fingerprint_similarity(
     left: FeatureFingerprint,
@@ -21,21 +27,37 @@ def fingerprint_similarity(
     weights: dict[str, float] | None = None,
 ) -> tuple[float, dict[str, float]]:
     weights = weights or DEFAULT_WEIGHTS
-    components = {
+    components: dict[str, float] = {
         "activation": _to_unit(cosine(left.activation_signature, right.activation_signature)),
         "decoder": _to_unit(cosine(left.decoder_signature, right.decoder_signature)),
-        "causal": _causal_similarity(left.causal_vector, right.causal_vector),
+    }
+    active = {
+        "activation": weights.get("activation", 0.0),
+        "decoder": weights.get("decoder", 0.0),
     }
     # Only compare text vectors produced by the same embedder; mixing a lexical-hash
     # fingerprint with a semantic one would silently cosine over truncated, unrelated axes.
-    if left.text_embedder == right.text_embedder and len(left.text_vector) == len(right.text_vector):
+    if (
+        left.text_embedder == right.text_embedder
+        and left.text_vector
+        and right.text_vector
+        and len(left.text_vector) == len(right.text_vector)
+    ):
         components["text"] = _to_unit(cosine(left.text_vector, right.text_vector))
-        score = sum(components[name] * weights.get(name, 0.0) for name in components)
+        active["text"] = weights.get("text", 0.0)
     else:
-        active = {name: weights.get(name, 0.0) for name in components}
-        total = sum(active.values()) or 1.0
-        score = sum(components[name] * active[name] / total for name in components)
         components["text_embedder_mismatch"] = 1.0
+    # Only credit causal similarity when BOTH sides carry a causal vector of the
+    # SAME provenance. An absent causal vector must not earn a free 0.5 "half match"
+    # (it is excluded and the remaining weights are renormalized), and a measured
+    # causal effect must never be cosine-compared against a correlational proxy.
+    if left.causal_vector and right.causal_vector and left.causal_provenance == right.causal_provenance:
+        components["causal"] = _causal_similarity(left.causal_vector, right.causal_vector)
+        active["causal"] = weights.get("causal", 0.0)
+    else:
+        components["causal_absent"] = 1.0
+    total = sum(active.values()) or 1.0
+    score = sum(components[name] * active[name] for name in active) / total
     return round(clamp(score), 6), {key: round(value, 6) for key, value in components.items()}
 
 
@@ -98,14 +120,14 @@ def _signed_effect_similarity(left: float, right: float) -> float:
 
 def _score_with_signed_effect(score: float, signed_component: float, left: float, right: float) -> float:
     adjusted = clamp(0.85 * score + 0.15 * signed_component)
-    if left * right < 0 and min(abs(left), abs(right)) >= 0.05:
+    if left * right < 0 and min(abs(left), abs(right)) >= SIGNED_EFFECT_DIRECTION_MIN:
         adjusted = min(adjusted, 0.49)
     return round(adjusted, 6)
 
 
 def _causal_similarity(left: list[float], right: list[float]) -> float:
     if not left or not right:
-        return 0.5
+        return 0.5  # defensive: callers exclude absent causal vectors before this
     direction = _to_unit(cosine(left, right))
     strength = min(1.0, _vector_norm(left)) * min(1.0, _vector_norm(right))
     return clamp(direction * strength)
