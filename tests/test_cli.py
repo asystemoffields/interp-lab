@@ -819,8 +819,8 @@ def test_run_config_renders_templated_out_before_deriving_run_dir(tmp_path: Path
     assert (run_dir / "demo" / "matches.json").exists()
     assert not (tmp_path / "reports" / "${name}").exists()
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert manifest["run_dir"] == "reports/myrun"
-    assert manifest["config"]["steps"][0]["args"]["out"] == "reports/myrun/demo"
+    assert Path(manifest["run_dir"]) == Path("reports/myrun")
+    assert Path(manifest["config"]["steps"][0]["args"]["out"]) == Path("reports/myrun/demo")
 
 
 def test_run_config_list_args_record_outputs(tmp_path: Path):
