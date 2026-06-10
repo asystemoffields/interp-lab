@@ -147,10 +147,10 @@ def test_feature_search_ranks_natural_language_query(tmp_path: Path):
 
     assert report["schema_version"] == "interp-lab.feature_search.v1"
     assert report["results"][0]["feature_id"] == "L1:F1"
-    assert report["results"][0]["agent_next_action"].startswith("Run interp-lab intervene")
+    assert report["results"][0]["agent_next_actions"][0]["command"].startswith("interp-lab intervene")
 
 
-def test_feature_search_next_action_argv_parses_against_cli(tmp_path: Path):
+def test_feature_search_canonical_action_argv_parses_against_cli(tmp_path: Path):
     path = _write_report(
         tmp_path / "report",
         criterion="successful tool calls",
@@ -160,28 +160,32 @@ def test_feature_search_next_action_argv_parses_against_cli(tmp_path: Path):
     report = build_feature_search_report(reports=[path], query="tool calls", top_k=1)
     result = report["results"][0]
 
-    argv = result["agent_next_action_argv"]
-    filled = ["dummy-path" if re.fullmatch(r"<.+>", str(token)) else str(token) for token in argv]
+    canonical = result["agent_next_actions"][0]
+    assert canonical["id"] == "plan_feature_intervention"
+    assert canonical["title"]
+    assert canonical["requires"] == ["scored causal prompt JSONL"]
+    assert "instruction" not in canonical
+
+    argv = canonical["argv"]
+    assert argv[0] == "interp-lab"
+    filled = ["dummy-path" if re.fullmatch(r"<.+>", str(token)) else str(token) for token in argv[1:]]
     args = build_parser().parse_args(filled)  # exits 2 if the suggested command is not runnable
     assert args.command == "intervene"
     assert args.model == "m"
     assert args.criterion == "successful tool calls"
     assert args.feature == ["L1:F1"]
     assert args.report == str(path)
-    assert result["agent_next_action_requires"] == ["scored causal prompt JSONL"]
 
-    # The canonical object mirrors the legacy flat keys (kept for one release).
-    canonical = result["agent_next_actions"][0]
-    assert canonical["id"] == "plan_feature_intervention"
-    assert canonical["title"]
-    assert canonical["argv"] == ["interp-lab", *argv]
-    assert canonical["requires"] == ["scored causal prompt JSONL"]
-    assert "instruction" not in canonical
+    # The legacy flat keys were removed in 3.0.0.
+    assert "agent_next_action" not in result
+    assert "agent_next_action_argv" not in result
+    assert "agent_next_action_requires" not in result
 
-    # Report-level prose actions: instruction is canonical, description is legacy.
+    # Report-level prose actions: instruction only; legacy "description" removed in 3.0.0.
     report_action = report["agent_next_actions"][0]
     assert report_action["id"] and report_action["title"]
-    assert report_action["instruction"] == report_action["description"]
+    assert report_action["instruction"]
+    assert "description" not in report_action
 
 
 def test_model_family_comparison_report_summarizes_cross_family_matches(tmp_path: Path):
@@ -239,11 +243,13 @@ def test_text_pivot_match_report_uses_explanations_as_bridge(tmp_path: Path):
     assert report["matches"][0]["right_feature_id"] == "L4:F9"
     assert report["matches"][0]["components"]["text_pivot"] >= 0.9
     assert report["matches"][0]["evidence_grade"] == "text_pivot_with_causal_support"
-    # Canonical per-match action alongside the legacy agent_next_action* keys.
+    # Canonical per-match action only; legacy agent_next_action* keys removed in 3.0.0.
     match_action = report["matches"][0]["agent_next_actions"][0]
     assert match_action["id"] == "validate_text_pivot_pair"
     assert match_action["argv"][:2] == ["interp-lab", "match"]
     assert match_action["command"].startswith("interp-lab match --left ")
+    assert "agent_next_action" not in report["matches"][0]
+    assert "agent_next_action_argv" not in report["matches"][0]
 
 
 def test_text_pivot_does_not_upgrade_label_only_or_association_only_matches(tmp_path: Path):

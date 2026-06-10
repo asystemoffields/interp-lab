@@ -27,14 +27,18 @@ interp-lab inspect \
 - **Claims are graded, not asserted.** `validate-matches` and `validate-attribution-graph` mark each result as `validated`, `needs_causal_evidence`, `plausible`, `contradicted`, or `weak`, with reason codes.
 - **Controls and uncertainty are first-class.** Intervention runs support `random_feature`, `matched_frequency`, and `placebo` controls, side-effect checks, sign-consistency, and confidence intervals.
 - **Everything is reproducible and agent-friendly.** Runs emit manifests with the tool version, platform, and input hashes; reports include `agent_next_actions` with exact follow-up commands; `interp_lab.public_api_contract()` exposes the stable surface as data.
+- **The investigation loop drives itself.** `plan-evidence` diagnoses each feature's evidence gaps and ranks the cheapest grade-moving interventions (with power-analysis sample sizes); `dossier-update` keeps a cumulative evidence dossier per (model, criterion) across runs — grade transitions, sign flips, contradictions.
+- **The grading is audited, not trusted.** `calibrate` plants synthetic ground truth (causal features, equally-correlated decoys, noise), runs the real pipeline blind, and reports what the verdicts are worth: precision/recall, decoy resistance, P(truly causal | tier). `quant-diff` applies the same discipline to precision studies — which intervention-validated features did quantization break?
+- **Validated features become deliverables.** `export-steering` packages an intervention-validated feature as a reusable steering-vector artifact, refusing unvalidated cards unless you explicitly accept a `provenance: "unvalidated"` stamp.
 
 ## The workflow
 
 1. Compile a natural-language criterion into examples and scores.
 2. Collect candidate features from SAEs, NLA explanations, or feature dumps — or feed any latents (crosscoders included) through the model-agnostic activation-records path.
 3. Rank features by criterion association, specificity, causal evidence, and stability.
-4. Build a feature fingerprint that can be compared across models.
-5. Validate cross-model equivalents with interventions.
+4. Plan the cheapest evidence-gathering path (`plan-evidence`), intervene, and track each round in a cumulative dossier.
+5. Build a feature fingerprint that can be compared across models.
+6. Validate cross-model equivalents with interventions.
 
 ```python
 from interp_lab import compare, inspect, validate_matches
@@ -89,7 +93,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 
 ## For AI agents
 
-[`AGENTS.md`](AGENTS.md) is the operating manual for coding agents driving interp-lab: the evidence rules, the canonical `agent_next_actions` shape, and the core loop as runnable commands. `interp-lab capabilities --json` returns the whole surface — command specs, the Python API contract, environment, and conventions — in one machine-readable payload, and `interp-lab mcp` serves the core workflow as Model Context Protocol tools over stdio.
+[`AGENTS.md`](AGENTS.md) is the operating manual for coding agents driving interp-lab: the evidence rules, the canonical `agent_next_actions` shape, and the core loop as runnable commands. `interp-lab capabilities --json` returns the whole surface — command specs, the Python API contract, environment, and conventions — in one machine-readable payload, and `interp-lab mcp` serves the workflow as Model Context Protocol tools over stdio, including a full investigation loop an agent can drive end to end: `plan-evidence` → `intervene` (dry-run by default) → `dossier`, with `calibrate` as the trust anchor for what the grades mean.
 
 ## Documentation
 
@@ -107,6 +111,9 @@ interp-lab demo --out reports/demo            # full toy tour (open reports/demo
 interp-lab quickstart                         # guided getting-started walkthrough
 interp-lab inspect ... --csv-out features.csv # ranked features as a spreadsheet
 interp-lab compare-runs --left a/report.json --right b/report.json --out diff.json  # rank/score drift
+interp-lab plan-evidence --report a/report.json --out a/plan.json  # cheapest grade-moving interventions
+interp-lab quant-diff --left-report f16/report.json --right-report q4/report.json --out qd.json  # what quantization broke
+interp-lab calibrate --out reports/calibration.json  # audit the grading against planted ground truth
 interp-lab studio --serve --reports-dir reports   # local browser command-builder + runner (persistent job history)
 interp-lab release-check --strict             # stable-release readiness
 ```

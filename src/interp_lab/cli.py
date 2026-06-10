@@ -25,6 +25,7 @@ from interp_lab.adapters.saelens import (
 )
 from interp_lab.adapters.scope import ScopeFeatureProvider
 from interp_lab.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
+from interp_lab.calibration import export_calibration_report, run_calibration
 from interp_lab.criterion_lab import (
     build_criterion_assay_validation_parser,
     build_criterion_lab_parser,
@@ -39,7 +40,14 @@ from interp_lab.demo_sweep import (
     run_demo_sweep_from_args,
 )
 from interp_lab.doctor import collect_diagnostics, diagnostics_to_json, diagnostics_to_text
+from interp_lab.dossier import (
+    dossier_summary,
+    load_dossier,
+    update_dossier,
+    write_dossier_markdown,
+)
 from interp_lab.env_profile import build_environment_profile_parser, run_environment_profile_from_args
+from interp_lab.evidence_planner import build_plan_evidence_parser, run_plan_evidence_from_args
 from interp_lab.explanation_reports import (
     build_explanation_consistency_parser,
     build_feature_search_parser,
@@ -51,6 +59,13 @@ from interp_lab.explanation_reports import (
     run_text_pivot_match_from_args,
 )
 from interp_lab.feature_interventions import build_intervene_parser, run_intervene_from_args
+from interp_lab.gguf_records import (
+    build_gguf_export_parser,
+    build_hidden_dump_convert_parser,
+    run_gguf_export_from_args,
+    run_hidden_dump_convert_from_args,
+    summarize_records,
+)
 from interp_lab.graphs import (
     build_graph_export_parser,
     build_graph_summary_parser,
@@ -78,8 +93,10 @@ from interp_lab.match_validation import (
     export_match_validation_report,
     run_match_validation_from_args,
 )
+from interp_lab.migrate_report import build_migrate_report_parser, run_migrate_report_from_args
 from interp_lab.nnsight_records import build_nnsight_export_parser, run_nnsight_export_from_args
 from interp_lab.pipeline import inspect_model, match_reports
+from interp_lab.quant_diff import build_quant_diff_parser, run_quant_diff_from_args
 from interp_lab.reporting import (
     load_inspection_report,
     write_inspection_csv,
@@ -97,6 +114,12 @@ from interp_lab.run_diff import build_compare_runs_parser, run_compare_runs_from
 from interp_lab.runs import RunOptions, run_config_file
 from interp_lab.sae_training import build_train_sae_parser, run_train_sae_from_args
 from interp_lab.scaling import build_scale_plan_parser, run_scale_plan_from_args
+from interp_lab.steering import (
+    build_apply_steering_parser,
+    build_export_steering_parser,
+    run_apply_steering_from_args,
+    run_export_steering_from_args,
+)
 from interp_lab.transformerlens_records import (
     build_transformerlens_export_parser,
     run_transformerlens_export_from_args,
@@ -124,18 +147,26 @@ Commands by purpose:
 
   Causal testing & attribution graphs
     intervene, export-attribution-graph, summarize-attribution-graph, validate-attribution-graph
+    export-steering, apply-steering   validated features as reusable steering artifacts
 
-  Bring your own model (optional extras: [hf] [transformerlens] [nnsight] [saelens])
+  Investigation: plan, track, and trust the evidence
+    plan-evidence   rank the cheapest interventions that move claim grades
+    dossier-update, dossier-show   cumulative evidence per (model, criterion) across runs
+    quant-diff      which intervention-validated features quantization broke
+    calibrate       audit interp-lab's own grading against planted ground truth
+
+  Bring your own model (optional extras: [hf] [transformerlens] [nnsight] [saelens] [gguf])
     export-hf-records, export-transformerlens-records, export-nnsight-records,
-    export-hf-interventions, export-hf-contrast, train-sae, export-hf-sae-paths,
-    validate-hf-sae-paths, build-prompts, prepare-sae-prompts, publish-hf-artifact
+    export-gguf-records, convert-hidden-dump, export-hf-interventions,
+    export-hf-contrast, train-sae, export-hf-sae-paths, validate-hf-sae-paths,
+    build-prompts, prepare-sae-prompts, publish-hf-artifact
 
   Agent integration
     capabilities  one-call discovery: commands, Python API, schemas, environment
     mcp           serve interp-lab tools over the Model Context Protocol (stdio)
 
   Utilities
-    profile-env, plan-scale, validate-assay, release-check
+    profile-env, plan-scale, validate-assay, release-check, migrate-report
 
 Run `interp-lab <command> --help` for the options of any command.
 """
@@ -409,6 +440,116 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compare_runs.set_defaults(func=run_compare_runs)
 
+    quant_diff = subparsers.add_parser(
+        "quant-diff",
+        help="Diff a baseline report against a quantized variant: which validated features broke.",
+        parents=[build_quant_diff_parser()],
+        add_help=False,
+    )
+    quant_diff.set_defaults(func=run_quant_diff)
+
+    plan_evidence = subparsers.add_parser(
+        "plan-evidence",
+        help="Diagnose a report's evidence gaps and rank the cheapest grade-moving interventions.",
+        parents=[build_plan_evidence_parser()],
+        add_help=False,
+    )
+    plan_evidence.set_defaults(func=run_plan_evidence)
+
+    dossier_update = subparsers.add_parser(
+        "dossier-update",
+        help="Append an inspection run to a cumulative (model, criterion) evidence dossier.",
+    )
+    dossier_update.add_argument(
+        "--dossier", required=True, help="Dossier JSON path (created when absent)."
+    )
+    dossier_update.add_argument("--report", required=True, help="Inspection report.json to append.")
+    dossier_update.add_argument("--matches", help="Optional match artifact from `interp-lab match`.")
+    dossier_update.add_argument(
+        "--match-validation",
+        help="Optional validation artifact from `interp-lab validate-matches`.",
+    )
+    dossier_update.add_argument(
+        "--graph-validation",
+        help="Optional validation artifact from `interp-lab validate-attribution-graph`.",
+    )
+    dossier_update.add_argument("--note", help="Free-text note recorded on this run entry.")
+    dossier_update.add_argument(
+        "--json", action="store_true", help="Print the full updated dossier as JSON."
+    )
+    dossier_update.set_defaults(func=run_dossier_update)
+
+    dossier_show = subparsers.add_parser(
+        "dossier-show",
+        help="Show where every feature's evidence stands in a criterion dossier.",
+    )
+    dossier_show.add_argument("--dossier", required=True, help="Dossier JSON path.")
+    dossier_show.add_argument("--markdown-out", help="Optional Markdown rendering output path.")
+    dossier_show.add_argument(
+        "--json", action="store_true", help="Print the full dossier as JSON."
+    )
+    dossier_show.set_defaults(func=run_dossier_show)
+
+    calibrate = subparsers.add_parser(
+        "calibrate",
+        help="Audit interp-lab's own claim grading against planted synthetic ground truth.",
+    )
+    calibrate.add_argument(
+        "--out",
+        help="Output calibration report JSON path (also writes a sibling .md). Omit to print JSON.",
+    )
+    calibrate.add_argument("--markdown-out", help="Optional explicit markdown path.")
+    calibrate.add_argument(
+        "--work-dir",
+        help="Directory for the planted world artifacts (default: a temporary directory).",
+    )
+    calibrate.add_argument(
+        "--seeds", type=int, default=5, help="Number of planted worlds (seeds 0..N-1)."
+    )
+    calibrate.add_argument("--features", type=int, default=24, help="Features per planted world.")
+    calibrate.add_argument("--causal", type=int, default=6, help="Truly causal features per world.")
+    calibrate.add_argument(
+        "--decoys",
+        type=int,
+        help="Correlational decoys per world (default: as many as fit, up to --causal).",
+    )
+    calibrate.add_argument("--prompts", type=int, default=64, help="Prompts per world.")
+    calibrate.add_argument("--noise", type=float, default=0.3, help="Activation noise scale.")
+    calibrate.add_argument(
+        "--min-abs-effect",
+        type=float,
+        default=0.05,
+        help="Minimum |signed effect| for the measured-causal evidence tier.",
+    )
+    calibrate.add_argument(
+        "--json", action="store_true", help="Print the calibration report as JSON."
+    )
+    calibrate.set_defaults(func=run_calibrate)
+
+    export_steering = subparsers.add_parser(
+        "export-steering",
+        help="Export a validated report feature as a reusable steering-vector artifact.",
+        parents=[build_export_steering_parser()],
+        add_help=False,
+    )
+    export_steering.set_defaults(func=run_export_steering)
+
+    apply_steering_cmd = subparsers.add_parser(
+        "apply-steering",
+        help="Generate baseline vs steered continuations from a steering artifact.",
+        parents=[build_apply_steering_parser()],
+        add_help=False,
+    )
+    apply_steering_cmd.set_defaults(func=run_apply_steering)
+
+    migrate_report_cmd = subparsers.add_parser(
+        "migrate-report",
+        help="Re-score an older inspection report under current scoring semantics.",
+        parents=[build_migrate_report_parser()],
+        add_help=False,
+    )
+    migrate_report_cmd.set_defaults(func=run_migrate_report)
+
     demo = subparsers.add_parser("demo", help="Run two toy inspections and match their features.")
     demo.add_argument("--out", default="reports/demo", help="Output directory.")
     demo.set_defaults(func=run_demo)
@@ -516,6 +657,22 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     export_nnsight.set_defaults(func=run_export_nnsight_records)
+
+    export_gguf = subparsers.add_parser(
+        "export-gguf-records",
+        help="Export final-layer activation records from a GGUF model via llama.cpp.",
+        parents=[build_gguf_export_parser()],
+        add_help=False,
+    )
+    export_gguf.set_defaults(func=run_export_gguf_records)
+
+    convert_hidden_dump = subparsers.add_parser(
+        "convert-hidden-dump",
+        help="Convert a hidden-state dump JSONL from any runtime into activation records.",
+        parents=[build_hidden_dump_convert_parser()],
+        add_help=False,
+    )
+    convert_hidden_dump.set_defaults(func=run_convert_hidden_dump)
 
     hf_interventions = subparsers.add_parser(
         "export-hf-interventions",
@@ -751,6 +908,177 @@ def run_compare_runs(args: argparse.Namespace) -> int:
         return 0
     print(f"Wrote {result.json_path}")
     print(f"Wrote {result.markdown_path}")
+    return 0
+
+
+def run_quant_diff(args: argparse.Namespace) -> int:
+    report = run_quant_diff_from_args(args)
+    if args.out is None:
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
+    if args.json:
+        # Keep stdout pure JSON under --json (`... --json | jq`); confirmations go to stderr.
+        print(json.dumps(report, indent=2, sort_keys=True))
+    stream = sys.stderr if args.json else sys.stdout
+    print(f"Wrote {args.out}", file=stream)
+    markdown_path = args.markdown_out if args.markdown_out else Path(args.out).with_suffix(".md")
+    print(f"Wrote {markdown_path}", file=stream)
+    return 0
+
+
+def run_plan_evidence(args: argparse.Namespace) -> int:
+    result = run_plan_evidence_from_args(args)
+    if isinstance(result, dict):
+        # No --out: the plan itself is the output (a Markdown may still have been
+        # written when --markdown-out alone was passed).
+        print(json.dumps(result, indent=2, sort_keys=True))
+        if args.markdown_out:
+            print(f"Wrote {args.markdown_out}", file=sys.stderr)
+        return 0
+    if args.json:
+        print(json.dumps(result.report, indent=2, sort_keys=True))
+    stream = sys.stderr if args.json else sys.stdout
+    print(f"Wrote {result.json_path}", file=stream)
+    print(f"Wrote {result.markdown_path}", file=stream)
+    return 0
+
+
+def run_export_steering(args: argparse.Namespace) -> int:
+    artifact = run_export_steering_from_args(args)
+    if args.json:
+        print(json.dumps(artifact, indent=2, sort_keys=True))
+    stream = sys.stderr if args.json else sys.stdout
+    print(f"Wrote {args.out}", file=stream)
+    return 0
+
+
+def run_apply_steering(args: argparse.Namespace) -> int:
+    summary = run_apply_steering_from_args(args)
+    if args.json:
+        print(json.dumps(summary, indent=2, sort_keys=True))
+    stream = sys.stderr if args.json else sys.stdout
+    print(f"Wrote {summary['out']}", file=stream)
+    return 0
+
+
+def run_migrate_report(args: argparse.Namespace) -> int:
+    migrated = run_migrate_report_from_args(args)
+    if args.out is None or args.json:
+        print(json.dumps(migrated, indent=2, sort_keys=True))
+    if args.out is not None:
+        stream = sys.stderr if args.json else sys.stdout
+        print(f"Wrote {Path(args.out) / 'report.json'}", file=stream)
+        print(f"Wrote {Path(args.out) / 'report.md'}", file=stream)
+    return 0
+
+
+def run_dossier_update(args: argparse.Namespace) -> int:
+    dossier = update_dossier(
+        args.dossier,
+        args.report,
+        matches=args.matches,
+        match_validation=args.match_validation,
+        graph_validation=args.graph_validation,
+        note=args.note,
+    )
+    if args.json:
+        print(json.dumps(dossier, indent=2, sort_keys=True))
+        print(f"Wrote {args.dossier}", file=sys.stderr)
+        return 0
+    print(f"Wrote {args.dossier}")
+    _print_dossier_summary(dossier_summary(dossier))
+    return 0
+
+
+def run_dossier_show(args: argparse.Namespace) -> int:
+    dossier = load_dossier(args.dossier)
+    markdown_path = (
+        write_dossier_markdown(dossier, args.markdown_out) if args.markdown_out else None
+    )
+    if args.json:
+        print(json.dumps(dossier, indent=2, sort_keys=True))
+        if markdown_path is not None:
+            print(f"Wrote {markdown_path}", file=sys.stderr)
+        return 0
+    _print_dossier_summary(dossier_summary(dossier))
+    if markdown_path is not None:
+        print(f"Wrote {markdown_path}")
+    return 0
+
+
+def _print_dossier_summary(summary: dict) -> None:
+    span = summary.get("span", {})
+    print(f"Dossier: model={summary.get('model')!r}, criterion={summary.get('criterion')!r}")
+    print(f"Runs: {summary.get('run_count', 0)} ({span.get('first')} -> {span.get('last')})")
+    print(
+        f"Features tracked: {summary.get('features_total', 0)}"
+        f" | validated: {summary.get('currently_validated', 0)}"
+        f" | regressions: {summary.get('regressions', 0)}"
+        f" | open questions: {summary.get('open_questions', 0)}"
+        f" | contradictions: {summary.get('contradictions', 0)}"
+    )
+    for feature_id, item in sorted(summary.get("features", {}).items()):
+        flag = "  ** CONTRADICTION **" if item.get("contradiction") else ""
+        print(
+            f"- {feature_id}: {item.get('current_grade')} "
+            f"({item.get('grade_transition')}, runs={item.get('run_count')}){flag}"
+        )
+
+
+def run_calibrate(args: argparse.Namespace) -> int:
+    world_kwargs = {
+        "n_features": args.features,
+        "n_causal": args.causal,
+        "n_decoys": args.decoys,
+        "n_prompts": args.prompts,
+        "noise": args.noise,
+    }
+    if args.out:
+        result = export_calibration_report(
+            args.out,
+            args.markdown_out,
+            work_dir=args.work_dir,
+            seeds=args.seeds,
+            min_abs_effect=args.min_abs_effect,
+            **world_kwargs,
+        )
+        if args.json:
+            print(json.dumps(result.report, indent=2, sort_keys=True))
+        stream = sys.stderr if args.json else sys.stdout
+        print(f"Wrote {result.json_path}", file=stream)
+        print(f"Wrote {result.markdown_path}", file=stream)
+        return 0
+    if args.work_dir:
+        report = run_calibration(
+            args.work_dir, seeds=args.seeds, min_abs_effect=args.min_abs_effect, **world_kwargs
+        )
+    else:
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="interp-lab-calibration-") as tmp:
+            report = run_calibration(
+                tmp, seeds=args.seeds, min_abs_effect=args.min_abs_effect, **world_kwargs
+            )
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
+
+
+def run_export_gguf_records(args: argparse.Namespace) -> int:
+    path = run_gguf_export_from_args(args)
+    if args.json:
+        # Keep stdout pure JSON so `... --json | jq` works.
+        print(json.dumps(summarize_records(path).to_dict(), indent=2, sort_keys=True))
+    else:
+        print(f"Wrote {path}")
+    return 0
+
+
+def run_convert_hidden_dump(args: argparse.Namespace) -> int:
+    path = run_hidden_dump_convert_from_args(args)
+    if args.json:
+        print(json.dumps(summarize_records(path).to_dict(), indent=2, sort_keys=True))
+    else:
+        print(f"Wrote {path}")
     return 0
 
 

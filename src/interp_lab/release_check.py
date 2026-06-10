@@ -81,15 +81,11 @@ def build_release_readiness_report(root: str | Path = ".") -> dict[str, Any]:
     }
     ready = counts["blocker"] == 0
     next_actions = [
-        {
-            **next_action(
-                action_id=check["id"],
-                title=check["title"],
-                instruction=check["next_action"],
-            ),
-            # Legacy key kept for one release; prefer "instruction".
-            "next_action": check["next_action"],
-        }
+        next_action(
+            action_id=check["id"],
+            title=check["title"],
+            instruction=check["next_action"],
+        )
         for check in checks
         if check["status"] in {"warn", "blocker"} and check.get("next_action")
     ]

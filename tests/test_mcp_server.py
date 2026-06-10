@@ -1,8 +1,11 @@
+import importlib.util
 import io
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 import interp_lab
 from interp_lab.mcp_server import (
@@ -88,7 +91,20 @@ def test_tools_list_schema_sanity():
         "check_explanation_consistency",
         "attribution_graph",
         "validate_attribution_graph",
+        "plan_evidence",
+        "dossier_update",
+        "dossier_show",
+        "quant_diff",
+        "calibrate",
+        "migrate_report",
+        "export_steering",
+        "intervene",
+        "train_sae",
     ]
+    assert len(names) == 19
+    # apply_steering is deliberately NOT served: generation against arbitrary
+    # models is a host-agent decision (see the server instructions).
+    assert "apply_steering" not in names
     for tool in tools:
         assert tool["name"]
         assert tool["description"]
@@ -264,6 +280,300 @@ def test_attribution_graph_and_validation_tools(tmp_path: Path):
     )["result"]["structuredContent"]
     assert validation["summary"]
     assert Path(validation["paths"]["validation_json"]).exists()
+
+
+def test_initialize_instructions_cover_the_investigation_loop():
+    instructions = McpServer().handle_message(
+        _request(1, "initialize", {"protocolVersion": DEFAULT_PROTOCOL_VERSION})
+    )["result"]["instructions"]
+
+    assert "plan_evidence" in instructions
+    assert "dossier_update" in instructions
+    assert "apply-steering" in instructions  # documented as deliberately not exposed
+
+
+def test_full_toy_investigation_loop_over_mcp_alone(tmp_path: Path):
+    """inspect -> plan_evidence -> dossier_update -> dossier_show -> migrate_report
+    (idempotent) -> quant_diff, all through tool calls only."""
+    server = McpServer()
+    left = _inspect_toy(server, 1, "toy/model-a", tmp_path / "a")["result"]["structuredContent"]
+    report_path = left["paths"]["report_json"]
+
+    # plan_evidence without out: the full plan comes back directly.
+    plan = _call(server, 2, "plan_evidence", {"report": report_path})["result"]
+    assert plan["isError"] is False
+    full_plan = plan["structuredContent"]
+    assert full_plan["schema_version"] == "interp-lab.evidence_plan.v1"
+    assert full_plan["summary"]["cards_assessed"] > 0
+    assert full_plan["plan"]
+
+    # plan_evidence with out: compact summary plus written JSON + Markdown.
+    written_plan = _call(
+        server,
+        3,
+        "plan_evidence",
+        {"report": report_path, "out": str(tmp_path / "plan.json"), "top_k": 3},
+    )["result"]["structuredContent"]
+    assert "plan" not in written_plan
+    assert written_plan["summary"]["cards_assessed"] == 3
+    assert Path(written_plan["paths"]["plan_json"]).exists()
+    assert Path(written_plan["paths"]["plan_markdown"]).exists()
+
+    # dossier_update twice: cumulative memory across rounds.
+    dossier_path = tmp_path / "dossier.json"
+    first = _call(
+        server,
+        4,
+        "dossier_update",
+        {"dossier": str(dossier_path), "report": report_path, "note": "round 1"},
+    )["result"]["structuredContent"]
+    assert first["summary"]["run_count"] == 1
+    assert dossier_path.exists()
+    second = _call(
+        server,
+        5,
+        "dossier_update",
+        {"dossier": str(dossier_path), "report": report_path, "note": "round 2"},
+    )["result"]["structuredContent"]
+    assert second["summary"]["run_count"] == 2
+    assert second["summary"]["features"]  # per-feature standing in the summary
+
+    shown = _call(
+        server,
+        6,
+        "dossier_show",
+        {"dossier": str(dossier_path), "markdown_out": str(tmp_path / "dossier.md")},
+    )["result"]["structuredContent"]
+    assert shown["summary"]["run_count"] == 2
+    for standing in shown["summary"]["features"].values():
+        assert standing["current_grade"]
+    assert Path(shown["paths"]["dossier_markdown"]).exists()
+
+    # migrate_report: current-version reports migrate cleanly and idempotently.
+    migrated = _call(
+        server,
+        7,
+        "migrate_report",
+        {"report": report_path, "out": str(tmp_path / "migrated")},
+    )["result"]["structuredContent"]
+    migrated_report = Path(migrated["paths"]["report_json"])
+    assert migrated_report.exists()
+    again = _call(server, 8, "migrate_report", {"report": str(migrated_report)})["result"][
+        "structuredContent"
+    ]
+    assert again["features_reordered"] is False
+    assert again["score_delta_feature_count"] == 0
+    assert again["score_deltas"] == {}
+
+    # quant_diff: baseline vs variant of the same criterion.
+    right = _inspect_toy(server, 9, "toy/model-b", tmp_path / "b")["result"]["structuredContent"]
+    diff = _call(
+        server,
+        10,
+        "quant_diff",
+        {
+            "left_report": report_path,
+            "right_report": right["paths"]["report_json"],
+            "out": str(tmp_path / "quant-diff.json"),
+            "left_label": "f16",
+            "right_label": "q4_k_m",
+        },
+    )["result"]["structuredContent"]
+    headline = diff["headline"]
+    for key in ("preserved_count", "degraded_count", "lost_count", "emerged_count"):
+        assert isinstance(headline[key], int)
+    assert isinstance(headline["degraded_validated"], list)
+    assert diff["interpretation"]
+    assert Path(diff["paths"]["diff_json"]).exists()
+    assert Path(diff["paths"]["diff_markdown"]).exists()
+
+
+def test_calibrate_tool_tiny_world(tmp_path: Path):
+    result = _call(
+        McpServer(),
+        1,
+        "calibrate",
+        {
+            "out": str(tmp_path / "calibration.json"),
+            "seeds": 1,
+            "features": 6,
+            "causal": 2,
+            "prompts": 8,
+            "noise": 0.2,
+            "work_dir": str(tmp_path / "worlds"),
+        },
+    )["result"]
+    assert result["isError"] is False
+    summary = result["structuredContent"]
+    assert summary["verdict"]
+    assert "decoy_resistance" in summary["headline"]
+    assert "p_truly_causal_given_measured_causal" in summary["headline"]
+    calibration_path = Path(summary["paths"]["calibration_json"])
+    assert calibration_path.exists()
+    assert Path(summary["paths"]["calibration_markdown"]).exists()
+    payload = json.loads(calibration_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "interp-lab.calibration_report.v1"
+    assert payload["config"]["world"]["n_features"] == 6
+
+
+def _write_association_only_report(path: Path) -> Path:
+    """A hand-built report with a steerable hidden-dim card carrying only
+    correlational evidence -- the case the export_steering provenance gate exists for."""
+    from interp_lab.schema import Criterion, FeatureCard, FeatureFingerprint, InspectionReport
+
+    card = FeatureCard(
+        feature_id="L3:D7",
+        model="toy/m",
+        layer=3,
+        label="eval awareness candidate",
+        explanation="",
+        importance=0.5,
+        association=0.4,
+        specificity=0.1,
+        causal_effect=0.0,
+        stability=0.5,
+        examples=["the assistant suspects a test"],
+        source="test",
+        fingerprint=FeatureFingerprint(
+            feature_id="L3:D7",
+            model="toy/m",
+            layer=3,
+            text="evaluation awareness",
+            text_vector=[0.5, 0.5],
+            activation_signature=[1.0, 0.0],
+            decoder_signature=[],
+            causal_vector=[],
+        ),
+        metadata={},
+        causal_effects={"criterion": 0.5, "signed_association": 0.4},
+    )
+    report = InspectionReport(
+        model="toy/m", criterion=Criterion(text="benchmark awareness"), cards=[card]
+    )
+    path.write_text(json.dumps(report.to_dict()), encoding="utf-8")
+    return path
+
+
+def test_export_steering_gate_refusal_and_allow_unvalidated(tmp_path: Path):
+    server = McpServer()
+    report_path = _write_association_only_report(tmp_path / "report.json")
+    out = tmp_path / "steer.json"
+
+    refused = _call(
+        server,
+        1,
+        "export_steering",
+        {"report": str(report_path), "feature_id": "L3:D7", "out": str(out)},
+    )["result"]
+    assert refused["isError"] is True
+    assert "--allow-unvalidated" in refused["content"][0]["text"]
+    assert not out.exists()
+
+    allowed = _call(
+        server,
+        2,
+        "export_steering",
+        {
+            "report": str(report_path),
+            "feature_id": "L3:D7",
+            "out": str(out),
+            "allow_unvalidated": True,
+        },
+    )["result"]
+    assert allowed["isError"] is False
+    summary = allowed["structuredContent"]
+    assert summary["provenance"] == "unvalidated"
+    assert summary["signed_effect_provenance"] == "association"
+    assert "UNVALIDATED" in summary["unvalidated_warning"]
+    artifact = json.loads(out.read_text(encoding="utf-8"))
+    assert artifact["provenance"] == "unvalidated"
+
+
+def _write_prompt_dataset(path: Path) -> Path:
+    rows = [
+        {"id": "p1", "text": "the assistant suspects this is a test", "criterion_score": 1.0},
+        {"id": "p2", "text": "a plain weather report", "criterion_score": 0.0},
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    return path
+
+
+def test_intervene_defaults_to_dry_run_planning_without_any_model(tmp_path: Path):
+    dataset = _write_prompt_dataset(tmp_path / "prompts.jsonl")
+
+    result = _call(
+        McpServer(),
+        1,
+        "intervene",
+        {
+            "model": "distilgpt2",
+            "dataset": str(dataset),
+            "criterion": "benchmark awareness",
+            "out": str(tmp_path / "interventions.jsonl"),
+            "features": ["L3:D7"],
+            "plan_out": str(tmp_path / "plan.json"),
+        },
+    )["result"]
+
+    assert result["isError"] is False
+    plan_result = result["structuredContent"]
+    assert plan_result["dry_run"] is True
+    assert plan_result["records_path"] is None
+    assert plan_result["plan"]["schema_version"] == "interp-lab.intervention_plan.v1"
+    assert Path(plan_result["plan_path"]).exists()
+    assert not (tmp_path / "interventions.jsonl").exists()
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("torch") is not None,
+    reason="verifies the clean install-hint error on a torch-free environment",
+)
+def test_intervene_execution_without_torch_is_a_clean_tool_error(tmp_path: Path):
+    dataset = _write_prompt_dataset(tmp_path / "prompts.jsonl")
+
+    result = _call(
+        McpServer(),
+        1,
+        "intervene",
+        {
+            "model": "distilgpt2",
+            "dataset": str(dataset),
+            "criterion": "benchmark awareness",
+            "out": str(tmp_path / "interventions.jsonl"),
+            "features": ["L3:D7"],
+            "dry_run": False,
+        },
+    )["result"]
+
+    assert result["isError"] is True
+    assert "interp-lab[hf]" in result["content"][0]["text"]
+
+
+def test_train_sae_tool_fallback_method_from_records(tmp_path: Path):
+    server = McpServer()
+    # Reuse the calibration world generator for a real activation-records file.
+    from interp_lab.calibration import generate_planted_world
+
+    world = generate_planted_world(0, n_features=4, n_causal=1, n_prompts=8)
+    records_path, _interventions = world.write(tmp_path / "world")
+
+    result = _call(
+        server,
+        1,
+        "train_sae",
+        {
+            "out": str(tmp_path / "sae.json"),
+            "records": str(records_path),
+            "method": "fallback",
+            "latent_dim": 2,
+        },
+    )["result"]
+
+    assert result["isError"] is False
+    summary = result["structuredContent"]
+    assert summary["method"] == "fallback-dictionary"
+    assert summary["latent_dim"] == 2
+    assert Path(summary["paths"]["sae_json"]).exists()
 
 
 def test_unknown_method_returns_method_not_found():

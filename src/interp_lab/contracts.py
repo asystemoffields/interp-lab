@@ -6,10 +6,13 @@ from copy import deepcopy
 from typing import Any
 
 from interp_lab import __version__
+from interp_lab.calibration import CALIBRATION_SCHEMA
 from interp_lab.capabilities import CAPABILITIES_SCHEMA
 from interp_lab.criterion_lab import PRESET_SCHEMA_VERSION
 from interp_lab.demo_sweep import REAL_MODEL_DEMO_SWEEP_SCHEMA
+from interp_lab.dossier import DOSSIER_SCHEMA
 from interp_lab.env_profile import SCHEMA_VERSION as ENV_PROFILE_SCHEMA
+from interp_lab.evidence_planner import EVIDENCE_PLAN_SCHEMA
 from interp_lab.explanation_reports import (
     EXPLANATION_CONSISTENCY_SCHEMA,
     FEATURE_SEARCH_SCHEMA,
@@ -17,9 +20,11 @@ from interp_lab.explanation_reports import (
     TEXT_PIVOT_MATCH_SCHEMA,
 )
 from interp_lab.feature_interventions import INTERVENTION_SCHEMA, PLAN_SCHEMA
+from interp_lab.quant_diff import QUANT_DIFF_SCHEMA
 from interp_lab.release_check import REAL_MODEL_DEMO_SCHEMA, RELEASE_CHECK_SCHEMA
 from interp_lab.run_diff import RUN_DIFF_SCHEMA
 from interp_lab.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA
+from interp_lab.steering import STEERING_GENERATION_SCHEMA, STEERING_SCHEMA
 from interp_lab.web_server import STUDIO_HISTORY_SCHEMA
 
 PUBLIC_API_CONTRACT_SCHEMA = "interp-lab.public_api_contract.v1"
@@ -49,9 +54,11 @@ PUBLIC_API_EXPORTS = [
     "WrittenMatch",
     "WrittenMatchValidation",
     "WrittenAnalysis",
+    "apply_steering",
     "attribution_graph",
     "attribution_graph_summary",
     "build_prompts",
+    "calibrate",
     "capabilities",
     "check_explanation_consistency",
     "compare",
@@ -61,22 +68,30 @@ PUBLIC_API_EXPORTS = [
     "criterion_lab_presets",
     "demo_sweep",
     "doctor",
+    "dossier_summary",
+    "export_steering_vector",
     "inspect",
     "intervene",
+    "load_dossier",
     "load_inspection_report",
     "load_match_report",
+    "load_steering_artifact",
     "match_text_pivot",
+    "migrate_inspection_report",
     "path_patch",
+    "plan_evidence",
     "prepare_sae_prompts",
     "public_api_contract",
     "publish_hf_artifact",
     "profile_environment",
+    "quant_diff",
     "release_check",
     "run",
     "scale_plan",
     "scaffold_run",
     "search_features",
     "train_sae",
+    "update_dossier",
     "validate_attribution_graph",
     "validate_criterion_assay",
     "validate_hf_sae_paths",
@@ -86,11 +101,14 @@ PUBLIC_API_EXPORTS = [
 SCHEMA_CONTRACTS = {
     "attribution_graph": "interp-lab.attribution_graph.v1",
     "attribution_graph_summary": "interp-lab.attribution_graph_summary.v1",
+    "calibration_report": CALIBRATION_SCHEMA,
     "capabilities": CAPABILITIES_SCHEMA,
     "criterion_assay_validation": "interp-lab.criterion_assay_validation.v1",
     "criterion_lab": "interp-lab.criterion_lab.v1",
     "criterion_lab_preset": PRESET_SCHEMA_VERSION,
+    "dossier": DOSSIER_SCHEMA,
     "environment_profile": ENV_PROFILE_SCHEMA,
+    "evidence_plan": EVIDENCE_PLAN_SCHEMA,
     "explanation_consistency": EXPLANATION_CONSISTENCY_SCHEMA,
     "feature_search": FEATURE_SEARCH_SCHEMA,
     "graph_validation": "interp-lab.graph_validation.v1",
@@ -103,6 +121,7 @@ SCHEMA_CONTRACTS = {
     "model_family_comparison": MODEL_FAMILY_COMPARISON_SCHEMA,
     "path_patch": "interp-lab.path_patch.v1",
     "public_api_contract": PUBLIC_API_CONTRACT_SCHEMA,
+    "quant_diff": QUANT_DIFF_SCHEMA,
     "real_model_demo": REAL_MODEL_DEMO_SCHEMA,
     "real_model_demo_sweep": REAL_MODEL_DEMO_SWEEP_SCHEMA,
     "release_check": RELEASE_CHECK_SCHEMA,
@@ -111,6 +130,8 @@ SCHEMA_CONTRACTS = {
     "sae": "interp-lab.sae.v1",
     "sae_prompt_pack": "interp-lab.sae_prompt_pack.v1",
     "scale_plan": "interp-lab.scale_plan.v2",
+    "steering_generation": STEERING_GENERATION_SCHEMA,
+    "steering_vector": STEERING_SCHEMA,
     "studio_history": STUDIO_HISTORY_SCHEMA,
     "text_pivot_match": TEXT_PIVOT_MATCH_SCHEMA,
 }
@@ -119,6 +140,18 @@ PUBLIC_API_SIGNATURES = {
     "attribution_graph": ["report", "out", "markdown_out", "html_out", "path_records"],
     "attribution_graph_summary": ["graph", "out"],
     "build_prompts": ["out", "positive", "negative", "positive_prompt", "negative_prompt"],
+    "calibrate": [
+        "out",
+        "markdown_out",
+        "work_dir",
+        "seeds",
+        "features",
+        "causal",
+        "decoys",
+        "prompts",
+        "noise",
+        "min_abs_effect",
+    ],
     "capabilities": [],
     "check_explanation_consistency": ["reports", "out", "markdown_out", "html_out", "min_similarity", "max_rank_span", "top_k"],
     "compare": ["left", "right", "out", "top_k"],
@@ -126,6 +159,7 @@ PUBLIC_API_SIGNATURES = {
     "compare_runs": ["left", "right", "out", "markdown_out"],
     "criterion_lab": ["out", "model", "preset", "preset_file", "criterion", "workflow", "run_dir"],
     "demo_sweep": ["repo_root", "manifest_dir", "demos", "out", "run", "allow_external"],
+    "dossier_summary": ["dossier", "markdown_out"],
     "inspect": [
         "model",
         "criterion",
@@ -192,8 +226,19 @@ PUBLIC_API_SIGNATURES = {
     ],
     "match_text_pivot": ["left", "right", "out", "markdown_out", "html_out", "top_k", "per_left", "min_score", "min_text_score"],
     "path_patch": ["model", "dataset", "source_sae", "target_sae", "out", "criterion"],
+    "plan_evidence": ["report", "out", "markdown_out", "top_k", "confidence"],
     "prepare_sae_prompts": ["dataset", "out_dir", "train_ratio", "causal_ratio", "validation_ratio"],
     "publish_hf_artifact": ["repo_id", "paths", "repo_type", "private", "dry_run"],
+    "quant_diff": [
+        "left",
+        "right",
+        "out",
+        "markdown_out",
+        "matches",
+        "match_validation",
+        "left_label",
+        "right_label",
+    ],
     "release_check": ["repo_root"],
     "run": ["config", "dry_run"],
     "scale_plan": ["model_params", "tokens", "d_model", "selected_layers", "latent_dim", "profile"],
@@ -241,6 +286,33 @@ PUBLIC_API_SIGNATURES = {
         "model_kwargs",
         "tokenizer_kwargs",
     ],
+    "update_dossier": [
+        "dossier",
+        "report",
+        "matches",
+        "match_validation",
+        "graph_validation",
+        "note",
+    ],
+    "apply_steering": [
+        "artifact",
+        "prompts",
+        "out",
+        "strength",
+        "max_new_tokens",
+        "model_loader",
+        "generate_fn",
+    ],
+    "export_steering_vector": [
+        "report",
+        "feature_id",
+        "sae",
+        "out",
+        "strength",
+        "allow_unvalidated",
+    ],
+    "load_steering_artifact": ["artifact"],
+    "migrate_inspection_report": ["report", "out"],
     "validate_attribution_graph": ["graph", "path_records", "out", "graph_out", "require_controls"],
     "validate_criterion_assay": ["preset", "preset_file", "preset_dir", "out"],
     "validate_hf_sae_paths": ["graph", "model", "dataset", "source_sae", "target_sae", "path_records_out", "out"],

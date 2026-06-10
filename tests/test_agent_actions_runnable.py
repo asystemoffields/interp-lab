@@ -13,9 +13,11 @@ placeholders for run-local values. Argv-bearing actions must parse against the
 real CLI parser after placeholder substitution: a suggestion that exits 2 when
 pasted back into the CLI is worse than no suggestion.
 
-Legacy keys kept for one release (release-check `next_action`, explanation
-reports `description`, per-result `agent_next_action*` flat keys) may appear
-ALONGSIDE the canonical keys; they are tolerated here and pinned separately.
+Since 3.0.0 the canonical keys are the ONLY keys: the legacy aliases that 2.3
+kept for one release (release-check `next_action`, explanation reports
+`description`, per-result `agent_next_action*` flat keys) must no longer be
+emitted anywhere. This file pins both the canonical shape and the absence of
+the legacy keys.
 """
 
 import json
@@ -78,28 +80,36 @@ def test_every_agent_next_action_is_canonical_and_runnable(tmp_path: Path):
         _assert_canonical(context, action, parser)
 
 
-def test_legacy_per_result_argvs_still_parse_against_cli(tmp_path: Path):
-    # Back-compat flat keys (kept for one release alongside agent_next_actions).
+def test_legacy_flat_keys_are_not_emitted(tmp_path: Path):
+    # The 2.3-era flat keys were removed in 3.0.0: per-result/per-match payloads
+    # carry only the canonical agent_next_actions list.
     left_path, right_path = _write_toy_reports(tmp_path)
-    parser = build_parser()
 
     search = build_feature_search_report(reports=[left_path], query="evaluation awareness", top_k=3)
+    assert search["results"]
     for result in search["results"]:
-        assert isinstance(result["agent_next_action"], str)
-        _assert_parses(parser, result["agent_next_action_argv"], f"feature search hit {result['feature_id']}")
+        assert "agent_next_action" not in result
+        assert "agent_next_action_argv" not in result
+        assert "agent_next_action_requires" not in result
 
     pivot = build_text_pivot_match_report(left_reports=[left_path], right_reports=[right_path], top_k=3, per_left=1)
+    assert pivot["matches"]
     for match in pivot["matches"]:
-        assert isinstance(match["agent_next_action"], str)
-        _assert_parses(
-            parser,
-            match["agent_next_action_argv"],
-            f"text-pivot match {match['left_feature_id']} -> {match['right_feature_id']}",
-        )
+        assert "agent_next_action" not in match
+        assert "agent_next_action_argv" not in match
+        assert "agent_next_action_requires" not in match
+
+
+CANONICAL_ACTION_KEYS = {"id", "title", "command", "argv", "instruction", "requires"}
 
 
 def _assert_canonical(context: str, action, parser) -> None:
     assert isinstance(action, dict), f"{context}: action is not an object: {action!r}"
+    extra = set(action) - CANONICAL_ACTION_KEYS
+    assert not extra, (
+        f"{context}: action carries non-canonical keys {sorted(extra)} "
+        f"(3.0.0 removed all legacy aliases): {action!r}"
+    )
     assert isinstance(action.get("id"), str) and action["id"], f"{context}: missing id: {action!r}"
     assert isinstance(action.get("title"), str) and action["title"], f"{context}: missing title: {action!r}"
     has_command = "command" in action

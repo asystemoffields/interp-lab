@@ -15,6 +15,9 @@ Design notes for agents:
   the CLI error boundary. JSON-RPC errors are reserved for protocol problems:
   -32700 parse, -32600 invalid request, -32601 unknown method, -32602 invalid
   params (unknown tool name or missing required arguments).
+- ``apply-steering`` is deliberately not exposed as a tool: generating text from
+  arbitrary models is a host-agent decision, not something a server should make
+  one tool call away. Use the ``interp-lab apply-steering`` CLI once decided.
 - Resources use the ``interp-lab://docs/<name>`` URI scheme and expose the
   project docs (README.md, COMMANDS.md, AGENTS.md) when they exist on disk,
   looked up under the current working directory first, then the package
@@ -47,7 +50,17 @@ _SERVER_INSTRUCTIONS = (
     "a plain-language criterion. Call the 'capabilities' tool first: it returns the "
     "full CLI surface, the Python API contract, artifact schemas, and environment. "
     "Conventions are JSON-first: every artifact carries schema_version, and tools "
-    "that write artifacts return compact summaries plus the written paths."
+    "that write artifacts return compact summaries plus the written paths. "
+    "The full investigation loop is driveable over MCP: inspect -> plan_evidence "
+    "(gaps and costed interventions) -> intervene (dry_run defaults to true: plan "
+    "first, then re-call with dry_run false to spend model time) -> inspect with "
+    "interventions attached -> dossier_update / dossier_show (cumulative evidence "
+    "per model+criterion) -> export_steering (the deliverable; refuses cards without "
+    "intervention provenance). calibrate audits the grading itself against planted "
+    "ground truth; quant_diff compares precision variants; migrate_report re-scores "
+    "old reports. apply-steering is deliberately NOT exposed as an MCP tool: "
+    "generating text from arbitrary models is a host-agent decision -- use the "
+    "'interp-lab apply-steering' CLI when you have made it."
 )
 
 _BACKEND_CHOICES = ["toy", "jsonl", "records", "neuronpedia", "saelens", "goodfire", "scope"]
@@ -277,6 +290,210 @@ def _tool_validate_attribution_graph(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _tool_plan_evidence(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    result = api.plan_evidence(
+        params["report"],
+        out=params.get("out"),
+        markdown_out=params.get("markdown_out"),
+        top_k=params.get("top_k"),
+        confidence=params.get("confidence", 0.95),
+    )
+    if isinstance(result, dict):
+        return result
+    return {
+        "summary": result.report.get("summary", {}),
+        "paths": _paths(plan_json=result.json_path, plan_markdown=result.markdown_path),
+    }
+
+
+def _tool_dossier_update(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    dossier = api.update_dossier(
+        dossier=params["dossier"],
+        report=params["report"],
+        matches=params.get("matches"),
+        match_validation=params.get("match_validation"),
+        graph_validation=params.get("graph_validation"),
+        note=params.get("note"),
+    )
+    return {
+        "summary": api.dossier_summary(dossier=dossier),
+        "paths": _paths(dossier_json=params["dossier"]),
+    }
+
+
+def _tool_dossier_show(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    summary = api.dossier_summary(
+        dossier=params["dossier"],
+        markdown_out=params.get("markdown_out"),
+    )
+    return {
+        "summary": summary,
+        "paths": _paths(dossier_json=params["dossier"], dossier_markdown=params.get("markdown_out")),
+    }
+
+
+def _tool_quant_diff(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    report = api.quant_diff(
+        params["left_report"],
+        params["right_report"],
+        out=params["out"],
+        markdown_out=params.get("markdown_out"),
+        left_label=params.get("left_label", "baseline"),
+        right_label=params.get("right_label", "variant"),
+    )
+    summary = report.get("summary", {})
+    json_path = Path(params["out"])
+    markdown_path = (
+        Path(params["markdown_out"]) if params.get("markdown_out") else json_path.with_suffix(".md")
+    )
+    return {
+        "headline": {
+            "preserved_count": summary.get("preserved_count"),
+            "degraded_count": summary.get("degraded_count"),
+            "lost_count": summary.get("lost_count"),
+            "emerged_count": summary.get("emerged_count"),
+            "validated_lost_count": summary.get("validated_lost_count"),
+            "degraded_validated": summary.get("degraded_validated", []),
+        },
+        "interpretation": report.get("interpretation"),
+        "paths": _paths(diff_json=json_path, diff_markdown=markdown_path),
+    }
+
+
+def _tool_calibrate(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    result = api.calibrate(
+        params["out"],
+        markdown_out=params.get("markdown_out"),
+        work_dir=params.get("work_dir"),
+        seeds=params.get("seeds", 5),
+        features=params.get("features", 24),
+        causal=params.get("causal", 6),
+        prompts=params.get("prompts", 64),
+        noise=params.get("noise", 0.3),
+    )
+    assessment = result.report.get("assessment", {})
+    return {
+        "verdict": assessment.get("verdict"),
+        "headline": assessment.get("headline", {}),
+        "summary": assessment.get("summary"),
+        "paths": _paths(calibration_json=result.json_path, calibration_markdown=result.markdown_path),
+    }
+
+
+def _tool_migrate_report(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    migrated = api.migrate_inspection_report(params["report"], out=params.get("out"))
+    migration = migrated.get("metadata", {}).get("migration", {})
+    changes = migration.get("changes", {})
+    score_deltas = changes.get("score_deltas", {})
+    out = params.get("out")
+    return {
+        "from_tool_version": migration.get("from_tool_version"),
+        "to_tool_version": migration.get("to_tool_version"),
+        "features_reordered": changes.get("features_reordered"),
+        "score_delta_feature_count": len(score_deltas),
+        "score_deltas": score_deltas,
+        "paths": _paths(report_json=Path(out) / "report.json" if out is not None else None),
+    }
+
+
+def _tool_export_steering(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    artifact = api.export_steering_vector(
+        params["report"],
+        params["feature_id"],
+        sae=params.get("sae"),
+        out=params["out"],
+        strength=params.get("strength"),
+        allow_unvalidated=params.get("allow_unvalidated", False),
+    )
+    summary = {
+        "feature_id": artifact["feature_id"],
+        "label": artifact["label"],
+        "layer": artifact["layer"],
+        "provenance": artifact["provenance"],
+        "recommended_strength": artifact["recommended_strength"],
+        "measured_signed_effect": artifact["measured_signed_effect"],
+        "signed_effect_provenance": artifact["signed_effect_provenance"],
+        "paths": _paths(steering_json=params["out"]),
+    }
+    if "unvalidated_warning" in artifact:
+        summary["unvalidated_warning"] = artifact["unvalidated_warning"]
+    return summary
+
+
+def _tool_intervene(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    result = api.intervene(
+        model=params["model"],
+        dataset=params["dataset"],
+        criterion=params["criterion"],
+        out=params["out"],
+        features=params.get("features"),
+        report=params.get("report"),
+        records=params.get("records"),
+        top_k=params.get("top_k", 8),
+        sae=params.get("sae"),
+        mode=params.get("mode", "suppress"),
+        strength_sweep=params.get("strength_sweep"),
+        target_tokens=params.get("target_tokens"),
+        device=params.get("device", "cpu"),
+        max_length=params.get("max_length", 128),
+        plan_out=params.get("plan_out"),
+        dry_run=params.get("dry_run", True),
+    )
+    return result.to_dict()
+
+
+def _tool_train_sae(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    result = api.train_sae(
+        out=params["out"],
+        records=params.get("records"),
+        model=params.get("model"),
+        hf_model=params.get("hf_model"),
+        dataset=params.get("dataset"),
+        records_out=params.get("records_out"),
+        preset=params.get("preset", "minimal"),
+        layer=params.get("layer"),
+        latent_dim=params.get("latent_dim"),
+        expansion_factor=params.get("expansion_factor"),
+        method=params.get("method"),
+        epochs=params.get("epochs"),
+        seed=params.get("seed", 0),
+        device=params.get("device", "cpu"),
+        max_records=params.get("max_records"),
+        criterion=params.get("criterion"),
+        causal_out=params.get("causal_out"),
+    )
+    artifact = json.loads(Path(result.artifact_path).read_text(encoding="utf-8"))
+    return {
+        "method": artifact.get("method"),
+        "input_dim": artifact.get("input_dim"),
+        "latent_dim": artifact.get("latent_dim"),
+        "metrics": artifact.get("metrics", {}),
+        "paths": _paths(
+            sae_json=result.artifact_path,
+            records_jsonl=result.records_path,
+            interventions_jsonl=result.interventions_path,
+        ),
+    }
+
+
 _COMPACT_NOTE = "Writes artifacts to disk and returns a compact summary plus the written paths; read the artifacts for the full payload."
 
 TOOLS: list[dict[str, Any]] = [
@@ -455,6 +672,250 @@ TOOLS: list[dict[str, Any]] = [
             ["graph", "records", "out"],
         ),
         "handler": _tool_validate_attribution_graph,
+    },
+    {
+        "name": "plan_evidence",
+        "description": (
+            "Diagnose a report's evidence gaps and rank the cheapest grade-moving "
+            "interventions (recommended sample sizes, ready-to-run next actions). "
+            "Returns the full plan directly; pass 'out' to write JSON+Markdown and "
+            "get a compact summary plus paths instead."
+        ),
+        "inputSchema": _schema(
+            "Evidence planning parameters.",
+            {
+                "report": _path_property("Inspection report.json"),
+                "out": _path_property("Optional output plan JSON path (Markdown sibling is written too)"),
+                "markdown_out": _path_property("Optional explicit Markdown summary path"),
+                "top_k": {"type": "integer", "description": "Only plan the top-k cards (default: all)."},
+                "confidence": {
+                    "type": "number",
+                    "description": "CI confidence for power analysis (default 0.95).",
+                },
+            },
+            ["report"],
+        ),
+        "handler": _tool_plan_evidence,
+    },
+    {
+        "name": "dossier_update",
+        "description": (
+            "Append an inspection run to the cumulative (model, criterion) evidence "
+            "dossier -- created when absent, identity-checked, rewritten atomically. "
+            "Returns the rollup summary (grade transitions, sign flips, contradictions) "
+            "plus the dossier path; read the dossier JSON for full per-run detail."
+        ),
+        "inputSchema": _schema(
+            "Dossier update parameters.",
+            {
+                "dossier": _path_property("Dossier JSON path (created when absent)"),
+                "report": _path_property("Inspection report.json to append"),
+                "matches": _path_property("Optional matches.json to attach"),
+                "match_validation": _path_property("Optional match-validation JSON to attach"),
+                "graph_validation": _path_property("Optional graph-validation JSON to attach"),
+                "note": {"type": "string", "description": "Optional free-text note for this run entry."},
+            },
+            ["dossier", "report"],
+        ),
+        "handler": _tool_dossier_update,
+    },
+    {
+        "name": "dossier_show",
+        "description": (
+            "Summarize an evidence dossier: per-feature standing, grade transitions, "
+            "contradictions. Pass 'markdown_out' to also write the full Markdown rendering."
+        ),
+        "inputSchema": _schema(
+            "Dossier summary parameters.",
+            {
+                "dossier": _path_property("Dossier JSON path"),
+                "markdown_out": _path_property("Optional Markdown rendering path"),
+            },
+            ["dossier"],
+        ),
+        "handler": _tool_dossier_show,
+    },
+    {
+        "name": "quant_diff",
+        "description": (
+            "Diff a baseline report against a quantized/precision variant of the same "
+            "criterion: which intervention-validated features survived, degraded, were "
+            f"lost, or emerged. {_COMPACT_NOTE}"
+        ),
+        "inputSchema": _schema(
+            "Quantization diff parameters.",
+            {
+                "left_report": _path_property("Higher-precision baseline report.json"),
+                "right_report": _path_property("Quantized variant report.json (same criterion)"),
+                "out": _path_property("Output diff JSON path (Markdown sibling is written too)"),
+                "markdown_out": _path_property("Optional explicit Markdown path"),
+                "left_label": {"type": "string", "description": "Baseline label (default 'baseline')."},
+                "right_label": {"type": "string", "description": "Variant label (default 'variant')."},
+            },
+            ["left_report", "right_report", "out"],
+        ),
+        "handler": _tool_quant_diff,
+    },
+    {
+        "name": "calibrate",
+        "description": (
+            "Audit interp-lab's own claim grading against planted synthetic ground truth "
+            "(truly causal features, correlational decoys, noise) and return the headline "
+            "trust metrics: discovery precision/recall, decoy resistance, P(truly causal | "
+            "tier), effect rank correlation, and an overall verdict. Compute-heavy at the "
+            f"defaults; shrink seeds/features/prompts for a quick check. {_COMPACT_NOTE}"
+        ),
+        "inputSchema": _schema(
+            "Calibration parameters.",
+            {
+                "out": _path_property("Output calibration JSON path (Markdown sibling is written too)"),
+                "markdown_out": _path_property("Optional explicit Markdown path"),
+                "work_dir": _path_property("Optional directory for planted-world artifacts (default: temp)"),
+                "seeds": {"type": "integer", "description": "Number of planted worlds (default 5)."},
+                "features": {"type": "integer", "description": "Features per world (default 24)."},
+                "causal": {"type": "integer", "description": "Truly causal features per world (default 6)."},
+                "prompts": {"type": "integer", "description": "Prompts per world (default 64, min 4)."},
+                "noise": {"type": "number", "description": "Activation noise level (default 0.3)."},
+            },
+            ["out"],
+        ),
+        "handler": _tool_calibrate,
+    },
+    {
+        "name": "migrate_report",
+        "description": (
+            "Re-score an older inspection report under current scoring semantics and "
+            "re-rank its cards (pre-2.3 reports counted correlational evidence on the "
+            "causal axis). Returns the migration summary (reorder flag, per-feature score "
+            "deltas); pass 'out' to write the migrated report.json/report.md directory."
+        ),
+        "inputSchema": _schema(
+            "Report migration parameters.",
+            {
+                "report": _path_property("Inspection report.json to migrate"),
+                "out": _path_property("Optional output directory for the migrated report"),
+            },
+            ["report"],
+        ),
+        "handler": _tool_migrate_report,
+    },
+    {
+        "name": "export_steering",
+        "description": (
+            "Export one report feature as a reusable steering-vector artifact. REFUSES "
+            "cards without intervention-measured evidence (provenance gate); set "
+            "'allow_unvalidated' to export anyway with the artifact stamped "
+            f"provenance=unvalidated. {_COMPACT_NOTE}"
+        ),
+        "inputSchema": _schema(
+            "Steering export parameters.",
+            {
+                "report": _path_property("Inspection report.json"),
+                "feature_id": {
+                    "type": "string",
+                    "description": "Steerable feature id: L<layer>:D<dim> or SAE:L<layer>:F<latent>.",
+                },
+                "out": _path_property("Output steering-artifact JSON path"),
+                "sae": _path_property("interp-lab SAE artifact JSON (required for SAE:* latents)"),
+                "strength": {"type": "number", "description": "Override the derived recommended_strength."},
+                "allow_unvalidated": {
+                    "type": "boolean",
+                    "description": "Export association-only cards, stamped provenance=unvalidated (default false).",
+                },
+            },
+            ["report", "feature_id", "out"],
+        ),
+        "handler": _tool_export_steering,
+    },
+    {
+        "name": "intervene",
+        "description": (
+            "Amplify, suppress, or ablate selected features on a Hugging Face model and "
+            "write intervention records (requires the [hf] extra and a scored prompt "
+            "JSONL). dry_run defaults to TRUE: the safe default returns the machine-"
+            "readable plan (features, expected forward passes, follow-up commands) "
+            "without loading any model. Re-call with dry_run=false to execute; the "
+            "records JSONL then feeds inspect's 'interventions' argument."
+        ),
+        "inputSchema": _schema(
+            "Feature intervention parameters.",
+            {
+                "model": {"type": "string", "description": "Hugging Face model name."},
+                "dataset": _path_property("Prompt JSONL with text and criterion_score"),
+                "criterion": {"type": "string", "description": "Criterion text stored in intervention rows."},
+                "out": _path_property("Output intervention-record JSONL path"),
+                "features": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Feature ids to intervene on (e.g. L6:D512, SAE:L6:F30).",
+                },
+                "report": _path_property("Optional report.json; top features are used when 'features' is omitted"),
+                "records": _path_property("Optional activation-record JSONL for runnable follow-up commands"),
+                "top_k": {"type": "integer", "description": "Top report features to use (default 8)."},
+                "sae": _path_property("SAE artifact JSON required for SAE:* latent interventions"),
+                "mode": {
+                    "type": "string",
+                    "enum": ["amplify", "suppress", "ablate"],
+                    "description": "Feature edit to test (default suppress).",
+                },
+                "strength_sweep": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "description": "Steering strengths to sweep; sign is inferred from mode.",
+                },
+                "target_tokens": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Target tokens or ['auto'] (default: shared behavior token set).",
+                },
+                "device": {"type": "string", "description": "Torch device (default cpu)."},
+                "max_length": {"type": "integer", "description": "Tokenizer max length (default 128)."},
+                "plan_out": _path_property("Optional JSON path for the intervention plan/manifest"),
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Default TRUE: plan only, no model load. Set false to execute.",
+                },
+            },
+            ["model", "dataset", "criterion", "out"],
+        ),
+        "handler": _tool_intervene,
+    },
+    {
+        "name": "train_sae",
+        "description": (
+            "Train an SAE from activation records ('records') or Hugging Face hidden "
+            "states ('hf_model' + 'dataset'). method=auto uses torch when installed and "
+            "falls back to the deterministic stdlib trainer otherwise; the HF path "
+            f"requires the [hf] extra. {_COMPACT_NOTE}"
+        ),
+        "inputSchema": _schema(
+            "SAE training parameters.",
+            {
+                "out": _path_property("Output SAE artifact JSON path"),
+                "records": _path_property("Activation-record JSONL to train from"),
+                "model": {"type": "string", "description": "Model name stamped into the artifact (records path)."},
+                "hf_model": {"type": "string", "description": "Hugging Face model to capture activations from."},
+                "dataset": _path_property("Prompt JSONL (required with hf_model)"),
+                "records_out": _path_property("Optional SAE-feature activation records output"),
+                "preset": {"type": "string", "description": "Training preset (default 'minimal')."},
+                "layer": {"type": "integer", "description": "Hidden-state layer to train on (hf_model path)."},
+                "latent_dim": {"type": "integer", "description": "Explicit latent dimension."},
+                "expansion_factor": {"type": "number", "description": "Latent dim as a multiple of input dim."},
+                "method": {
+                    "type": "string",
+                    "enum": ["auto", "torch", "fallback"],
+                    "description": "Trainer backend; auto falls back to stdlib without torch.",
+                },
+                "epochs": {"type": "integer", "description": "Training epochs."},
+                "seed": {"type": "integer", "description": "Random seed (default 0)."},
+                "device": {"type": "string", "description": "Torch device (default cpu)."},
+                "max_records": {"type": "integer", "description": "Cap on training records."},
+                "criterion": {"type": "string", "description": "Criterion for the optional causal sweep (hf_model path)."},
+                "causal_out": _path_property("Optional intervention-record output for the causal sweep"),
+            },
+            ["out"],
+        ),
+        "handler": _tool_train_sae,
     },
 ]
 

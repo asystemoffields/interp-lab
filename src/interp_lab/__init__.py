@@ -1,6 +1,6 @@
 """Public Python API for interp-lab."""
 
-__version__ = "2.3.0"
+__version__ = "3.0.0"
 
 from interp_lab.schema import (
     CandidateMatch,
@@ -21,6 +21,11 @@ from interp_lab.workflows import RunTemplateWriteResult
 from interp_lab.contracts import public_api_contract
 from interp_lab.reporting import load_inspection_report, load_match_report
 
+# DOSSIER_SCHEMA and write_dossier_markdown are importable conveniences; the
+# stable contract surface (__all__ / contracts.PUBLIC_API_EXPORTS) carries the
+# load/update/summary callables.
+from interp_lab.dossier import DOSSIER_SCHEMA, load_dossier, write_dossier_markdown
+
 from interp_lab.api import (
     FeatureInterventionResult,
     PathPatchResult,
@@ -33,9 +38,11 @@ from interp_lab.api import (
     WrittenMatch,
     WrittenMatchValidation,
     WrittenAnalysis,
+    apply_steering,
     attribution_graph,
     attribution_graph_summary,
     build_prompts,
+    calibrate,
     capabilities,
     check_explanation_consistency,
     compare,
@@ -45,19 +52,26 @@ from interp_lab.api import (
     criterion_lab_presets,
     demo_sweep,
     doctor,
+    dossier_summary,
+    export_steering_vector,
     inspect,
     intervene,
+    load_steering_artifact,
     match_text_pivot,
+    migrate_inspection_report,
     path_patch,
+    plan_evidence,
     prepare_sae_prompts,
     publish_hf_artifact,
     profile_environment,
+    quant_diff,
     release_check,
     run,
     scale_plan,
     scaffold_run,
     search_features,
     train_sae,
+    update_dossier,
     validate_attribution_graph,
     validate_criterion_assay,
     validate_hf_sae_paths,
@@ -89,9 +103,11 @@ __all__ = [
     "WrittenMatch",
     "WrittenMatchValidation",
     "WrittenAnalysis",
+    "apply_steering",
     "attribution_graph",
     "attribution_graph_summary",
     "build_prompts",
+    "calibrate",
     "capabilities",
     "check_explanation_consistency",
     "compare",
@@ -101,22 +117,30 @@ __all__ = [
     "criterion_lab_presets",
     "demo_sweep",
     "doctor",
+    "dossier_summary",
+    "export_steering_vector",
     "inspect",
     "intervene",
+    "load_dossier",
     "load_inspection_report",
     "load_match_report",
+    "load_steering_artifact",
     "match_text_pivot",
+    "migrate_inspection_report",
     "path_patch",
+    "plan_evidence",
     "prepare_sae_prompts",
     "public_api_contract",
     "publish_hf_artifact",
     "profile_environment",
+    "quant_diff",
     "release_check",
     "run",
     "scale_plan",
     "scaffold_run",
     "search_features",
     "train_sae",
+    "update_dossier",
     "validate_attribution_graph",
     "validate_criterion_assay",
     "validate_hf_sae_paths",

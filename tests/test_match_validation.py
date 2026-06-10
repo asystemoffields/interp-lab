@@ -47,6 +47,87 @@ def test_match_validation_grades_cross_model_equivalence_claims():
     assert "score_below_threshold" in by_pair[("L1:F4", "R3:F11")]["reason_codes"]
 
 
+def _opposite_signed_match(marker: str | None) -> CandidateMatch:
+    components = {
+        "text": 0.87,
+        "activation": 0.8,
+        "decoder": 0.7,
+        "causal": 0.76,
+        "signed_effect": 0.75,
+    }
+    if marker is not None:
+        components[marker] = 1.0
+    return CandidateMatch(
+        left_feature_id="L1:F3",
+        right_feature_id="R3:F10",
+        left_model="left/model",
+        right_model="right/model",
+        score=0.89,
+        components=components,
+        left_label="promotes criterion",
+        right_label="suppresses criterion",
+        left_signed_effect=0.14,
+        right_signed_effect=-0.11,
+    )
+
+
+def test_contradicted_requires_intervention_provenance():
+    # Intervention-marked opposite pair (the post-2.3 fixture shape): still contradicts.
+    report = build_match_validation_report(
+        MatchReport(
+            left_model="left/model",
+            right_model="right/model",
+            matches=[_opposite_signed_match("signed_effect_provenance_intervention")],
+        )
+    )
+    row = report["validations"][0]
+    assert row["status"] == "contradicted"
+    assert row["claim_grade"] == "contradicted_effect"
+    assert "signed_effect_direction_conflict" in row["reason_codes"]
+    assert "intervention-measured" in row["interpretation"]
+
+
+def test_association_only_opposite_pair_needs_causal_evidence():
+    # Opposite correlational signs with zero interventions: evidence against
+    # equivalence, but the causal claim is untested -- never "contradicted".
+    report = build_match_validation_report(
+        MatchReport(
+            left_model="left/model",
+            right_model="right/model",
+            matches=[_opposite_signed_match("signed_effect_provenance_association")],
+        )
+    )
+    assert report["summary"]["contradicted_count"] == 0
+    assert report["summary"]["needs_causal_evidence_count"] == 1
+    assert report["summary"]["overall_claim_grade"] == "causal_evidence_needed"
+    row = report["validations"][0]
+    assert row["status"] == "needs_causal_evidence"
+    assert row["claim_grade"] == "needs_more_evidence"
+    assert "opposite_associations_lack_intervention_provenance" in row["reason_codes"]
+    assert "signed_effect_direction_conflict" not in row["reason_codes"]
+    assert "opposite directions" in row["interpretation"]
+    assert "no interventions were run" in row["interpretation"]
+    assert "causal claim is untested" in row["interpretation"]
+    assert "interventions" in row["next_action"].lower()
+
+
+def test_legacy_unmarked_opposite_pair_cannot_contradict():
+    # Pre-provenance match reports carry no markers: same rule as "validated" --
+    # they cannot reach "contradicted" either.
+    report = build_match_validation_report(
+        MatchReport(
+            left_model="left/model",
+            right_model="right/model",
+            matches=[_opposite_signed_match(None)],
+        )
+    )
+    row = report["validations"][0]
+    assert row["status"] == "needs_causal_evidence"
+    assert row["claim_grade"] == "needs_more_evidence"
+    assert "opposite_associations_lack_intervention_provenance" in row["reason_codes"]
+    assert row["signed_effect_provenance"] is None
+
+
 def test_match_validation_markdown_and_export(tmp_path: Path):
     matches_path = tmp_path / "matches.json"
     matches_path.write_text(json.dumps(_match_report().to_dict()), encoding="utf-8")

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "interp-lab"
-version = "2.3.0"
+version = "3.0.0"
 description = "Criterion-driven feature discovery, explanation, causal testing, and cross-model activation matching."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -44,6 +44,7 @@ Documentation = "https://github.com/asystemoffields/interp-lab#readme"
 [project.optional-dependencies]
 dev = [
   "build>=1.2",
+  "hypothesis>=6.155",
   "pytest>=8.0",
   "twine>=6.0"
 ]

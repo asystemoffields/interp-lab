@@ -389,6 +389,101 @@ def build_run_template(
     raise ValueError("workflow must be one of: records, hf-records, sae, sae-paths")
 
 
+def quant_diff_workflow(
+    left_records: str | Path,
+    right_records: str | Path,
+    criterion: str,
+    out_dir: str | Path,
+    *,
+    model_left: str = "baseline",
+    model_right: str = "variant",
+    top_k: int = 8,
+) -> dict[str, Any]:
+    """Build an `interp-lab run` config that answers "which features did quantization break?".
+
+    Steps: inspect the baseline-precision records, inspect the quantized-variant
+    records (same criterion), match the two reports, validate the matches, then
+    emit the quant-diff verdicts. ``left_records``/``right_records`` are
+    activation-record JSONLs for the SAME model family at two precisions -- e.g.
+    from ``export-gguf-records`` (FP16 vs Q4 GGUF) or ``export-hf-records`` at two
+    dtypes. ``model_left``/``model_right`` label each side (e.g.
+    ``llama-3-8b-f16`` / ``llama-3-8b-q4_k_m``) and double as the quant-diff
+    side labels.
+    """
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    config: dict[str, Any] = {
+        "out": str(out_dir),
+        "steps": [],
+    }
+    left_report_path = "{run_dir}/baseline-report/report.json"
+    right_report_path = "{run_dir}/variant-report/report.json"
+    matches_path = "{run_dir}/matches.json"
+    match_validation_path = "{run_dir}/match-validation.json"
+    _add_inspect_step(
+        config,
+        name="inspect-baseline",
+        model=model_left,
+        criterion=criterion,
+        records=str(left_records),
+        interventions=None,
+        top_k=top_k,
+        out="{run_dir}/baseline-report",
+    )
+    _add_inspect_step(
+        config,
+        name="inspect-variant",
+        model=model_right,
+        criterion=criterion,
+        records=str(right_records),
+        interventions=None,
+        top_k=top_k,
+        out="{run_dir}/variant-report",
+    )
+    config["steps"].append(
+        {
+            "name": "match",
+            "command": "match",
+            "args": {
+                "left": left_report_path,
+                "right": right_report_path,
+                # Keep every candidate pair: quant-diff picks the best acceptable
+                # match per baseline feature, so a tight top-k cut here would turn
+                # surviving features into "lost".
+                "top_k": top_k * top_k,
+                "out": matches_path,
+            },
+        }
+    )
+    config["steps"].append(
+        {
+            "name": "validate-matches",
+            "command": "validate-matches",
+            "args": {
+                "matches": matches_path,
+                "out": match_validation_path,
+            },
+        }
+    )
+    config["steps"].append(
+        {
+            "name": "quant-diff",
+            "command": "quant-diff",
+            "args": {
+                "left_report": left_report_path,
+                "right_report": right_report_path,
+                "matches": matches_path,
+                "match_validation": match_validation_path,
+                "left_label": model_left,
+                "right_label": model_right,
+                "out": "{run_dir}/quant-diff.json",
+                "markdown_out": "{run_dir}/quant-diff.md",
+            },
+        }
+    )
+    return config
+
+
 def write_run_template(
     *,
     out: str | Path,

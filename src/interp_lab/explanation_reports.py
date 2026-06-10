@@ -5,7 +5,6 @@ import html
 import itertools
 import json
 import math
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -351,13 +350,6 @@ def build_feature_search_report(
                     "causal_effect": card.causal_effect,
                     "source": card.source,
                     "matched_terms": sorted(set(content_tokens(query)) & set(content_tokens(_card_search_text(card)))),
-                    # Legacy flat keys kept for one release; prefer agent_next_actions.
-                    "agent_next_action": (
-                        f"Run interp-lab {_format_command(intervene_argv)} "
-                        "(fill the <placeholders>) to test amplification or suppression."
-                    ),
-                    "agent_next_action_argv": intervene_argv,
-                    "agent_next_action_requires": ["scored causal prompt JSONL"],
                     "agent_next_actions": [
                         next_action(
                             action_id="plan_feature_intervention",
@@ -973,18 +965,6 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
         "evidence_grade": _text_pivot_grade(components, min_text_score=min_text_score),
         "text_pivot_source": text_source,
         "matched_terms": sorted(set(content_tokens(_card_search_text(left))) & set(content_tokens(_card_search_text(right)))),
-        # Legacy flat keys kept for one release; prefer agent_next_actions.
-        "agent_next_action": (
-            f"Validate with interp-lab match --left {left_item['path']} --right {right_item['path']} "
-            "followed by interp-lab validate-matches."
-        ),
-        "agent_next_action_argv": [
-            "match",
-            "--left",
-            left_item["path"],
-            "--right",
-            right_item["path"],
-        ],
         "agent_next_actions": [
             next_action(
                 action_id="validate_text_pivot_pair",
@@ -993,10 +973,6 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
             )
         ],
     }
-
-
-def _format_command(argv: list[str]) -> str:
-    return " ".join(shlex.quote(str(item)) for item in argv)
 
 
 def _card_search_text(card: FeatureCard) -> str:
@@ -1199,15 +1175,8 @@ def _family_pair_summaries(pairwise: list[dict[str, Any]]) -> list[dict[str, Any
 
 
 def _prose_action(action_id: str, title: str, instruction: str) -> dict[str, str]:
-    """Canonical prose-only action plus the legacy ``description`` key.
-
-    ``description`` is kept for one release for pre-2.3 consumers; prefer
-    ``instruction``.
-    """
-    return {
-        **next_action(action_id=action_id, title=title, instruction=instruction),
-        "description": instruction,
-    }
+    """Build a canonical prose-only action (since 3.0.0: no legacy ``description``)."""
+    return next_action(action_id=action_id, title=title, instruction=instruction)
 
 
 def _consistency_actions(summary: dict[str, Any]) -> list[dict[str, str]]:

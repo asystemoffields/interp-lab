@@ -1,0 +1,61 @@
+{
+  "out": "reports/quant-diff/${name}",
+  "steps": [
+    {
+      "args": {
+        "backend": "records",
+        "criterion": "${criterion}",
+        "model": "baseline",
+        "out": "{run_dir}/baseline-report",
+        "records": "${left_records}",
+        "top_k": 8
+      },
+      "command": "inspect",
+      "name": "inspect-baseline"
+    },
+    {
+      "args": {
+        "backend": "records",
+        "criterion": "${criterion}",
+        "model": "variant",
+        "out": "{run_dir}/variant-report",
+        "records": "${right_records}",
+        "top_k": 8
+      },
+      "command": "inspect",
+      "name": "inspect-variant"
+    },
+    {
+      "args": {
+        "left": "{run_dir}/baseline-report/report.json",
+        "out": "{run_dir}/matches.json",
+        "right": "{run_dir}/variant-report/report.json",
+        "top_k": 64
+      },
+      "command": "match",
+      "name": "match"
+    },
+    {
+      "args": {
+        "matches": "{run_dir}/matches.json",
+        "out": "{run_dir}/match-validation.json"
+      },
+      "command": "validate-matches",
+      "name": "validate-matches"
+    },
+    {
+      "args": {
+        "left_label": "baseline",
+        "left_report": "{run_dir}/baseline-report/report.json",
+        "markdown_out": "{run_dir}/quant-diff.md",
+        "match_validation": "{run_dir}/match-validation.json",
+        "matches": "{run_dir}/matches.json",
+        "out": "{run_dir}/quant-diff.json",
+        "right_label": "variant",
+        "right_report": "{run_dir}/variant-report/report.json"
+      },
+      "command": "quant-diff",
+      "name": "quant-diff"
+    }
+  ]
+}

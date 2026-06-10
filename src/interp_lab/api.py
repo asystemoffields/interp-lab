@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,12 @@ from interp_lab.adapters.saelens import (
 )
 from interp_lab.adapters.scope import ScopeFeatureProvider
 from interp_lab.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
+from interp_lab.calibration import (
+    CalibrationWriteResult,
+    export_calibration_report,
+    render_calibration_markdown,
+    run_calibration,
+)
 from interp_lab.capabilities import build_capabilities
 from interp_lab.cli import main as _cli_main
 from interp_lab.criterion_lab import (
@@ -34,7 +41,14 @@ from interp_lab.criterion_lab import (
 )
 from interp_lab.demo_sweep import build_demo_sweep_report
 from interp_lab.doctor import collect_diagnostics
+from interp_lab.dossier import (
+    dossier_summary as _dossier_summary,
+    load_dossier,
+    update_dossier as _update_dossier,
+    write_dossier_markdown,
+)
 from interp_lab.env_profile import collect_environment_profile, load_environment_profile
+from interp_lab.evidence_planner import export_evidence_plan
 from interp_lab.explanation_reports import (
     WrittenJsonMarkdown,
     build_explanation_consistency_report,
@@ -87,6 +101,7 @@ from interp_lab.match_validation import (
     write_match_validation_html,
 )
 from interp_lab.pipeline import inspect_model, match_reports
+from interp_lab.quant_diff import build_quant_diff, render_quant_diff_markdown
 from interp_lab.reporting import (
     load_inspection_report,
     load_match_report,
@@ -672,6 +687,262 @@ def compare_runs(
     from interp_lab.run_diff import export_run_diff_report
 
     return export_run_diff_report(left=left, right=right, out=out, markdown_out=markdown_out)
+
+
+def plan_evidence(
+    report: "InspectionReport | WrittenInspection | dict[str, Any] | str | Path",
+    *,
+    out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+    top_k: int | None = None,
+    confidence: float = 0.95,
+) -> "dict[str, Any] | WrittenAnalysis":
+    """Diagnose a report's evidence gaps and rank the cheapest grade-moving interventions.
+
+    Per feature card, the plan names what is missing (causal evidence, signed effect,
+    sign stability, statistical power, controls), the recommended intervention sample
+    size at ``confidence``, and ready-to-run next actions. With ``out`` set the plan is
+    written as JSON plus a sibling Markdown summary; otherwise the plan dict is returned.
+    """
+    if isinstance(report, WrittenInspection):
+        report = report.report
+    return export_evidence_plan(
+        report,
+        out=out,
+        markdown_out=markdown_out,
+        top_k=top_k,
+        confidence=confidence,
+    )
+
+
+def update_dossier(
+    *,
+    dossier: str | Path,
+    report: "InspectionReport | WrittenInspection | str | Path",
+    matches: str | Path | None = None,
+    match_validation: str | Path | None = None,
+    graph_validation: str | Path | None = None,
+    note: str | None = None,
+) -> dict[str, Any]:
+    """Append an inspection run to the cumulative (model, criterion) dossier at ``dossier``.
+
+    Creates the dossier when absent; rejects reports whose (model, criterion) identity
+    does not match. Optional ``matches`` / ``match_validation`` / ``graph_validation``
+    artifact paths are hashed, summarized, and folded into the per-feature claim grades.
+    Returns the full updated dossier dict (also rewritten atomically on disk).
+    """
+    if isinstance(report, WrittenInspection):
+        report = report.json_path
+    return _update_dossier(
+        dossier,
+        report,
+        matches=matches,
+        match_validation=match_validation,
+        graph_validation=graph_validation,
+        note=note,
+    )
+
+
+def dossier_summary(
+    *,
+    dossier: str | Path | dict[str, Any],
+    markdown_out: str | Path | None = None,
+) -> dict[str, Any]:
+    """Return the compact rollup summary of a dossier (path or loaded dict).
+
+    With ``markdown_out`` set, the full dossier Markdown rendering is also written.
+    """
+    data = dossier if isinstance(dossier, dict) else load_dossier(dossier)
+    if markdown_out is not None:
+        write_dossier_markdown(data, markdown_out)
+    return _dossier_summary(data)
+
+
+def calibrate(
+    out: str | Path | None = None,
+    *,
+    markdown_out: str | Path | None = None,
+    work_dir: str | Path | None = None,
+    seeds: "int | list[int]" = 5,
+    features: int = 24,
+    causal: int = 6,
+    decoys: int | None = None,
+    prompts: int = 64,
+    noise: float = 0.3,
+    min_abs_effect: float = 0.05,
+) -> "dict[str, Any] | CalibrationWriteResult":
+    """Audit interp-lab's own claim grading against planted synthetic ground truth.
+
+    Generates planted worlds (truly causal features, correlational decoys, noise), runs
+    the REAL records + interventions pipeline over them, and reports discovery
+    precision/recall, decoy resistance, P(truly causal | tier), and effect rank
+    correlation. With ``out`` set the report is written as JSON plus Markdown and a
+    ``CalibrationWriteResult`` is returned; otherwise the report dict is returned.
+    World artifacts go to ``work_dir`` (or a temporary directory).
+    """
+    world_kwargs = {
+        "n_features": features,
+        "n_causal": causal,
+        "n_decoys": decoys,
+        "n_prompts": prompts,
+        "noise": noise,
+    }
+    if out is not None:
+        return export_calibration_report(
+            out,
+            markdown_out,
+            work_dir=work_dir,
+            seeds=seeds,
+            min_abs_effect=min_abs_effect,
+            **world_kwargs,
+        )
+    if work_dir is not None:
+        report = run_calibration(
+            work_dir, seeds=seeds, min_abs_effect=min_abs_effect, **world_kwargs
+        )
+    else:
+        with tempfile.TemporaryDirectory(prefix="interp-lab-calibration-") as tmp:
+            report = run_calibration(
+                tmp, seeds=seeds, min_abs_effect=min_abs_effect, **world_kwargs
+            )
+    if markdown_out is not None:
+        markdown_path = Path(markdown_out)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(render_calibration_markdown(report), encoding="utf-8")
+    return report
+
+
+def quant_diff(
+    left: "InspectionReport | WrittenInspection | str | Path",
+    right: "InspectionReport | WrittenInspection | str | Path",
+    *,
+    out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+    matches: "MatchReport | WrittenMatch | str | Path | None" = None,
+    match_validation: "dict[str, Any] | str | Path | None" = None,
+    left_label: str = "baseline",
+    right_label: str = "variant",
+) -> dict[str, Any]:
+    """Which validated features did quantization break?
+
+    ``left`` is the higher-precision baseline report, ``right`` the quantized variant
+    (same criterion). When ``matches`` / ``match_validation`` artifacts are omitted they
+    are computed in-process with the real matching and validation machinery. With
+    ``out`` set the diff is written as JSON plus Markdown; the report dict is returned
+    either way.
+    """
+    if isinstance(matches, WrittenMatch):
+        matches = matches.report
+    elif isinstance(matches, (str, Path)):
+        matches = load_match_report(matches)
+    if isinstance(match_validation, (str, Path)):
+        match_validation = json.loads(Path(match_validation).read_text(encoding="utf-8"))
+    report = build_quant_diff(
+        _load_report(left),
+        _load_report(right),
+        matches=matches,
+        match_validation=match_validation,
+        left_label=left_label,
+        right_label=right_label,
+    )
+    if out is None:
+        if markdown_out is not None:
+            markdown_path = Path(markdown_out)
+            markdown_path.parent.mkdir(parents=True, exist_ok=True)
+            markdown_path.write_text(render_quant_diff_markdown(report), encoding="utf-8")
+        return report
+    json_path = Path(out)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    markdown_path = Path(markdown_out) if markdown_out is not None else json_path.with_suffix(".md")
+    markdown_path.parent.mkdir(parents=True, exist_ok=True)
+    markdown_path.write_text(render_quant_diff_markdown(report), encoding="utf-8")
+    return report
+
+
+def export_steering_vector(
+    report: "InspectionReport | WrittenInspection | str | Path",
+    feature_id: str,
+    *,
+    sae: "dict[str, Any] | str | Path | None" = None,
+    out: str | Path,
+    strength: float | None = None,
+    allow_unvalidated: bool = False,
+) -> dict[str, Any]:
+    """Export one report feature as a reusable steering-vector artifact.
+
+    Refuses cards without intervention-measured evidence unless
+    ``allow_unvalidated`` is set, in which case the artifact is stamped
+    ``provenance: "unvalidated"`` so downstream consumers cannot mistake it for
+    a validated steering direction.
+    """
+    from interp_lab.steering import export_steering_vector as _export
+
+    if isinstance(report, WrittenInspection):
+        report = report.report
+    return _export(
+        report,
+        feature_id,
+        sae=sae,
+        out=out,
+        strength=strength,
+        allow_unvalidated=allow_unvalidated,
+    )
+
+
+def apply_steering(
+    artifact: "dict[str, Any] | str | Path",
+    *,
+    prompts: "list[str] | str | Path",
+    out: str | Path,
+    strength: float | None = None,
+    max_new_tokens: int = 32,
+    model_loader=None,
+    generate_fn=None,
+) -> dict[str, Any]:
+    """Generate baseline vs steered continuations from a steering artifact.
+
+    The default path loads the artifact's model via the ``[hf]`` extra and routes
+    the direction through the existing hidden-steering hooks; ``model_loader`` /
+    ``generate_fn`` are injectable seams for custom runtimes.
+    """
+    from interp_lab.steering import apply_steering as _apply
+
+    return _apply(
+        artifact,
+        prompts=prompts,
+        out=out,
+        strength=strength,
+        max_new_tokens=max_new_tokens,
+        model_loader=model_loader,
+        generate_fn=generate_fn,
+    )
+
+
+def load_steering_artifact(artifact: "dict[str, Any] | str | Path") -> dict[str, Any]:
+    """Load and schema-check a steering-vector artifact."""
+    from interp_lab.steering import load_steering_artifact as _load
+
+    return _load(artifact)
+
+
+def migrate_inspection_report(
+    report: "InspectionReport | WrittenInspection | dict[str, Any] | str | Path",
+    *,
+    out: str | Path | None = None,
+) -> dict[str, Any]:
+    """Re-score an older inspection report under current scoring semantics.
+
+    Pre-2.3 reports whose ``criterion`` key was counted as causal without
+    intervention provenance re-score to ``causal_effect = 0.0`` and re-rank; the
+    changes are recorded under ``metadata.migration`` (per-field score deltas,
+    reorder flag) and per-card ``migration_notes``.
+    """
+    from interp_lab.migrate_report import migrate_inspection_report as _migrate
+
+    if isinstance(report, WrittenInspection):
+        report = report.report
+    return _migrate(report, out=out)
 
 
 def compare(

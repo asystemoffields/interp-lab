@@ -45,7 +45,7 @@ Serve interp-lab tools over the Model Context Protocol:
 interp-lab mcp
 ```
 
-The MCP server speaks newline-delimited JSON-RPC 2.0 over stdio (one JSON object per line; diagnostics on stderr only) and exposes tools wrapping the Python API -- `capabilities`, `doctor`, `inspect`, `compare`, `validate_matches`, `search_features`, `compare_runs`, `check_explanation_consistency`, `attribution_graph`, and `validate_attribution_graph` -- plus the project docs as `interp-lab://docs/<name>` resources. Tools that produce large artifacts require an `out` path and return a compact summary plus the written paths; tool-level failures come back as results with `isError: true` rather than protocol errors.
+The MCP server speaks newline-delimited JSON-RPC 2.0 over stdio (one JSON object per line; diagnostics on stderr only) and exposes tools wrapping the Python API -- `capabilities`, `doctor`, `inspect`, `compare`, `validate_matches`, `search_features`, `compare_runs`, `check_explanation_consistency`, `attribution_graph`, `validate_attribution_graph`, `plan_evidence`, `dossier_update`, `dossier_show`, `quant_diff`, `calibrate`, `migrate_report`, `export_steering`, `intervene` (dry-run by default: it plans without loading a model), and `train_sae` -- plus the project docs as `interp-lab://docs/<name>` resources. `apply-steering` is deliberately not served: generating text from arbitrary models is a host-agent decision; use the CLI once made. Tools that produce large artifacts require an `out` path and return a compact summary plus the written paths; tool-level failures (including missing optional extras like `[hf]`) come back as results with `isError: true` rather than protocol errors.
 
 Check stable-release readiness:
 
@@ -172,6 +172,52 @@ interp-lab compare-runs \
 ```
 
 `--left` is the baseline and `--right` the candidate. The diff reports rank stability, per-score deltas for shared features (sorted by the biggest importance moves), and which features appeared or dropped out, with a plain-language interpretation. It writes JSON plus a sibling `.md`; omit `--out` to print the JSON. From Python: `interp_lab.compare_runs(left, right, out=...)`.
+
+Diff a baseline report against a quantized variant of the same model family:
+
+```bash
+interp-lab quant-diff \
+  --left-report reports/f16/report.json \
+  --right-report reports/q4/report.json \
+  --left-label f16 --right-label q4_k_m \
+  --out reports/quant-diff.json
+```
+
+`quant-diff` (`schema_version: interp-lab.quant_diff.v1`) answers the question mixed-precision quantization work cares about: which features survived, which degraded, which disappeared, and which appeared from nowhere. Both reports must inspect the SAME criterion; model ids may differ (that is the point). Per matched pair it issues a verdict — `preserved`, `degraded`, `preserved_correlational`, `changed_correlational`, plus `lost` / `emerged` for unmatched features — with provenance discipline: signed effects are only compared at the same provenance, and a correlational-only baseline pair can never land in `degraded_validated`. Omit `--matches` / `--match-validation` and the pairing and grading are computed in-process with the real matching and match-validation machinery. The Markdown opens with the "Features broken by quantization" table. Omit `--out` to print the JSON. From Python: `interp_lab.quant_diff(left, right, out=...)`; `interp_lab.workflows.quant_diff_workflow(...)` builds the full inspect → match → validate → diff run config. See `docs/QUANT_DIFF.md` for the end-to-end GGUF/PMRA walkthrough.
+
+Plan the cheapest evidence-gathering path from a report:
+
+```bash
+interp-lab plan-evidence \
+  --report reports/eval-awareness/report.json \
+  --out reports/eval-awareness/evidence-plan.json
+```
+
+The plan (`schema_version: interp-lab.evidence_plan.v1`) diagnoses each feature card's evidence gaps against the same grading semantics the validation layers use — `no_causal_evidence`, `no_signed_effect`, `sign_inconsistency`, `insufficient_power`, `no_controls` — then ranks the interventions that would most cheaply move each card's claim grade toward `validated`. The recommended intervention count comes from the same Student-t machinery every reported CI uses (smallest `n` whose two-sided CI at `--confidence` excludes zero). Power-analysis honesty: when a card carries only a correlational association, that value may seed the power calculation as a prior, but it is labeled `effect_size_source: "association_prior"` everywhere — never presented as a measurement. Each entry carries ready-to-run `intervene` next actions. Writes JSON plus a sibling `.md`; omit `--out` to print the JSON (with `--out --json`, stdout stays pure JSON and confirmations go to stderr). From Python: `interp_lab.plan_evidence(report, out=...)`.
+
+Keep a cumulative evidence dossier for one (model, criterion) across runs:
+
+```bash
+interp-lab dossier-update \
+  --dossier reports/eval-awareness/dossier.json \
+  --report reports/eval-awareness/report.json \
+  --match-validation reports/match-validation.json \
+  --note "after adding control interventions"
+
+interp-lab dossier-show \
+  --dossier reports/eval-awareness/dossier.json \
+  --markdown-out reports/eval-awareness/dossier.md
+```
+
+A dossier (`schema_version: interp-lab.dossier.v1`) is a persistent JSON artifact keyed on (model, criterion); each `dossier-update` appends a run entry (created when absent, identity-checked on append, rewritten atomically) and recomputes a rollup of grade transitions, score drift, sign flips, and contradictions across runs. Attached `--matches` / `--match-validation` / `--graph-validation` artifacts are hashed and summarized, and match-validation claim grades feed each feature's standing on one evidence ladder. Provenance discipline: an intervention-measured effect is never compared against a correlational association — such a pair is a provenance change, not a contradiction; only an intervention-vs-intervention sign flip raises the contradiction flag. `dossier-show` prints the per-feature standing (`--json` for the full dossier, stdout machine-pure). From Python: `interp_lab.update_dossier(dossier=..., report=...)`, `interp_lab.dossier_summary(dossier=...)`, `interp_lab.load_dossier(...)`.
+
+Measure interp-lab's own grading honesty against planted ground truth:
+
+```bash
+interp-lab calibrate --out reports/calibration.json
+```
+
+`calibrate` (`schema_version: interp-lab.calibration_report.v1`) generates synthetic worlds with planted causal structure — truly causal features, correlational decoys whose activations correlate just as strongly, and noise — runs the REAL records + interventions pipeline over the blind artifacts, and reports how well the verdicts track the planted truth: discovery precision/recall@k, decoy resistance, P(truly causal | evidence tier) with Wilson CIs, and the planted-vs-reported effect rank correlation, plus an overall verdict (`well_calibrated`, `overclaims_causality`, `underpowered_or_misranked`). World sizes are tunable (`--seeds`, `--features`, `--causal`, `--decoys`, `--prompts`, `--noise`); artifacts go to `--work-dir` or a temporary directory. Honest caveat, embedded in every report: synthetic worlds certify the grading machinery, not the toolkit's behavior on messy real activations. Omit `--out` to print the JSON. From Python: `interp_lab.calibrate(out=...)`.
 
 Create a demo run:
 
@@ -328,6 +374,30 @@ interp-lab export-nnsight-records \
   --out reports/nnsight/gpt2-layer6-records.jsonl
 ```
 
+Export activation records from a GGUF model via llama.cpp (CPU-friendly, no torch):
+
+```bash
+python -m pip install "interp-lab[gguf]"
+
+interp-lab export-gguf-records \
+  --model models/smollm2-135m.Q8_0.gguf \
+  --dataset prompts/eval-awareness.jsonl \
+  --out reports/gguf/smollm2-135m/records.jsonl \
+  --top-features 64
+```
+
+Honest limitation: llama.cpp's embedding API only exposes the FINAL hidden state (post final norm), so every record is stamped `"layers_available": "final_only"` and feature ids follow the HF hidden-state convention (`L<n_layers>:D<dim>`). Dimensions are ranked by activation variance across prompts and the top `--top-features` kept; pass `--n-layers` when the GGUF metadata lacks a block count, and `--model-name` so the record model string matches `inspect --model`. For intermediate layers, dump hidden states from any runtime (a patched llama.cpp, a custom GGML harness, ten lines of Python) in the documented `interp-lab.hidden_state_dump.v1` JSONL format and convert them:
+
+```bash
+interp-lab convert-hidden-dump \
+  --dump reports/gguf/parcae-140m/dump.jsonl \
+  --dataset prompts/eval-awareness.jsonl \
+  --out reports/gguf/parcae-140m/records.jsonl \
+  --features-per-layer 64
+```
+
+Every layer the runtime dumps becomes a record layer, stamped with `--layer-convention` so cross-tool layer comparisons stay honest (`--features-per-layer 0` keeps every dimension). Both paths emit the existing activation-records format — no new schema — and re-validate their output through the real records loader before returning, so the result feeds `inspect --backend records` directly. Add `--json` for a machine-pure summary (record/feature/layer counts). See `docs/GGUF_BRIDGE.md` for the dump format spec and worked examples.
+
 Export ablation records for top hidden-dimension features:
 
 ```bash
@@ -480,6 +550,32 @@ interp-lab validate-attribution-graph \
 ```
 
 This writes JSON and Markdown summaries with effect sizes, control comparisons, sign consistency, confidence intervals, path status, claim grade, validation reason codes, run-level `agent_next_actions`, and a next action for each path. `--graph-out` writes a copy of the attribution graph with validation attached to matching path edges and candidate paths, plus `validated-graph.md` and `validated-graph.html` digests by default.
+
+Export an intervention-validated feature as a reusable steering-vector artifact, then generate baseline-vs-steered continuations from it:
+
+```bash
+interp-lab export-steering \
+  --report reports/eval-awareness/report.json \
+  --feature SAE:L6:F30 \
+  --sae reports/sae-layer6/sae.json \
+  --out steering/eval-f30.json
+
+interp-lab apply-steering \
+  --artifact steering/eval-f30.json \
+  --prompts prompts/eval-probes.jsonl \
+  --out steering/generations.jsonl \
+  --strength 8 --max-new-tokens 32
+```
+
+`export-steering` (`schema_version: interp-lab.steering_vector.v1`) resolves the direction from the SAE decoder row (`SAE:L*:F*`) or a hidden dimension (`L*:D*`) and refuses cards without intervention-measured evidence — pass `--allow-unvalidated` to export anyway, which stamps the artifact `provenance: "unvalidated"` so it can never be mistaken for a validated direction. `apply-steering` routes the artifact through the existing hidden-steering hooks (`[hf]` extra) and writes baseline/steered pairs as JSONL (`interp-lab.steering_generation.v1`). From Python: `interp_lab.export_steering_vector(...)` / `interp_lab.apply_steering(...)`.
+
+Re-score an older inspection report under current scoring semantics:
+
+```bash
+interp-lab migrate-report --report old-runs/report.json --out old-runs/migrated
+```
+
+Pre-2.3 reports counted correlational evidence on the causal axis; `migrate-report` re-runs the current scoring over each card's stored evidence, re-ranks, and records exactly what changed under `metadata.migration` (per-field score deltas, reorder flag) plus per-card `migration_notes` for anything that could not be recomputed from the serialized card. Useful before diffing old runs against new ones with `compare-runs` so score shifts reflect the model, not the scorer. From Python: `interp_lab.migrate_inspection_report(...)`.
 
 Rerun the graph's top SAE paths on held-out prompts and validate them in one step:
 

@@ -1329,3 +1329,213 @@ def test_init_run_scaffolds_sae_path_workflow(tmp_path: Path, capsys):
     assert "interp-lab export-hf-sae-paths" in dry_run
     assert "interp-lab validate-hf-sae-paths" in dry_run
     assert "interp-lab summarize-attribution-graph" in dry_run
+
+
+# --- investigation commands (plan-evidence, dossier-*, calibrate, quant-diff) ---
+
+
+CRITERION = "the model is aware it is being evaluated"
+
+
+def _toy_report(tmp_path: Path, name: str, *, model: str = "toy/a") -> Path:
+    out = tmp_path / name
+    assert main(
+        ["inspect", "--model", model, "--criterion", CRITERION, "--backend", "toy", "--out", str(out)]
+    ) == 0
+    return out / "report.json"
+
+
+def test_plan_evidence_command_writes_plan_and_markdown(tmp_path: Path, capsys):
+    report = _toy_report(tmp_path, "report")
+    capsys.readouterr()
+    out = tmp_path / "plan.json"
+
+    assert main(["plan-evidence", "--report", str(report), "--out", str(out)]) == 0
+
+    captured = capsys.readouterr()
+    plan = json.loads(out.read_text(encoding="utf-8"))
+    assert plan["schema_version"] == "interp-lab.evidence_plan.v1"
+    assert plan["criterion"] == CRITERION
+    assert plan["plan"]
+    assert out.with_suffix(".md").exists()
+    assert f"Wrote {out}" in captured.out
+
+
+def test_plan_evidence_json_keeps_stdout_pure(tmp_path: Path, capsys):
+    report = _toy_report(tmp_path, "report")
+    capsys.readouterr()
+    out = tmp_path / "plan.json"
+
+    assert main(["plan-evidence", "--report", str(report), "--out", str(out), "--json"]) == 0
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)  # stdout stays machine-pure
+    assert payload["schema_version"] == "interp-lab.evidence_plan.v1"
+    assert f"Wrote {out}" in captured.err
+
+
+def test_plan_evidence_without_out_prints_plan_json(tmp_path: Path, capsys):
+    report = _toy_report(tmp_path, "report")
+    capsys.readouterr()
+
+    assert main(["plan-evidence", "--report", str(report)]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "interp-lab.evidence_plan.v1"
+
+
+def test_dossier_update_and_show_commands(tmp_path: Path, capsys):
+    report = _toy_report(tmp_path, "report")
+    capsys.readouterr()
+    dossier = tmp_path / "dossier.json"
+
+    assert main(
+        ["dossier-update", "--dossier", str(dossier), "--report", str(report), "--note", "first run"]
+    ) == 0
+
+    out = capsys.readouterr().out
+    assert f"Wrote {dossier}" in out
+    assert "Features tracked:" in out
+    data = json.loads(dossier.read_text(encoding="utf-8"))
+    assert data["schema_version"] == "interp-lab.dossier.v1"
+    assert data["model"] == "toy/a"
+    assert len(data["runs"]) == 1
+    assert data["runs"][0]["note"] == "first run"
+
+    markdown = tmp_path / "dossier.md"
+    assert main(["dossier-show", "--dossier", str(dossier), "--markdown-out", str(markdown)]) == 0
+    out = capsys.readouterr().out
+    assert "Features tracked:" in out
+    assert f"Wrote {markdown}" in out
+    assert "# interp-lab Criterion Dossier" in markdown.read_text(encoding="utf-8")
+
+
+def test_dossier_show_json_keeps_stdout_pure(tmp_path: Path, capsys):
+    report = _toy_report(tmp_path, "report")
+    dossier = tmp_path / "dossier.json"
+    assert main(["dossier-update", "--dossier", str(dossier), "--report", str(report)]) == 0
+    capsys.readouterr()
+
+    assert main(["dossier-show", "--dossier", str(dossier), "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "interp-lab.dossier.v1"
+    assert payload["summary"]["run_count"] == 1
+
+
+def test_calibrate_command_json_keeps_stdout_pure(tmp_path: Path, capsys):
+    out = tmp_path / "calibration.json"
+
+    assert main(
+        [
+            "calibrate",
+            "--seeds", "1",
+            "--features", "6",
+            "--causal", "2",
+            "--decoys", "2",
+            "--prompts", "16",
+            "--work-dir", str(tmp_path / "worlds"),
+            "--out", str(out),
+            "--json",
+        ]
+    ) == 0
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)  # stdout stays machine-pure
+    assert payload["schema_version"] == "interp-lab.calibration_report.v1"
+    assert payload["assessment"]["verdict"]
+    assert f"Wrote {out}" in captured.err
+    assert out.with_suffix(".md").exists()
+    # The planted-world artifacts land in --work-dir for inspection.
+    assert (tmp_path / "worlds" / "seed-0" / "activation_records.jsonl").exists()
+
+
+def test_quant_diff_command_writes_report_and_markdown(tmp_path: Path, capsys):
+    left = _toy_report(tmp_path, "left", model="toy/model-f16")
+    right = _toy_report(tmp_path, "right", model="toy/model-q4")
+    capsys.readouterr()
+    out = tmp_path / "quant-diff.json"
+
+    assert main(
+        [
+            "quant-diff",
+            "--left-report", str(left),
+            "--right-report", str(right),
+            "--left-label", "f16",
+            "--right-label", "q4_k_m",
+            "--out", str(out),
+        ]
+    ) == 0
+
+    captured = capsys.readouterr()
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["schema_version"] == "interp-lab.quant_diff.v1"
+    assert data["left"]["label"] == "f16"
+    assert data["right"]["label"] == "q4_k_m"
+    assert out.with_suffix(".md").exists()
+    assert f"Wrote {out}" in captured.out
+
+
+# --- GGUF bridge commands (export-gguf-records, convert-hidden-dump) ---------
+
+
+def test_export_gguf_records_command_with_fake_llama(tmp_path: Path, capsys, monkeypatch):
+    dataset = tmp_path / "prompts.jsonl"
+    rows = [
+        {"prompt_id": "pos-1", "text": "an evaluation-looking prompt", "criterion_score": 1.0},
+        {"prompt_id": "neg-1", "text": "an ordinary user request", "criterion_score": 0.0},
+    ]
+    dataset.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    class _FakeLlama:
+        def n_layer(self):
+            return 4
+
+        def embed(self, text):
+            return [[1.0, 0.0]] if "evaluation" in text else [[0.0, 1.0]]
+
+    monkeypatch.setattr(
+        "interp_lab.gguf_records._load_llama",
+        lambda model_path, *, n_ctx, n_threads: _FakeLlama(),
+    )
+    out = tmp_path / "records.jsonl"
+
+    assert main(
+        [
+            "export-gguf-records",
+            "--model", str(tmp_path / "m.gguf"),
+            "--dataset", str(dataset),
+            "--out", str(out),
+            "--top-features", "2",
+        ]
+    ) == 0
+
+    assert f"Wrote {out}" in capsys.readouterr().out
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 2
+    assert {feature["feature_id"] for feature in rows[0]["features"]} == {"L4:D0", "L4:D1"}
+    assert rows[0]["metadata"]["layers_available"] == "final_only"
+
+
+def test_convert_hidden_dump_command_json_summary(tmp_path: Path, capsys):
+    dump = tmp_path / "dump.jsonl"
+    lines = [
+        {"prompt_index": 0, "layer": 1, "hidden": [1.0, 0.0], "text": "a", "criterion_score": 1.0},
+        {"prompt_index": 0, "layer": 2, "hidden": [0.5, 0.5], "text": "a", "criterion_score": 1.0},
+        {"prompt_index": 1, "layer": 1, "hidden": [0.0, 1.0], "text": "b", "criterion_score": 0.0},
+        {"prompt_index": 1, "layer": 2, "hidden": [0.2, 0.8], "text": "b", "criterion_score": 0.0},
+    ]
+    dump.write_text("\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
+    out = tmp_path / "records.jsonl"
+
+    assert main(
+        ["convert-hidden-dump", "--dump", str(dump), "--out", str(out), "--model-name", "m", "--json"]
+    ) == 0
+
+    summary = json.loads(capsys.readouterr().out)  # --json: stdout is the summary only
+    assert summary["out"] == str(out)
+    assert summary["record_count"] == 2
+    assert summary["layers"] == [1, 2]
+    assert summary["source"] == "hidden_state_dump"
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert rows[0]["model"] == "m"

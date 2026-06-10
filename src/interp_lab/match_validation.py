@@ -595,7 +595,15 @@ def _match_status(
     intervention_signed_effects: bool,
 ) -> str:
     if direction_conflict:
-        return "contradicted"
+        # "contradicted" is a causal claim too: opposite signed effects only refute
+        # causal equivalence when both sides are intervention-measured. Opposite
+        # correlational signed associations (or legacy reports without provenance
+        # markers) are evidence against equivalence but leave the causal claim
+        # untested, so they route to needs_causal_evidence -- the same provenance
+        # rule the "validated" gate applies.
+        if intervention_signed_effects:
+            return "contradicted"
+        return "needs_causal_evidence"
     if not score_pass:
         return "weak"
     if (
@@ -652,7 +660,12 @@ def _match_reason_codes(
         else:
             reasons.append("signed_effects_below_threshold")
     elif same_effect_direction is False:
-        reasons.append("signed_effect_direction_conflict")
+        if signed_effect_provenance == "intervention":
+            reasons.append("signed_effect_direction_conflict")
+        else:
+            # Opposite correlational (or legacy unmarked) signed effects: a lead
+            # against equivalence, not an intervention-backed contradiction.
+            reasons.append("opposite_associations_lack_intervention_provenance")
     elif not signed_delta_ok:
         reasons.append("signed_effect_delta_above_threshold")
     elif signed_effect_provenance != "intervention":
@@ -687,6 +700,13 @@ def _interpret_status(status: str, reason_codes: list[str]) -> str:
     if status == "validated":
         return "The match preserves high fingerprint similarity and aligned intervention-measured signed effects under the current thresholds."
     if status == "needs_causal_evidence":
+        if "opposite_associations_lack_intervention_provenance" in reasons:
+            return (
+                "The signed associations point in opposite directions, which is "
+                "correlational evidence against equivalence, but no interventions were "
+                "run, so the causal claim is untested; run matched interventions on "
+                "both features before treating this pair as contradicted."
+            )
         if "signed_effects_lack_intervention_provenance" in reasons:
             return (
                 "The signed effects agree, but both are correlational associations rather than "
@@ -701,7 +721,7 @@ def _interpret_status(status: str, reason_codes: list[str]) -> str:
     if status == "plausible":
         return "The match is plausible from the available fingerprints and should be prioritized after stronger candidates."
     if status == "contradicted":
-        return "The features have opposite same-provenance signed effects for this criterion."
+        return "The features have opposite intervention-measured signed effects for this criterion."
     if "score_below_threshold" in reasons:
         return "The candidate does not clear the match-score threshold."
     return "The available fingerprint evidence is weak for this candidate."
@@ -716,6 +736,7 @@ def _next_action(claim_grade: str, reason_codes: list[str]) -> str:
             "missing_signed_effects",
             "causal_component_neutral",
             "signed_effects_lack_intervention_provenance",
+            "opposite_associations_lack_intervention_provenance",
             "signed_effect_provenance_mismatch",
         }:
             return "Run matched interventions or path-patching records for both features on the same criterion."
@@ -938,7 +959,8 @@ def _signed_effect_provenance(components: dict[str, float]) -> str | None:
     """Provenance of the compared signed effects, recorded by matching as component
     markers (the CandidateMatch schema predates provenance, and components round-trip
     through JSON). ``None`` means a pre-provenance match report: treated as
-    not-intervention-backed, so it can never grade "validated"."""
+    not-intervention-backed, so it can never grade "validated" -- and, by the same
+    rule, never "contradicted"."""
     if "signed_effect_provenance_intervention" in components:
         return "intervention"
     if "signed_effect_provenance_association" in components:

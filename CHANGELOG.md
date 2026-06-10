@@ -3,6 +3,103 @@
 All notable changes to interp-lab are documented here. This project adheres to
 [semantic versioning](https://semver.org/).
 
+## 3.0.0 — the self-driving investigation release
+
+interp-lab 2.x ranked features and graded claims; 3.0.0 closes the loop. The
+toolkit now plans its own next experiments, accumulates evidence across runs,
+audits its own grading against planted ground truth, and turns validated
+findings into reusable artifacts — all drivable end-to-end over MCP. The suite
+grew from 363 to 500 tests, including a generative (Hypothesis) invariant
+suite over the evidence rules.
+
+### Added — the investigation loop
+
+- **`plan-evidence`** / `interp_lab.plan_evidence()` — "what should I run
+  next?" Diagnoses each card's evidence gaps against the real grading
+  semantics (`no_causal_evidence`, `no_signed_effect`, `insufficient_power`,
+  `no_controls`, `sign_inconsistency`), solves the Student-t sample size that
+  would close each gap, and ranks runnable `intervene` commands by expected
+  claim-grade movement per prompt (`interp-lab.evidence_plan.v1`).
+  Association-derived effect priors are labeled `association_prior`, never as
+  measured.
+- **Criterion dossiers** — `dossier-update` / `dossier-show` /
+  `interp_lab.update_dossier()` accumulate evidence for one (model, criterion)
+  across runs: per-feature grade history and transitions, score trajectories,
+  same-provenance sign-flip contradictions (provenance changes are never
+  flagged as contradictions), attached match/graph-validation artifacts with
+  hashes (`interp-lab.dossier.v1`, atomic writes).
+- **`calibrate`** / `interp_lab.calibrate()` — the trust anchor. Plants
+  synthetic worlds with known causal features, equally-correlated decoys, and
+  noise; runs the real records+interventions pipeline blind; reports discovery
+  precision/recall, P(truly causal | claim grade) with Wilson CIs, decoy
+  resistance, and effect-size rank correlation
+  (`interp-lab.calibration_report.v1`). Current machinery scores
+  precision@k = 1.0, decoy resistance = 1.0,
+  P(truly causal | validated) = 1.0 on default worlds.
+- **`quant-diff`** / `interp_lab.quant_diff()` — which validated features did
+  quantization break? Matches and validates two same-criterion reports (e.g.
+  FP16 vs Q4 of one model) and verdicts every feature: preserved / degraded /
+  lost / emerged, with `degraded_validated` as the headline and all thresholds
+  echoed in the report (`interp-lab.quant_diff.v1`). Ships with a `run` preset
+  (`examples/presets/quant-diff-run.json`), a workflow builder, and
+  docs/QUANT_DIFF.md.
+- **Steering artifacts** — `export-steering` packages an
+  intervention-validated feature as a reusable steering vector
+  (`interp-lab.steering_vector.v1`; refuses unvalidated cards unless
+  `--allow-unvalidated`, which stamps `provenance: "unvalidated"`);
+  `apply-steering` generates baseline-vs-steered continuations through the
+  existing hidden-steering hooks (`interp-lab.steering_generation.v1`).
+- **`migrate-report`** / `interp_lab.migrate_inspection_report()` — re-scores
+  pre-2.3 reports under current scoring semantics with per-field deltas
+  recorded under `metadata.migration`, so old/new diffs reflect the model,
+  not the scorer.
+- **GGUF bridge** (`docs/GGUF_BRIDGE.md`) — `export-gguf-records` pulls
+  final-layer activation records from GGUF models via llama-cpp-python
+  (`pip install "interp-lab[gguf]"`; honestly labeled `layers_available:
+  final_only`), and `convert-hidden-dump` converts a simple documented
+  hidden-state dump format from ANY runtime into full-fidelity multi-layer
+  activation records — CPU-only labs need no torch.
+
+### Added — agents & assurance
+
+- **MCP server now covers the whole loop**: 19 tools (was 10) — adding
+  `plan_evidence`, `dossier_update`, `dossier_show`, `quant_diff`,
+  `calibrate`, `migrate_report`, `export_steering`, `intervene` (dry-run by
+  default), and `train_sae`. `apply-steering` is deliberately not served
+  (text generation is a host-agent decision).
+- **Generative evidence invariants** (`tests/test_evidence_invariants.py`,
+  Hypothesis, dev extra): association-only inputs can never produce
+  causal-labeled outputs anywhere — scoring, matching, validation, graphs,
+  rendered reports, explanation reports, end-to-end serialized artifacts.
+  The 2.3.0 point regressions are now properties of the system.
+- A **Claude Code skill** (`.claude/skills/interp-lab-investigate/`) that
+  drives the full investigation loop, and an updated AGENTS.md.
+
+### Fixed
+
+- **`contradicted` / `contradicted_effect` now require intervention
+  provenance** (found by the new invariant suite): two opposite-sign
+  correlations previously earned a causal-sounding contradiction verdict with
+  zero interventions. Association-only opposite pairs now grade
+  `needs_causal_evidence` / `needs_more_evidence` with reason code
+  `opposite_associations_lack_intervention_provenance`, mirroring the
+  `validated` gate. Run-level: such reports grade `causal_evidence_needed`
+  instead of `contradicted_matches_present`.
+
+### Breaking
+
+- `agent_next_actions` entries emit only the canonical shape
+  `{id, title, command?+argv?, instruction?, requires?}`. The 2.3.0
+  compatibility aliases are removed from emitted payloads: `next_action` on
+  release-check actions, `description` on explanation-report prose actions,
+  and the flat `agent_next_action` / `agent_next_action_argv` /
+  `agent_next_action_requires` keys on feature-search results and text-pivot
+  matches. Renderers still tolerate legacy keys when reading pre-3.0 artifacts
+  from disk.
+- Match-validation grade flow: association-only opposite-sign pairs no longer
+  grade `contradicted` (see Fixed above) — consumers keying on that grade for
+  correlational data must read the new reason code instead.
+
 ## 2.3.0 — evidence-integrity hardening & agent ergonomics
 
 A full re-audit of the codebase (four independent review passes) found that
