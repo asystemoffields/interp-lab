@@ -45,7 +45,7 @@ Serve interp-lab tools over the Model Context Protocol:
 interp-lab mcp
 ```
 
-The MCP server speaks newline-delimited JSON-RPC 2.0 over stdio (one JSON object per line; diagnostics on stderr only) and exposes tools wrapping the Python API -- `capabilities`, `doctor`, `inspect`, `compare`, `validate_matches`, `search_features`, `compare_runs`, `check_explanation_consistency`, `attribution_graph`, `validate_attribution_graph`, `plan_evidence`, `dossier_update`, `dossier_show`, `quant_diff`, `calibrate`, `migrate_report`, `export_steering`, `intervene` (dry-run by default: it plans without loading a model), and `train_sae` -- plus the project docs as `interp-lab://docs/<name>` resources. `apply-steering` is deliberately not served: generating text from arbitrary models is a host-agent decision; use the CLI once made. Tools that produce large artifacts require an `out` path and return a compact summary plus the written paths; tool-level failures (including missing optional extras like `[hf]`) come back as results with `isError: true` rather than protocol errors.
+The MCP server speaks newline-delimited JSON-RPC 2.0 over stdio (one JSON object per line; diagnostics on stderr only) and exposes tools wrapping the Python API -- `capabilities`, `doctor`, `inspect`, `compare`, `validate_matches`, `search_features`, `compare_runs`, `check_explanation_consistency`, `attribution_graph`, `validate_attribution_graph`, `plan_evidence`, `dossier_update`, `dossier_show`, `quant_diff`, `calibrate`, `migrate_report`, `export_steering`, `intervene` (dry-run by default: it plans without loading a model), `train_sae`, `score_prompts`, and `compile_criterion` (with `generator=agent` the tool result IS the generation request: write the candidates JSONL it specifies, then re-call with `candidates` -- the natural MCP shape for the two-phase flow) -- plus the project docs as `interp-lab://docs/<name>` resources. `apply-steering` is deliberately not served: generating text from arbitrary models is a host-agent decision; use the CLI once made. Tools that produce large artifacts require an `out` path and return a compact summary plus the written paths; tool-level failures (including missing optional extras like `[hf]`) come back as results with `isError: true` rather than protocol errors.
 
 Check stable-release readiness:
 
@@ -97,6 +97,29 @@ interp-lab build-prompts \
 Prompt files can use one prompt per paragraph or one prompt per line with `--split lines`. Use `--positive-prompt` and `--negative-prompt` for inline prompts, and `--delimiter` for multi-line chat-style prompts separated by a literal marker. The output JSONL works anywhere interp-lab accepts `--dataset`.
 
 The same custom-prompt path is available from Python with `interp_lab.build_prompts(...)`.
+
+Compile a natural-language criterion into a scored, gated prompt dataset:
+
+```bash
+interp-lab compile-criterion \
+  --criterion "the model is aware it is being evaluated" \
+  --out reports/eval-awareness-dataset
+```
+
+`compile-criterion` (`schema_version: interp-lab.criterion_compile.v1`) operationalizes a criterion through three pluggable stages — generate big, score tiny, verify everything. A GENERATOR produces candidate prompts: `--generator heuristic` (zero-dependency template paraphrases, the floor — outputs are clearly labeled heuristic), `--generator llamacpp --model <model.gguf>` (a small local instruct GGUF prompted for JSON-lines candidates, parsed defensively with line-numbered diagnostics), or `--generator agent` (no model call: writes a generation request — `schema_version: interp-lab.criterion_generation_request.v1` — with the criterion, scoring hypothesis, counts, diversity and confound constraints, and the exact candidates-JSONL format, plus `agent_next_actions` telling the driving agent to write `candidates.jsonl` and finish with `compile-criterion --candidates`; the intended agent path). A SCORER scores every candidate: `--scorer nli` (default) runs P(entailment) of the scoring hypothesis against each text with a compact zero-shot NLI cross-encoder (~70M params; any Hugging Face zero-shot/NLI model id works via `--scorer-model`) behind the `[criteria]` extra; `--scorer hash` is the dependency-free lexical fallback, always labeled weak. The GATE then enforces score margins (positives below `--pos-threshold` and negatives above `--neg-threshold` are excluded with recorded reasons — never silently), balances the sides (trimming the over-represented side, lowest margin first), and runs the survivors through the real `validate-assay` machinery; with `--scorer hash` the margin gate degrades to advisory warnings and the report says so loudly. Outputs under `--out`: `prompts.jsonl` (the scored dataset, usable anywhere interp-lab accepts `--dataset`, each row stamped `criterion_score_source`), `preset.json` (a Criterion Lab preset with the hypothesis and scorer cached), and `compile-report.json`/`.md` (gate verdicts, exclusions with reasons, score distributions, provenance, next actions). Fewer than `--min-per-side` survivors on either side fails the gate — the report is still written and the error names it. From Python: `interp_lab.compile_criterion(criterion, out=...)`.
+
+Scoring-hypothesis discipline: criterion text is often model-internal language ("the model is aware it is being evaluated") while the scorer judges TEXT properties, so scoring uses the hypothesis `This text clearly involves <criterion>.` by default; override it with `--hypothesis`, and every output records the hypothesis and scorer id actually used. Planned: an ONNX scorer backend (optimum/onnxruntime, no torch) for lighter installs.
+
+Re-score any prompt dataset against a criterion:
+
+```bash
+interp-lab score-prompts \
+  --dataset prompts/code-criterion.jsonl \
+  --criterion "the text contains a Python security bug" \
+  --out prompts/code-criterion-scored.jsonl --json
+```
+
+`score-prompts` accepts a JSONL with `text`/`prompt` fields or a plain text file (one prompt per line) and writes the standard scored-prompt JSONL with continuous `criterion_score` values plus per-row `criterion_score_source` provenance (`--binarize 0.5` thresholds to 0/1, keeping the raw score as `criterion_score_raw`). The same `--scorer nli|hash`, `--scorer-model`, and `--hypothesis` options apply. From Python: `interp_lab.score_prompts(dataset, criterion, out=...)`.
 
 Compare two reports:
 

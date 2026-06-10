@@ -8,6 +8,7 @@ from typing import Any
 from interp_lab import __version__
 from interp_lab.calibration import CALIBRATION_SCHEMA
 from interp_lab.capabilities import CAPABILITIES_SCHEMA
+from interp_lab.criterion_compile import CRITERION_COMPILE_SCHEMA, GENERATION_REQUEST_SCHEMA
 from interp_lab.criterion_lab import PRESET_SCHEMA_VERSION
 from interp_lab.demo_sweep import REAL_MODEL_DEMO_SWEEP_SCHEMA
 from interp_lab.dossier import DOSSIER_SCHEMA
@@ -64,6 +65,7 @@ PUBLIC_API_EXPORTS = [
     "compare",
     "compare_model_families",
     "compare_runs",
+    "compile_criterion",
     "criterion_lab",
     "criterion_lab_presets",
     "demo_sweep",
@@ -89,6 +91,7 @@ PUBLIC_API_EXPORTS = [
     "run",
     "scale_plan",
     "scaffold_run",
+    "score_prompts",
     "search_features",
     "train_sae",
     "update_dossier",
@@ -104,6 +107,8 @@ SCHEMA_CONTRACTS = {
     "calibration_report": CALIBRATION_SCHEMA,
     "capabilities": CAPABILITIES_SCHEMA,
     "criterion_assay_validation": "interp-lab.criterion_assay_validation.v1",
+    "criterion_compile": CRITERION_COMPILE_SCHEMA,
+    "criterion_generation_request": GENERATION_REQUEST_SCHEMA,
     "criterion_lab": "interp-lab.criterion_lab.v1",
     "criterion_lab_preset": PRESET_SCHEMA_VERSION,
     "dossier": DOSSIER_SCHEMA,
@@ -157,6 +162,22 @@ PUBLIC_API_SIGNATURES = {
     "compare": ["left", "right", "out", "top_k"],
     "compare_model_families": ["members", "out", "markdown_out", "html_out", "top_k", "min_score"],
     "compare_runs": ["left", "right", "out", "markdown_out"],
+    "compile_criterion": [
+        "criterion",
+        "out",
+        "generator",
+        "candidates",
+        "n",
+        "hypothesis",
+        "scorer",
+        "scorer_model",
+        "pos_threshold",
+        "neg_threshold",
+        "min_per_side",
+        "scorer_factory",
+        "llama_factory",
+        "model_path",
+    ],
     "criterion_lab": ["out", "model", "preset", "preset_file", "criterion", "workflow", "run_dir"],
     "demo_sweep": ["repo_root", "manifest_dir", "demos", "out", "run", "allow_external"],
     "dossier_summary": ["dossier", "markdown_out"],
@@ -243,6 +264,16 @@ PUBLIC_API_SIGNATURES = {
     "run": ["config", "dry_run"],
     "scale_plan": ["model_params", "tokens", "d_model", "selected_layers", "latent_dim", "profile"],
     "scaffold_run": ["out", "workflow", "model", "criterion", "run_dir"],
+    "score_prompts": [
+        "dataset",
+        "criterion",
+        "hypothesis",
+        "scorer",
+        "scorer_model",
+        "out",
+        "binarize",
+        "scorer_factory",
+    ],
     "search_features": ["query", "reports", "out", "markdown_out", "html_out", "top_k", "min_score"],
     "train_sae": [
         "out",

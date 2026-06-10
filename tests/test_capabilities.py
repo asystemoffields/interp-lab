@@ -34,6 +34,8 @@ def test_capabilities_commands_cover_the_cli_surface():
     assert "plan-evidence" in ids
     assert "quant-diff" in ids
     assert "calibrate" in ids
+    assert "compile-criterion" in ids
+    assert "score-prompts" in ids
 
 
 def test_capabilities_python_api_matches_public_contract():

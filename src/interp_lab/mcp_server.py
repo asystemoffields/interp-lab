@@ -51,7 +51,12 @@ _SERVER_INSTRUCTIONS = (
     "full CLI surface, the Python API contract, artifact schemas, and environment. "
     "Conventions are JSON-first: every artifact carries schema_version, and tools "
     "that write artifacts return compact summaries plus the written paths. "
-    "The full investigation loop is driveable over MCP: inspect -> plan_evidence "
+    "The full investigation loop is driveable over MCP: compile_criterion "
+    "(operationalize the criterion into a scored, gated prompt dataset; "
+    "generator=agent returns a generation request so YOU write the candidate "
+    "prompts, then re-call with the candidates path — the intended agent path) "
+    "/ score_prompts (re-score any dataset against a criterion) -> inspect -> "
+    "plan_evidence "
     "(gaps and costed interventions) -> intervene (dry_run defaults to true: plan "
     "first, then re-call with dry_run false to spend model time) -> inspect with "
     "interventions attached -> dossier_update / dossier_show (cumulative evidence "
@@ -494,6 +499,65 @@ def _tool_train_sae(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _tool_score_prompts(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+
+    return api.score_prompts(
+        params["dataset"],
+        params["criterion"],
+        hypothesis=params.get("hypothesis"),
+        scorer=params.get("scorer", "nli"),
+        scorer_model=params.get("scorer_model"),
+        out=params["out"],
+        binarize=params.get("binarize"),
+    )
+
+
+def _tool_compile_criterion(params: dict[str, Any]) -> dict[str, Any]:
+    from interp_lab import api
+    from interp_lab.criterion_compile import GENERATION_REQUEST_SCHEMA
+
+    result = api.compile_criterion(
+        params["criterion"],
+        out=params["out"],
+        generator=params.get("generator", "heuristic"),
+        candidates=params.get("candidates"),
+        n=params.get("n", 32),
+        hypothesis=params.get("hypothesis"),
+        scorer=params.get("scorer", "nli"),
+        scorer_model=params.get("scorer_model"),
+        pos_threshold=params.get("pos_threshold", 0.7),
+        neg_threshold=params.get("neg_threshold", 0.3),
+        min_per_side=params.get("min_per_side", 8),
+        model_path=params.get("model"),
+    )
+    if result.get("schema_version") == GENERATION_REQUEST_SCHEMA:
+        # Two-phase agent flow: return the generation request whole — the
+        # natural MCP shape; the caller writes the candidates and re-calls.
+        return result
+    return {
+        "status": result["status"],
+        "criterion": result["criterion"],
+        "hypothesis": result["hypothesis"],
+        "scorer": result["scorer"],
+        "counts": result["counts"],
+        "gates": {
+            "margins": result["gates"]["margins"],
+            "balance": result["gates"]["balance"],
+            "min_per_side": result["gates"]["min_per_side"],
+            "assay_validation_status": result["gates"]["assay_validation"].get("status"),
+        },
+        "warnings": result["warnings"],
+        "agent_next_actions": result["agent_next_actions"],
+        "paths": _paths(
+            prompts_jsonl=result["outputs"]["prompts"],
+            preset_json=result["outputs"]["preset"],
+            report_json=result["outputs"]["report"],
+            report_markdown=result["outputs"]["report_markdown"],
+        ),
+    }
+
+
 _COMPACT_NOTE = "Writes artifacts to disk and returns a compact summary plus the written paths; read the artifacts for the full payload."
 
 TOOLS: list[dict[str, Any]] = [
@@ -916,6 +980,106 @@ TOOLS: list[dict[str, Any]] = [
             ["out"],
         ),
         "handler": _tool_train_sae,
+    },
+    {
+        "name": "score_prompts",
+        "description": (
+            "Score a prompt dataset against a natural-language criterion via a scoring "
+            "hypothesis. scorer='nli' uses a compact zero-shot NLI cross-encoder (needs "
+            "the [criteria] extra; any HF zero-shot/NLI model id works via "
+            "'scorer_model'); scorer='hash' is the dependency-free lexical fallback, "
+            "always labeled weak. Every row carries criterion_score_source provenance. "
+            f"Requires 'out'. {_COMPACT_NOTE}"
+        ),
+        "inputSchema": _schema(
+            "Prompt scoring parameters.",
+            {
+                "dataset": _path_property(
+                    "Prompt JSONL (text/prompt fields) or plain text file, one prompt per line"
+                ),
+                "criterion": {"type": "string", "description": "Natural-language criterion."},
+                "hypothesis": {
+                    "type": "string",
+                    "description": 'Override the scoring hypothesis (default: "This text clearly involves <criterion>.").',
+                },
+                "scorer": {
+                    "type": "string",
+                    "enum": ["nli", "hash"],
+                    "description": "Scorer backend (default nli; hash is weak/lexical but dependency-free).",
+                },
+                "scorer_model": {
+                    "type": "string",
+                    "description": "HF zero-shot/NLI cross-encoder id for scorer=nli.",
+                },
+                "out": _path_property("Output scored-prompt JSONL path"),
+                "binarize": {
+                    "type": "number",
+                    "description": "Threshold continuous scores to 0/1 (raw kept as criterion_score_raw).",
+                },
+            },
+            ["dataset", "criterion", "out"],
+        ),
+        "handler": _tool_score_prompts,
+    },
+    {
+        "name": "compile_criterion",
+        "description": (
+            "Compile a natural-language criterion into a scored, gated prompt dataset "
+            "(prompts.jsonl + Criterion Lab preset + compile report). Generators: "
+            "'heuristic' (default; zero-dep templates), 'llamacpp' (local GGUF via "
+            "'model'), or 'agent' — the intended agent path: NO model is called, the "
+            "tool result IS the generation request (criterion, hypothesis, counts, "
+            "diversity/confound constraints, candidates format); write the candidates "
+            "JSONL yourself, then re-call with 'candidates' to score, gate, and "
+            "package. The gate enforces score margins (per-prompt exclusions with "
+            "reasons), positive/negative balance, and the real assay validation; with "
+            "scorer='hash' margins are advisory only. Gate failure is a tool error "
+            f"that names the already-written report. {_COMPACT_NOTE}"
+        ),
+        "inputSchema": _schema(
+            "Criterion compile parameters.",
+            {
+                "criterion": {"type": "string", "description": "Natural-language criterion."},
+                "out": _path_property("Output directory for the compiled artifacts"),
+                "generator": {
+                    "type": "string",
+                    "enum": ["heuristic", "llamacpp", "agent"],
+                    "description": "Candidate generator (default heuristic).",
+                },
+                "candidates": _path_property(
+                    'Candidates JSONL ({"label": "positive"|"negative", "text": ...}); skips generation'
+                ),
+                "n": {"type": "integer", "description": "Candidates per side to generate (default 32)."},
+                "hypothesis": {
+                    "type": "string",
+                    "description": "Override the scoring hypothesis.",
+                },
+                "scorer": {
+                    "type": "string",
+                    "enum": ["nli", "hash"],
+                    "description": "Scorer backend (default nli; hash is weak/lexical, margins advisory).",
+                },
+                "scorer_model": {
+                    "type": "string",
+                    "description": "HF zero-shot/NLI cross-encoder id for scorer=nli.",
+                },
+                "model": _path_property("GGUF model path for generator=llamacpp"),
+                "pos_threshold": {
+                    "type": "number",
+                    "description": "Minimum positive score; lower-scoring positives are excluded (default 0.7).",
+                },
+                "neg_threshold": {
+                    "type": "number",
+                    "description": "Maximum negative score; higher-scoring negatives are excluded (default 0.3).",
+                },
+                "min_per_side": {
+                    "type": "integer",
+                    "description": "Minimum surviving prompts per side (default 8).",
+                },
+            },
+            ["criterion", "out"],
+        ),
+        "handler": _tool_compile_criterion,
     },
 ]
 

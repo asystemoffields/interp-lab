@@ -3,6 +3,60 @@
 All notable changes to interp-lab are documented here. This project adheres to
 [semantic versioning](https://semver.org/).
 
+## 3.1.0 — the criterion compiler release
+
+Natural-language criteria are the front door to interp-lab, and until now the
+text→dataset step rested on lexical templating and hash-bucket cosine — the
+weakest link in an otherwise provenance-obsessed pipeline. 3.1.0 rebuilds it
+around a clean division of labor: **generation is delegated to big models**
+(the agent driving the toolkit, or a local GGUF), **verification runs on a
+tiny purpose-built NLI cross-encoder** (~70 M, optional extra, nothing
+bundled), and **everything is gated** through NLI margins plus the existing
+assay validation. Generator and verifier have different failure modes, which
+is the point. 539 tests (up from 500).
+
+### Added
+
+- **`compile-criterion`** / `interp_lab.compile_criterion()` — turn a
+  natural-language criterion into a verified prompt dataset + criterion-lab
+  preset (`interp-lab.criterion_compile.v1`). Three generators:
+  - `agent` (recommended): two-phase flow — phase 1 writes a
+    `generation-request.json` (`interp-lab.criterion_generation_request.v1`)
+    with exact candidate format and counts plus canonical `agent_next_actions`;
+    the driving agent writes `candidates.jsonl` and finishes with
+    `compile-criterion --candidates`. The model already in the loop does the
+    generation; no bundled generator.
+  - `llamacpp`: generate candidates with a local GGUF via llama-cpp-python.
+  - `heuristic`: the previous templating engine, kept as a dependency-free
+    floor.
+  Candidates pass a margin gate (positives ≥ 0.7, negatives ≤ 0.3,
+  ≥ 8 survivors per side, balance-trimmed lowest-margin-first, every exclusion
+  recorded) and the resulting preset is validated through the real
+  criterion-assay machinery before anything is written. Gate failure writes
+  the report and names the failed gate.
+- **`score-prompts`** / `interp_lab.score_prompts()` — score any prompt
+  dataset against a criterion hypothesis. Default scorer is a tiny zero-shot
+  NLI cross-encoder (`MoritzLaurer/deberta-v3-xsmall-zeroshot-v1.1`),
+  installed via the new **`interp-lab[criteria]`** extra; outputs are exact
+  `ScoredPrompt` JSONL re-validated through the real record loader, with
+  per-row `criterion_score_source` (`nli:<model>` / `hash_cosine`) and
+  `--binarize` preserving `criterion_score_raw`.
+- **Honest degradation** — without `[criteria]`, the hash-cosine scorer still
+  runs but is labeled weak everywhere it appears: the margin gate downgrades
+  to advisory (no candidates excluded on score), reports carry explicit
+  warnings, and `criterion_score_source` says so per row.
+- **2 new MCP tools** (21 total): `compile_criterion` (the agent generator
+  returns the generation request directly — the natural two-phase fit for
+  MCP) and `score_prompts`.
+- Docs: `AGENTS.md` now opens investigations with "operationalize the
+  criterion first"; COMMANDS.md and README cover the compile flow.
+
+### Noted for future work
+
+ONNX scorer backend (torch-free `[criteria]`), a `doctor` check for the
+`[criteria]` extra, real-model NLI smoke test in CI, and a fine-tuned
+purpose-built scorer once usage data accumulates.
+
 ## 3.0.0 — the self-driving investigation release
 
 interp-lab 2.x ranked features and graded claims; 3.0.0 closes the loop. The

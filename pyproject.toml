@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "interp-lab"
-version = "3.0.0"
+version = "3.1.0"
 description = "Criterion-driven feature discovery, explanation, causal testing, and cross-model activation matching."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -68,6 +68,10 @@ goodfire = [
 ]
 embeddings = [
   "sentence-transformers>=3.0"
+]
+criteria = [
+  "transformers>=4.44",
+  "torch>=2.2"
 ]
 gguf = [
   "llama-cpp-python>=0.3"

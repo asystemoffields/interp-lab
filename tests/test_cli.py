@@ -1539,3 +1539,173 @@ def test_convert_hidden_dump_command_json_summary(tmp_path: Path, capsys):
     assert summary["source"] == "hidden_state_dump"
     rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
     assert rows[0]["model"] == "m"
+
+
+def test_score_prompts_command_writes_scored_dataset(tmp_path: Path, capsys):
+    dataset = tmp_path / "prompts.jsonl"
+    dataset.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in [
+                {"prompt_id": "p1", "text": "a passage about evaluation awareness"},
+                {"prompt_id": "p2", "text": "a recipe for vegetable soup"},
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "scored.jsonl"
+
+    assert main(
+        [
+            "score-prompts",
+            "--dataset", str(dataset),
+            "--criterion", "evaluation awareness",
+            "--scorer", "hash",
+            "--out", str(out),
+        ]
+    ) == 0
+
+    captured = capsys.readouterr().out
+    assert f"Wrote {out}" in captured
+    assert "hash_cosine" in captured
+    assert "Hypothesis: This text clearly involves evaluation awareness." in captured
+    assert "weak/lexical" in captured  # the hash scorer is always labeled weak
+    rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert [row["prompt_id"] for row in rows] == ["p1", "p2"]
+    assert all(row["criterion_score_source"] == "hash_cosine" for row in rows)
+
+
+def test_score_prompts_command_json_keeps_stdout_pure(tmp_path: Path, capsys):
+    dataset = tmp_path / "prompts.txt"
+    dataset.write_text("an evaluation prompt\nan ordinary line\n", encoding="utf-8")
+    out = tmp_path / "scored.jsonl"
+
+    assert main(
+        [
+            "score-prompts",
+            "--dataset", str(dataset),
+            "--criterion", "evaluation awareness",
+            "--scorer", "hash",
+            "--out", str(out),
+            "--json",
+        ]
+    ) == 0
+
+    captured = capsys.readouterr()
+    summary = json.loads(captured.out)  # stdout is exactly one JSON payload
+    assert summary["count"] == 2
+    assert summary["scorer"] == "hash_cosine"
+    assert summary["out"] == str(out)
+    assert f"Wrote {out}" in captured.err
+
+
+def test_compile_criterion_command_heuristic_hash(tmp_path: Path, capsys):
+    out = tmp_path / "compile"
+
+    assert main(
+        [
+            "compile-criterion",
+            "--criterion", "the model is aware it is being evaluated",
+            "--out", str(out),
+            "--generator", "heuristic",
+            "--scorer", "hash",
+            "--n", "10",
+        ]
+    ) == 0
+
+    captured = capsys.readouterr().out
+    assert f"Wrote {out / 'prompts.jsonl'}" in captured
+    assert f"Wrote {out / 'preset.json'}" in captured
+    assert f"Wrote {out / 'compile-report.json'}" in captured
+    assert "Gate: pass" in captured
+    assert "ADVISORY" in captured  # hash margins are advisory, said loudly
+    report = json.loads((out / "compile-report.json").read_text(encoding="utf-8"))
+    assert report["schema_version"] == "interp-lab.criterion_compile.v1"
+
+
+def test_compile_criterion_command_json_keeps_stdout_pure(tmp_path: Path, capsys):
+    out = tmp_path / "compile"
+
+    assert main(
+        [
+            "compile-criterion",
+            "--criterion", "the model is aware it is being evaluated",
+            "--out", str(out),
+            "--generator", "heuristic",
+            "--scorer", "hash",
+            "--n", "8",
+            "--json",
+        ]
+    ) == 0
+
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)  # stdout is exactly one JSON payload
+    assert report["status"] == "pass"
+    assert report["scorer"] == "hash_cosine"
+    assert f"Wrote {out / 'compile-report.json'}" in captured.err
+
+
+def test_compile_criterion_command_agent_two_phase(tmp_path: Path, capsys):
+    out = tmp_path / "compile"
+
+    assert main(
+        [
+            "compile-criterion",
+            "--criterion", "the model is aware it is being evaluated",
+            "--out", str(out),
+            "--generator", "agent",
+        ]
+    ) == 0
+
+    captured = capsys.readouterr().out
+    assert f"Wrote {out / 'generation-request.json'}" in captured
+    assert "compile-criterion" in captured  # the finish command is printed
+    request = json.loads((out / "generation-request.json").read_text(encoding="utf-8"))
+    assert request["schema_version"] == "interp-lab.criterion_generation_request.v1"
+
+    # Phase two: write candidates per the request and finish via the CLI.
+    candidates = out / "candidates.jsonl"
+    rows = [{"label": "positive", "text": f"a clear test-awareness passage {i}"} for i in range(8)]
+    rows += [{"label": "negative", "text": f"a mundane gardening note {i}"} for i in range(8)]
+    candidates.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    assert main(
+        [
+            "compile-criterion",
+            "--criterion", "the model is aware it is being evaluated",
+            "--out", str(out),
+            "--candidates", str(candidates),
+            "--scorer", "hash",
+        ]
+    ) == 0
+    assert (out / "prompts.jsonl").exists()
+    assert (out / "preset.json").exists()
+
+
+def test_compile_criterion_gate_failure_is_clean_cli_error(tmp_path: Path, capsys):
+    out = tmp_path / "compile"
+    candidates = tmp_path / "candidates.jsonl"
+    rows = [{"label": "positive", "text": "only one positive"}]
+    rows += [{"label": "negative", "text": "only one negative"}]
+    candidates.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    code = None
+    try:
+        main(
+            [
+                "compile-criterion",
+                "--criterion", "the model is aware it is being evaluated",
+                "--out", str(out),
+                "--candidates", str(candidates),
+                "--scorer", "hash",
+            ]
+        )
+    except SystemExit as exc:
+        code = exc.code
+
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "interp-lab: error:" in err
+    assert str(out / "compile-report.json") in err  # the error points at the report
+    assert (out / "compile-report.json").exists()

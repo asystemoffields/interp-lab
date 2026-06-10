@@ -33,7 +33,7 @@ interp-lab inspect \
 
 ## The workflow
 
-1. Compile a natural-language criterion into examples and scores.
+1. Compile a natural-language criterion into examples and scores — `compile-criterion` generates candidate prompts (templates, a local GGUF, or your own agent), scores them with a compact NLI cross-encoder, and gates the dataset (margins, balance, assay validation) before anything downstream trusts it.
 2. Collect candidate features from SAEs, NLA explanations, or feature dumps — or feed any latents (crosscoders included) through the model-agnostic activation-records path.
 3. Rank features by criterion association, specificity, causal evidence, and stability.
 4. Plan the cheapest evidence-gathering path (`plan-evidence`), intervene, and track each round in a cumulative dossier.

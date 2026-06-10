@@ -53,8 +53,12 @@ as Model Context Protocol tools over stdio: `capabilities`, `doctor`,
 `dossier_show`, `quant_diff`, `calibrate`, `migrate_report`, `export_steering`,
 `intervene` (dry-run by default: it returns the plan without loading a model;
 without the `[hf]` extra, execution fails cleanly with an install hint as an
-`isError` result), and `train_sae` (`method=auto` falls back to the stdlib
-trainer when torch is absent). `apply-steering` is deliberately **not** served:
+`isError` result), `train_sae` (`method=auto` falls back to the stdlib
+trainer when torch is absent), `score_prompts`, and `compile_criterion` (with
+`generator=agent` the tool result IS the generation request — write the
+candidates JSONL it specifies, then re-call with `candidates`; see
+"Operationalize the criterion first" below). `apply-steering` is deliberately
+**not** served:
 generating text from arbitrary models is a decision the host agent (you) must
 make explicitly — use the CLI once you have. Example client config:
 
@@ -162,6 +166,40 @@ for anything you may need to rerun or hand off.
 Since 3.0.0 the loop above has a brain, a memory, and a trust anchor — you can
 run an entire investigation without inventing a single command yourself.
 
+**Operationalize the criterion first: `compile-criterion`.** Before any
+inspection you need a scored prompt dataset that actually measures the
+criterion. The compiler's three stages — generate, score, gate — are all
+pluggable, and the GENERATOR'S intended driver is YOU. The two-phase agent
+round-trip:
+
+```bash
+# Phase 1: no model call — interp-lab writes a generation request instead.
+interp-lab compile-criterion \
+  --criterion "the model is aware it is being evaluated" \
+  --out reports/eval-awareness-dataset --generator agent
+# Read reports/eval-awareness-dataset/generation-request.json: it carries the
+# scoring hypothesis, counts, diversity + confound constraints (vary length/
+# topic/style independently of the criterion; no shared template strings
+# between sides), and the exact candidates-JSONL format.
+
+# Phase 2: YOU write candidates.jsonl per the request (you are the big
+# generator), then finish — interp-lab scores every candidate with a tiny NLI
+# cross-encoder and gates the result:
+interp-lab compile-criterion \
+  --criterion "the model is aware it is being evaluated" \
+  --candidates reports/eval-awareness-dataset/candidates.jsonl \
+  --out reports/eval-awareness-dataset
+```
+
+The gate excludes low-margin outliers WITH recorded reasons, balances the
+sides, and runs the real assay validation; the compile report carries the
+verdicts, exclusions, and next actions (export records over `prompts.jsonl`,
+then inspect). Provenance discipline applies here too: every row is stamped
+`criterion_score_source`, and a dataset scored with `--scorer hash` is labeled
+weak/lexical with the margin gate downgraded to advisory — do not treat such
+margins as evidence. `score-prompts` re-scores any dataset later (drift check,
+or re-scoring under a refined `--hypothesis`).
+
 **`plan-evidence` is the brain.** Point it at any report and it diagnoses each
 card's evidence gaps (`no_causal_evidence`, `no_signed_effect`,
 `sign_inconsistency`, `insufficient_power`, `no_controls`), computes the
@@ -223,10 +261,11 @@ standard activation-records JSONL, so llama.cpp models feed
 `inspect --backend records` — and the whole loop above — without torch. See
 `docs/GGUF_BRIDGE.md`.
 
-The round, end to end: `inspect` → `plan-evidence` → run the suggested
-`intervene --dry-run`, inspect the plan, execute → re-`inspect` with
-`--interventions` → `dossier-update`. Repeat until validated, or until the
-planner says the effect is too small to chase.
+The round, end to end: `compile-criterion` (two-phase: you generate, it
+scores and gates) → export records over `prompts.jsonl` → `inspect` →
+`plan-evidence` → run the suggested `intervene --dry-run`, inspect the plan,
+execute → re-`inspect` with `--interventions` → `dossier-update`. Repeat until
+validated, or until the planner says the effect is too small to chase.
 
 ## What NOT to claim
 

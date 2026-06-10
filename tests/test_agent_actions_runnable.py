@@ -29,6 +29,7 @@ import pytest
 
 from interp_lab.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from interp_lab.cli import build_parser
+from interp_lab.criterion_compile import compile_criterion
 from interp_lab.demo_sweep import build_demo_sweep_report
 from interp_lab.env_profile import collect_environment_profile
 from interp_lab.explanation_reports import (
@@ -74,6 +75,8 @@ def test_every_agent_next_action_is_canonical_and_runnable(tmp_path: Path):
         "explanation_consistency",
         "text_pivot",
         "text_pivot_match",
+        "compile_report",
+        "generation_request",
     }, f"missing surfaces: {seen_surfaces}"
     parser = build_parser()
     for context, action in surfaces:
@@ -235,6 +238,27 @@ def _collect_agent_next_actions(tmp_path: Path) -> list[tuple[str, dict]]:
             actions.append(
                 (f"text_pivot_match:{match['left_feature_id']}->{match['right_feature_id']}", action)
             )
+
+    # Criterion compile report (heuristic generator, weak-but-dependency-free
+    # hash scorer) and the two-phase agent generation request.
+    compile_report = compile_criterion(
+        CRITERION,
+        out=tmp_path / "compile",
+        generator="heuristic",
+        scorer="hash",
+        n=8,
+    )
+    assert compile_report["agent_next_actions"]
+    for action in compile_report["agent_next_actions"]:
+        actions.append(("compile_report", action))
+    generation_request = compile_criterion(
+        CRITERION,
+        out=tmp_path / "compile-agent",
+        generator="agent",
+    )
+    assert generation_request["agent_next_actions"]
+    for action in generation_request["agent_next_actions"]:
+        actions.append(("generation_request", action))
 
     return actions
 

@@ -31,6 +31,7 @@ from interp_lab.calibration import (
 )
 from interp_lab.capabilities import build_capabilities
 from interp_lab.cli import main as _cli_main
+from interp_lab.criterion_compile import compile_criterion as _compile_criterion
 from interp_lab.criterion_lab import (
     CriterionAssayValidationResult,
     CriterionLabPresetInfo,
@@ -39,6 +40,7 @@ from interp_lab.criterion_lab import (
     write_criterion_assay_validation_report,
     write_criterion_lab_config,
 )
+from interp_lab.criterion_scoring import score_prompts as _score_prompts
 from interp_lab.demo_sweep import build_demo_sweep_report
 from interp_lab.doctor import collect_diagnostics
 from interp_lab.dossier import (
@@ -440,6 +442,86 @@ def validate_criterion_assay(
         preset_dirs=_as_optional_list(preset_dir),
     )
     return result if out is not None else result.report
+
+
+def score_prompts(
+    dataset: str | Path,
+    criterion: str,
+    *,
+    hypothesis: str | None = None,
+    scorer: str = "nli",
+    scorer_model: str | None = None,
+    out: str | Path | None = None,
+    binarize: float | None = None,
+    scorer_factory: Any | None = None,
+) -> dict[str, Any]:
+    """Score a prompt dataset against a natural-language criterion.
+
+    The scorer judges TEXT properties via a scoring hypothesis (default:
+    "This text clearly involves <criterion>."); every output records the
+    hypothesis and scorer id used. ``scorer='nli'`` needs the ``[criteria]``
+    extra; ``scorer='hash'`` is the dependency-free lexical fallback, always
+    labeled weak. With ``out`` set the scored rows are written in the standard
+    scored-prompt JSONL format plus a ``criterion_score_source`` provenance
+    stamp; without it the rows ride along in the returned summary.
+    """
+    return _score_prompts(
+        dataset,
+        criterion,
+        hypothesis=hypothesis,
+        scorer=scorer,
+        scorer_model=scorer_model,
+        out=out,
+        binarize=binarize,
+        scorer_factory=scorer_factory,
+    )
+
+
+def compile_criterion(
+    criterion: str,
+    *,
+    out: str | Path,
+    generator: str = "heuristic",
+    candidates: str | Path | None = None,
+    n: int = 32,
+    hypothesis: str | None = None,
+    scorer: str = "nli",
+    scorer_model: str | None = None,
+    pos_threshold: float = 0.7,
+    neg_threshold: float = 0.3,
+    min_per_side: int = 8,
+    scorer_factory: Any | None = None,
+    llama_factory: Any | None = None,
+    model_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Compile a natural-language criterion into a scored, gated prompt dataset.
+
+    Generate big, score tiny, verify everything: candidates come from a
+    pluggable generator (``heuristic`` templates, a local GGUF via
+    ``llamacpp``, or the two-phase ``agent`` flow that writes a generation
+    request instead of calling any model), every candidate is scored against
+    the scoring hypothesis, and the gate enforces score margins (with
+    per-prompt exclusions, never silent), positive/negative balance, and the
+    real Criterion Lab assay validation. Outputs ``prompts.jsonl``,
+    ``preset.json``, and ``compile-report.json``/``.md`` under ``out``; a gate
+    failure still writes the report and raises ``ValueError`` pointing at it.
+    """
+    return _compile_criterion(
+        criterion,
+        out=out,
+        generator=generator,
+        candidates=candidates,
+        n=n,
+        hypothesis=hypothesis,
+        scorer=scorer,
+        scorer_model=scorer_model,
+        pos_threshold=pos_threshold,
+        neg_threshold=neg_threshold,
+        min_per_side=min_per_side,
+        scorer_factory=scorer_factory,
+        llama_factory=llama_factory,
+        model_path=model_path,
+    )
 
 
 def inspect(

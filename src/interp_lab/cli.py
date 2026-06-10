@@ -26,6 +26,11 @@ from interp_lab.adapters.saelens import (
 from interp_lab.adapters.scope import ScopeFeatureProvider
 from interp_lab.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
 from interp_lab.calibration import export_calibration_report, run_calibration
+from interp_lab.criterion_compile import (
+    GENERATION_REQUEST_SCHEMA,
+    build_compile_criterion_parser,
+    run_compile_criterion_from_args,
+)
 from interp_lab.criterion_lab import (
     build_criterion_assay_validation_parser,
     build_criterion_lab_parser,
@@ -34,6 +39,7 @@ from interp_lab.criterion_lab import (
     run_criterion_assay_validation_from_args,
     run_criterion_lab_from_args,
 )
+from interp_lab.criterion_scoring import build_score_prompts_parser, run_score_prompts_from_args
 from interp_lab.demo_sweep import (
     build_demo_sweep_parser,
     render_demo_sweep_text,
@@ -141,6 +147,7 @@ Commands by purpose:
 
   Inspect & explain one model
     inspect, search-features, check-explanation-consistency, criterion-lab, init-run, run
+    compile-criterion, score-prompts   operationalize a criterion into a scored, gated prompt dataset
 
   Compare across models
     match, validate-matches, compare-model-families, match-text-pivot
@@ -617,6 +624,22 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     validate_assay.set_defaults(func=run_validate_assay)
+
+    compile_criterion_cmd = subparsers.add_parser(
+        "compile-criterion",
+        help="Compile a natural-language criterion into a scored, gated prompt dataset.",
+        parents=[build_compile_criterion_parser()],
+        add_help=False,
+    )
+    compile_criterion_cmd.set_defaults(func=run_compile_criterion)
+
+    score_prompts_cmd = subparsers.add_parser(
+        "score-prompts",
+        help="Score a prompt dataset against a natural-language criterion.",
+        parents=[build_score_prompts_parser()],
+        add_help=False,
+    )
+    score_prompts_cmd.set_defaults(func=run_score_prompts)
 
     export_hf = subparsers.add_parser(
         "export-hf-records",
@@ -1322,6 +1345,58 @@ def run_validate_assay(args: argparse.Namespace) -> int:
     status = result.report["status"]
     if status == "fail" or (args.fail_on_warning and status == "warn"):
         return 1
+    return 0
+
+
+def run_compile_criterion(args: argparse.Namespace) -> int:
+    result = run_compile_criterion_from_args(args)
+    if args.json:
+        # Keep stdout pure JSON so `... --json | jq` works; confirmations go to stderr.
+        print(json.dumps(result, indent=2, sort_keys=True))
+    stream = sys.stderr if args.json else sys.stdout
+    if result.get("schema_version") == GENERATION_REQUEST_SCHEMA:
+        # Two-phase agent flow: phase one wrote the generation request only.
+        print(f"Wrote {result['request_path']}", file=stream)
+        if not args.json:
+            print(
+                "Generation request written (no model called). Write "
+                f"{result['candidates_format']['path']} per the request, then finish with:",
+            )
+            print(f"  {result['agent_next_actions'][1]['command']}")
+        return 0
+    for path in result["outputs"].values():
+        print(f"Wrote {path}", file=stream)
+    if not args.json:
+        counts = result["counts"]
+        print(
+            f"Gate: {result['status']} — {counts['positive_survivors']} positive / "
+            f"{counts['negative_survivors']} negative survivor(s), {counts['excluded']} excluded"
+        )
+        for warning in result["warnings"]:
+            print(f"Warning: {warning}")
+    return 0
+
+
+def run_score_prompts(args: argparse.Namespace) -> int:
+    summary = run_score_prompts_from_args(args)
+    if args.json:
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        if summary["out"] is not None:
+            print(f"Wrote {summary['out']}", file=sys.stderr)
+        return 0
+    if summary["out"] is not None:
+        print(f"Wrote {summary['out']}")
+    stats = summary["score_stats"]
+    print(
+        f"Scored {summary['count']} prompt(s) with {summary['scorer']} "
+        f"(min={stats['min']}, mean={stats['mean']}, max={stats['max']})"
+    )
+    print(f"Hypothesis: {summary['hypothesis']}")
+    for warning in summary["warnings"]:
+        print(f"Warning: {warning}")
+    if summary["out"] is None:
+        for row in summary["rows"]:
+            print(json.dumps(row, sort_keys=True))
     return 0
 
 

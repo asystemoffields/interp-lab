@@ -1,6 +1,6 @@
 """Public Python API for interp-lab."""
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 
 from interp_lab.schema import (
     CandidateMatch,
@@ -48,6 +48,7 @@ from interp_lab.api import (
     compare,
     compare_model_families,
     compare_runs,
+    compile_criterion,
     criterion_lab,
     criterion_lab_presets,
     demo_sweep,
@@ -69,6 +70,7 @@ from interp_lab.api import (
     run,
     scale_plan,
     scaffold_run,
+    score_prompts,
     search_features,
     train_sae,
     update_dossier,
@@ -113,6 +115,7 @@ __all__ = [
     "compare",
     "compare_model_families",
     "compare_runs",
+    "compile_criterion",
     "criterion_lab",
     "criterion_lab_presets",
     "demo_sweep",
@@ -138,6 +141,7 @@ __all__ = [
     "run",
     "scale_plan",
     "scaffold_run",
+    "score_prompts",
     "search_features",
     "train_sae",
     "update_dossier",

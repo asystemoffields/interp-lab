@@ -100,8 +100,10 @@ def test_tools_list_schema_sanity():
         "export_steering",
         "intervene",
         "train_sae",
+        "score_prompts",
+        "compile_criterion",
     ]
-    assert len(names) == 19
+    assert len(names) == 21
     # apply_steering is deliberately NOT served: generation against arbitrary
     # models is a host-agent decision (see the server instructions).
     assert "apply_steering" not in names
@@ -289,6 +291,8 @@ def test_initialize_instructions_cover_the_investigation_loop():
 
     assert "plan_evidence" in instructions
     assert "dossier_update" in instructions
+    assert "compile_criterion" in instructions
+    assert "score_prompts" in instructions
     assert "apply-steering" in instructions  # documented as deliberately not exposed
 
 
@@ -574,6 +578,81 @@ def test_train_sae_tool_fallback_method_from_records(tmp_path: Path):
     assert summary["method"] == "fallback-dictionary"
     assert summary["latent_dim"] == 2
     assert Path(summary["paths"]["sae_json"]).exists()
+
+
+def test_score_prompts_tool_writes_scored_dataset_with_hash_scorer(tmp_path: Path):
+    dataset = _write_prompt_dataset(tmp_path / "prompts.jsonl")
+
+    result = _call(
+        McpServer(),
+        1,
+        "score_prompts",
+        {
+            "dataset": str(dataset),
+            "criterion": "benchmark awareness",
+            "scorer": "hash",
+            "out": str(tmp_path / "scored.jsonl"),
+        },
+    )["result"]
+
+    assert result["isError"] is False
+    summary = result["structuredContent"]
+    assert summary["count"] == 2
+    assert summary["scorer"] == "hash_cosine"
+    assert summary["hypothesis"] == "This text clearly involves benchmark awareness."
+    assert summary["warnings"]  # hash scorer is always labeled weak
+    assert "rows" not in summary  # out required over MCP: compact summary only
+    rows = [
+        json.loads(line)
+        for line in Path(summary["out"]).read_text(encoding="utf-8").splitlines()
+    ]
+    assert all(row["criterion_score_source"] == "hash_cosine" for row in rows)
+
+
+def test_compile_criterion_tool_agent_generator_returns_request_payload(tmp_path: Path):
+    result = _call(
+        McpServer(),
+        1,
+        "compile_criterion",
+        {
+            "criterion": "benchmark awareness",
+            "out": str(tmp_path / "compile"),
+            "generator": "agent",
+        },
+    )["result"]
+
+    assert result["isError"] is False
+    request = result["structuredContent"]
+    # The generation request IS the tool result — the two-phase agent flow.
+    assert request["schema_version"] == "interp-lab.criterion_generation_request.v1"
+    assert request["counts"] == {"positive": 32, "negative": 32}
+    assert Path(request["request_path"]).exists()
+    action_ids = [action["id"] for action in request["agent_next_actions"]]
+    assert action_ids == ["write_candidate_prompts", "finish_compile_criterion"]
+
+
+def test_compile_criterion_tool_heuristic_with_hash_scorer(tmp_path: Path):
+    result = _call(
+        McpServer(),
+        1,
+        "compile_criterion",
+        {
+            "criterion": "benchmark awareness",
+            "out": str(tmp_path / "compile"),
+            "generator": "heuristic",
+            "scorer": "hash",
+            "n": 10,
+        },
+    )["result"]
+
+    assert result["isError"] is False
+    summary = result["structuredContent"]
+    assert summary["status"] == "pass"
+    assert summary["gates"]["margins"]["mode"] == "advisory"
+    assert summary["warnings"]
+    assert Path(summary["paths"]["prompts_jsonl"]).exists()
+    assert Path(summary["paths"]["preset_json"]).exists()
+    assert Path(summary["paths"]["report_json"]).exists()
 
 
 def test_unknown_method_returns_method_not_found():
