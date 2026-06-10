@@ -11,14 +11,14 @@ from interp_lab.run_diff import RUN_DIFF_SCHEMA, build_run_diff_report
 CRITERION = "the model is aware it is being evaluated"
 
 
-def _write(model: str, *, measured: bool, out: Path) -> Path:
+def _write(model: str, *, measured: bool, out: Path, top_k: int = 8) -> Path:
     report = inspect_model(
         model=model,
         criterion_text=CRITERION,
         feature_provider=ToyFeatureProvider(),
         verbalizer=ToyVerbalizer(),
         intervention_runner=ToyInterventionRunner(measured=measured),
-        top_k=8,
+        top_k=top_k,
     )
     json_path, _ = write_inspection_report(report, out)
     return json_path
@@ -37,11 +37,15 @@ def test_identical_runs_report_no_drift(tmp_path: Path):
 
 
 def test_measured_vs_correlational_shows_movers(tmp_path: Path):
-    base = _write("toy/model-a", measured=False, out=tmp_path / "plain")
-    cand = _write("toy/model-a", measured=True, out=tmp_path / "measured")
+    # top_k=16 keeps every toy feature: measured mode reorders the ranking (causal
+    # evidence now changes scores), so a top-8 cut would surface that reordering as
+    # added/dropped features instead of a pure "changed" diff.
+    base = _write("toy/model-a", measured=False, out=tmp_path / "plain", top_k=16)
+    cand = _write("toy/model-a", measured=True, out=tmp_path / "measured", top_k=16)
     diff = compare_runs(base, cand)
-    # Same model+criterion -> same feature ids, so everything is "changed", not added/dropped.
-    assert diff["summary"]["common_count"] == 8
+    # Same model+criterion with full coverage -> same feature ids, so everything is
+    # "changed", not added/dropped.
+    assert diff["summary"]["common_count"] == 16
     assert diff["summary"]["added_count"] == 0
     assert diff["changed_features"]
     top = diff["changed_features"][0]
@@ -72,6 +76,35 @@ def test_compare_runs_writes_json_and_markdown(tmp_path: Path):
     text = result.markdown_path.read_text(encoding="utf-8")
     assert "# interp-lab Run Diff" in text
     assert "Biggest movers" in text
+
+
+def test_markdown_out_alone_still_writes_markdown(tmp_path: Path):
+    # Regression: --markdown-out without --out used to be silently ignored.
+    a = _write("toy/m", measured=False, out=tmp_path / "a")
+    b = _write("toy/m", measured=True, out=tmp_path / "b")
+    markdown = tmp_path / "diff.md"
+    result = compare_runs(a, b, markdown_out=markdown)
+    assert isinstance(result, dict)  # no JSON path -> the diff dict is returned
+    assert result["schema_version"] == RUN_DIFF_SCHEMA
+    assert "# interp-lab Run Diff" in markdown.read_text(encoding="utf-8")
+
+
+def test_run_diff_next_actions_use_canonical_shape(tmp_path: Path):
+    a = inspect("toy/m", CRITERION, backend="toy", out=tmp_path / "a", top_k=6)
+    b = inspect("toy/m", "the text discusses cooking recipes", backend="toy", out=tmp_path / "b", top_k=6)
+    diff = compare_runs(a.json_path, b.json_path)
+
+    actions = {action["id"]: action for action in diff["agent_next_actions"]}
+    # Prose-only guidance carries instruction, not command/argv.
+    assert "instruction" in actions["inspect_top_movers"]
+    assert "command" not in actions["inspect_top_movers"]
+    # Runnable suggestions carry argv + the shlex-joined command.
+    stabilize = actions["stabilize_run"]
+    assert stabilize["argv"][:2] == ["interp-lab", "inspect"]
+    assert "<model>" in stabilize["argv"]
+    assert stabilize["command"].startswith("interp-lab inspect")
+    for action in actions.values():
+        assert action["id"] and action["title"]
 
 
 def test_build_run_diff_is_pure_function():

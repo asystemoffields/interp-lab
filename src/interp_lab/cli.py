@@ -130,6 +130,10 @@ Commands by purpose:
     export-hf-interventions, export-hf-contrast, train-sae, export-hf-sae-paths,
     validate-hf-sae-paths, build-prompts, prepare-sae-prompts, publish-hf-artifact
 
+  Agent integration
+    capabilities  one-call discovery: commands, Python API, schemas, environment
+    mcp           serve interp-lab tools over the Model Context Protocol (stdio)
+
   Utilities
     profile-env, plan-scale, validate-assay, release-check
 
@@ -608,6 +612,20 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
     release_check.set_defaults(func=run_release_check)
+
+    capabilities = subparsers.add_parser(
+        "capabilities",
+        help="Print the machine-readable interp-lab capabilities payload for agents.",
+    )
+    capabilities.add_argument("--json", action="store_true", help="Print the payload as JSON on stdout.")
+    capabilities.add_argument("--out", help="Optional output JSON file path.")
+    capabilities.set_defaults(func=run_capabilities)
+
+    mcp = subparsers.add_parser(
+        "mcp",
+        help="Serve interp-lab tools over the Model Context Protocol (stdio).",
+    )
+    mcp.set_defaults(func=run_mcp)
 
     seen: set[int] = set()
     for subparser in subparsers.choices.values():
@@ -1139,6 +1157,34 @@ def run_release_check(args: argparse.Namespace) -> int:
     if args.strict and not result.report["ready_for_stable_release"]:
         return 1
     return 0
+
+
+def run_capabilities(args: argparse.Namespace) -> int:
+    from interp_lab.capabilities import build_capabilities, write_capabilities
+
+    payload = build_capabilities()
+    if args.json:
+        # Keep stdout pure JSON so `interp-lab capabilities --json | jq` works.
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    if args.out:
+        path = write_capabilities(args.out)
+        print(f"Wrote {path}", file=sys.stderr if args.json else sys.stdout)
+    if not args.json and not args.out:
+        print(f"interp-lab {__version__} capabilities")
+        print(f"- CLI commands: {len(payload['commands'])}")
+        print(f"- Python API exports: {len(payload['python_api']['exports'])}")
+        print(f"- Artifact schemas: {len(payload['python_api']['schemas'])}")
+        print(f"- MCP server: {payload['conventions']['mcp']['command']} (stdio)")
+        print()
+        print("Full machine-readable payload: interp-lab capabilities --json")
+    return 0
+
+
+def run_mcp(args: argparse.Namespace) -> int:
+    from interp_lab.mcp_server import run_mcp_server
+
+    _ = args  # the MCP server takes no CLI options; stdin/stdout carry the protocol
+    return run_mcp_server()
 
 
 def _provider_from_args(args: argparse.Namespace):

@@ -81,7 +81,7 @@ def export_transformerlens_activation_records(
                             "layer": layer,
                         }
                     )
-                    feature_metadata[feature_id] = {
+                    metadata = {
                         "label": f"{hook_name} dimension {dimension}",
                         "layer": layer,
                         "source": "transformerlens",
@@ -89,6 +89,9 @@ def export_transformerlens_activation_records(
                         "dimension": dimension,
                         "signed_selection_correlation": round(association, 6),
                     }
+                    if layer is not None:
+                        metadata["layer_convention"] = "hidden_state_index"
+                    feature_metadata[feature_id] = metadata
             handle.write(
                 json.dumps(
                     {
@@ -235,8 +238,18 @@ def _select_dimensions(
 
 
 def _layer_for_hook(hook_name: str) -> int | None:
+    """Map a TransformerLens hook to the HF hidden-state index convention.
+
+    ``blocks.i.hook_resid_post`` (and other block-``i`` hooks) describe the
+    residual stream HF exposes as ``hidden_states[i + 1]``, so they normalize to
+    ``block_index + 1``; ``hook_resid_pre`` is the incoming stream and stays at
+    ``block_index``. This matches L<layer>:D<dim> records from export-hf-records.
+    """
     chunks = hook_name.split(".")
     for index, chunk in enumerate(chunks[:-1]):
         if chunk == "blocks" and chunks[index + 1].isdigit():
-            return int(chunks[index + 1])
+            block_index = int(chunks[index + 1])
+            if hook_name.endswith("hook_resid_pre"):
+                return block_index
+            return block_index + 1
     return None

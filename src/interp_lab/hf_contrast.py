@@ -94,7 +94,7 @@ def export_hf_contrast_feature(
     if interventions_out is not None:
         requested_target_tokens = target_tokens
         score_target_tokens = requested_target_tokens or DEFAULT_TARGET_TOKENS
-        target_ids, resolved_target_tokens = resolve_target_token_ids(
+        target_ids, resolved_target_tokens, target_token_map = resolve_target_token_ids(
             model=model,
             tokenizer=tokenizer,
             prompts=prompts,
@@ -115,6 +115,7 @@ def export_hf_contrast_feature(
             criterion=criterion,
             target_ids=target_ids,
             target_tokens=resolved_target_tokens,
+            target_token_map=target_token_map,
             target_token_strategy=target_token_strategy(requested_target_tokens),
             steer_strength=steer_strength,
             strength_sweep=strength_sweep,
@@ -293,6 +294,7 @@ def _write_steering_interventions(
     criterion: str,
     target_ids: list[int],
     target_tokens: list[str],
+    target_token_map: dict[str, str],
     target_token_strategy: str,
     steer_strength: float,
     strength_sweep: list[float] | None,
@@ -349,6 +351,7 @@ def _write_steering_interventions(
                                 "behavior_score": "target_token_probability_mass",
                                 "negative_prompt_count": len(negative_indexes),
                                 "positive_prompt_count": len(positive_indexes),
+                                "resolved_target_token_ids": target_token_map,
                                 "steer_strength": strength,
                                 "target_token_strategy": target_token_strategy,
                                 "target_tokens": target_tokens,
@@ -425,15 +428,6 @@ def _score_prompt(
 
 def _register_gpt2_steering(model: Any, layer: int, direction: Any, strength: float):
     return register_hidden_steering(model, layer, direction, strength)
-
-
-def _target_token_ids(tokenizer: Any, target_tokens: list[str]) -> list[int]:
-    token_ids: set[int] = set()
-    for token in target_tokens:
-        ids = tokenizer.encode(token, add_special_tokens=False)
-        if ids:
-            token_ids.add(int(ids[-1]))
-    return sorted(token_ids)
 
 
 def _slug(value: str) -> str:

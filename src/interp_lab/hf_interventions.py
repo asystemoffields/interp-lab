@@ -11,6 +11,7 @@ from typing import Any
 from interp_lab.hf_hooks import register_hidden_ablations
 from interp_lab.hf_loading import add_hf_loading_args, hf_loading_options_from_args, load_hf_text_model
 from interp_lab.hf_records import PromptRecord, load_prompt_records, split_prompt_record_indexes
+from interp_lab.matching import signed_effect_with_provenance
 from interp_lab.reporting import load_inspection_report
 
 FEATURE_PATTERN = re.compile(r"^L(?P<layer>\d+):D(?P<dimension>\d+)$")
@@ -76,6 +77,7 @@ def export_hf_intervention_records(
     positive_indexes, negative_indexes = split_prompt_record_indexes(prompts)
     if not positive_indexes:
         raise ValueError("HF interventions need at least one positive-scored prompt")
+    validate_hookable_feature_layers(features)
     requested_target_tokens = target_tokens
     score_target_tokens = requested_target_tokens or DEFAULT_TARGET_TOKENS
     token_strategy = target_token_strategy(requested_target_tokens)
@@ -93,7 +95,7 @@ def export_hf_intervention_records(
         model_kwargs=model_kwargs,
         tokenizer_kwargs=tokenizer_kwargs,
     )
-    target_ids, resolved_target_tokens = resolve_target_token_ids(
+    target_ids, resolved_target_tokens, target_token_map = resolve_target_token_ids(
         model=model,
         tokenizer=tokenizer,
         prompts=prompts,
@@ -122,6 +124,7 @@ def export_hf_intervention_records(
                         "behavior_score": "target_token_probability_mass",
                         "negative_prompt_count": len(negative_indexes),
                         "positive_prompt_count": len(positive_indexes),
+                        "resolved_target_token_ids": target_token_map,
                         "target_token_strategy": token_strategy,
                         "target_tokens": resolved_target_tokens,
                     },
@@ -150,6 +153,7 @@ def export_hf_intervention_records(
                         "group_members": [item[2] for item in group_ablations],
                         "negative_prompt_count": len(negative_indexes),
                         "positive_prompt_count": len(positive_indexes),
+                        "resolved_target_token_ids": target_token_map,
                         "target_token_strategy": token_strategy,
                         "target_tokens": resolved_target_tokens,
                     },
@@ -239,15 +243,16 @@ def append_hf_group_activation_record(
         raise ValueError(f"{report_path}: no report cards found")
     group_id = _group_id([card.feature_id for card in members])
     member_ids = [card.feature_id for card in members]
-    member_signs = {
-        card.feature_id: _effect_sign(
-            card.causal_effects.get(
-                "signed_causal_effect",
-                card.causal_effects.get("signed_association", 0.0),
-            )
-        )
-        for card in members
-    }
+    # Member signs only orient the group aggregate (a heuristic seed), so falling
+    # back to a correlational signed_association is acceptable here -- but each
+    # member's provenance is recorded in the output artifact below so downstream
+    # readers never mistake an association-derived sign for a measured direction.
+    member_signs: dict[str, float] = {}
+    member_sign_provenance: dict[str, str] = {}
+    for card in members:
+        signed, provenance = signed_effect_with_provenance(card.causal_effects, card.metadata)
+        member_signs[card.feature_id] = _effect_sign(0.0 if signed is None else signed)
+        member_sign_provenance[card.feature_id] = provenance
     input_path = Path(records_path)
     output_path = Path(out_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -282,6 +287,10 @@ def append_hf_group_activation_record(
                 "layer": members[0].layer,
                 "source": "hf-hidden-state-group",
                 "group_members": member_ids,
+                "member_signs": member_signs,
+                # "intervention" signs are measured; "association"/"none" signs are
+                # heuristic seeds for orienting the aggregate, not causal directions.
+                "member_sign_provenance": member_sign_provenance,
             }
             row["features"] = features
             row["feature_metadata"] = metadata
@@ -334,7 +343,7 @@ def resolve_target_token_ids(
     device: str,
     max_length: int,
     auto_top_k: int = 16,
-) -> tuple[list[int], list[str]]:
+) -> tuple[list[int], list[str], dict[str, str]]:
     if target_tokens_are_auto(target_tokens):
         token_ids = _auto_target_token_ids(
             model=model,
@@ -345,8 +354,9 @@ def resolve_target_token_ids(
             top_k=auto_top_k,
         )
         labels = [_decode_token(tokenizer, token_id) for token_id in token_ids]
-        return token_ids, labels
-    return _target_token_ids(tokenizer, target_tokens), target_tokens
+        return token_ids, labels, _target_token_id_map(tokenizer, token_ids)
+    token_ids = _target_token_ids(tokenizer, target_tokens)
+    return token_ids, target_tokens, _target_token_id_map(tokenizer, token_ids)
 
 
 def build_intervention_parser() -> argparse.ArgumentParser:
@@ -431,13 +441,54 @@ def _parse_hidden_dimension(feature_id: str) -> tuple[int, int, str]:
     return int(match.group("layer")), int(match.group("dimension")), feature_id
 
 
+def validate_hookable_feature_layers(features: list[tuple[int, int, str]]) -> None:
+    """Reject layer-0 features before any model loading or scoring starts.
+
+    Layer 0 is hidden_states[0] (the embedding output); decoder hooks only cover
+    layers 1..n_blocks, so failing late would leave a truncated record file.
+    """
+    offending = sorted({feature_id for layer, _, feature_id in features if layer < 1})
+    if offending:
+        raise ValueError(
+            "Layer 0 features are embedding hidden states and cannot be hooked for interventions: "
+            + ", ".join(offending)
+            + ". Re-export records without layer 0 (e.g. --layers 1+) or drop these features."
+        )
+
+
 def _target_token_ids(tokenizer: Any, target_tokens: list[str]) -> list[int]:
     token_ids: set[int] = set()
     for token in target_tokens:
         ids = tokenizer.encode(token, add_special_tokens=False)
-        if ids:
-            token_ids.add(int(ids[-1]))
+        token_id = _first_scored_token_id(tokenizer, ids)
+        if token_id is not None:
+            token_ids.add(token_id)
     return sorted(token_ids)
+
+
+def _first_scored_token_id(tokenizer: Any, ids: Any) -> int | None:
+    """Pick the token id the behavior score should watch for a target string.
+
+    The next-token probability at logits[0, -1] can only see the FIRST piece of
+    a multi-piece target, so use ids[0]. SentencePiece tokenizers sometimes emit
+    a lone space/▁ piece first; skip whitespace-only pieces when a later piece
+    exists so the scored id carries the target's content.
+    """
+    ids = [int(token_id) for token_id in ids or []]
+    if not ids:
+        return None
+    for token_id in ids[:-1]:
+        try:
+            decoded = tokenizer.decode([token_id])
+        except Exception:
+            decoded = ""
+        if decoded.strip():
+            return token_id
+    return ids[-1]
+
+
+def _target_token_id_map(tokenizer: Any, token_ids: list[int]) -> dict[str, str]:
+    return {str(token_id): _decode_token(tokenizer, token_id) for token_id in token_ids}
 
 
 def _auto_target_token_ids(

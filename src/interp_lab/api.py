@@ -22,6 +22,7 @@ from interp_lab.adapters.saelens import (
 )
 from interp_lab.adapters.scope import ScopeFeatureProvider
 from interp_lab.adapters.toy import ToyFeatureProvider, ToyInterventionRunner, ToyVerbalizer
+from interp_lab.capabilities import build_capabilities
 from interp_lab.cli import main as _cli_main
 from interp_lab.criterion_lab import (
     CriterionAssayValidationResult,
@@ -1029,6 +1030,15 @@ def run(
 def doctor() -> dict[str, Any]:
     """Return environment diagnostics for optional adapters and core runtime."""
     return collect_diagnostics()
+
+
+def capabilities() -> dict[str, Any]:
+    """Return the machine-readable interp-lab capabilities payload for agents.
+
+    One call covers the structured CLI surface, the Python API contract (exports,
+    schemas, signatures), optional-module availability, and output conventions.
+    """
+    return build_capabilities()
 
 
 def profile_environment(path: str | Path = ".") -> dict[str, Any]:

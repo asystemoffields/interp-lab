@@ -225,6 +225,81 @@ def test_fallback_training_honors_topk_sparsity(tmp_path: Path):
     assert all(sum(1 for value in row if value > 1e-6) <= 1 for row in encoded)
 
 
+def test_fallback_artifact_reproduces_metric_latents_with_nonzero_l1(tmp_path: Path):
+    source = tmp_path / "source.jsonl"
+    rows = [
+        _row("m", "p1", 1.0, {"raw-a": 3.0, "raw-b": 0.5}),
+        _row("m", "p2", 1.0, {"raw-a": 2.0, "raw-b": 0.0}),
+        _row("m", "p3", 0.0, {"raw-a": 0.0, "raw-b": 2.5}),
+        _row("m", "p4", 0.0, {"raw-a": 0.5, "raw-b": 3.0}),
+    ]
+    source.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    matrix = load_activation_matrix_from_records(source, model_name="m")
+
+    artifact = train_sae(
+        matrix,
+        latent_dim=2,
+        method="fallback",
+        l1_coefficient=0.5,
+        validation_fraction=0.0,
+    )
+
+    # The l1 soft shrinkage must live in the stored encoder bias so
+    # encode_with_artifact reproduces the latents the metrics describe.
+    assert artifact["encoder_bias"] == [-0.5, -0.5]
+    encoded = encode_with_artifact(matrix.values, artifact)
+    average_l0 = sum(sum(1 for value in row if value > 1e-6) for row in encoded) / len(encoded)
+    firing_rates = [
+        sum(1.0 for row in encoded if row[index] > 1e-6) / len(encoded)
+        for index in range(2)
+    ]
+    latent_means = [sum(row[index] for row in encoded) / len(encoded) for index in range(2)]
+    assert artifact["metrics"]["average_l0"] == round(average_l0, 6)
+    assert artifact["metrics"]["latent_firing_rate"] == [round(rate, 8) for rate in firing_rates]
+    assert artifact["metrics"]["latent_activation_mean"] == [round(value, 8) for value in latent_means]
+
+
+def test_train_sae_auto_falls_back_with_advisory_when_torch_missing(tmp_path: Path, monkeypatch, capsys):
+    source = tmp_path / "source.jsonl"
+    rows = [
+        _row("m", "p1", 1.0, {"raw-a": 2.0, "raw-b": 0.0}),
+        _row("m", "p2", 0.0, {"raw-a": 0.0, "raw-b": 2.0}),
+    ]
+    source.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    matrix = load_activation_matrix_from_records(source, model_name="m")
+    monkeypatch.setattr("interp_lab.sae_training._torch_is_available", lambda: False)
+
+    artifact = train_sae(matrix, latent_dim=2, method="auto")
+
+    assert artifact["method"] == "fallback-dictionary"
+    assert "fallback dictionary trainer" in capsys.readouterr().err
+
+
+def test_train_sae_torch_method_fails_fast_without_torch(tmp_path: Path, monkeypatch):
+    source = tmp_path / "source.jsonl"
+    source.write_text(json.dumps(_row("m", "p", 1.0, {"raw-a": 1.0})) + "\n", encoding="utf-8")
+    matrix = load_activation_matrix_from_records(source, model_name="m")
+    monkeypatch.setattr("interp_lab.sae_training._torch_is_available", lambda: False)
+
+    with pytest.raises(RuntimeError, match="PyTorch is required"):
+        train_sae(matrix, latent_dim=1, method="torch")
+
+
+def test_train_sae_auto_surfaces_import_errors_from_broken_torch(tmp_path: Path, monkeypatch):
+    source = tmp_path / "source.jsonl"
+    source.write_text(json.dumps(_row("m", "p", 1.0, {"raw-a": 1.0})) + "\n", encoding="utf-8")
+    matrix = load_activation_matrix_from_records(source, model_name="m")
+    monkeypatch.setattr("interp_lab.sae_training._torch_is_available", lambda: True)
+
+    def _broken_torch_training(*args, **kwargs):
+        raise ImportError("torch is installed but broken")
+
+    monkeypatch.setattr("interp_lab.sae_training._train_torch_sae", _broken_torch_training)
+
+    with pytest.raises(ImportError, match="installed but broken"):
+        train_sae(matrix, latent_dim=1, method="auto")
+
+
 def test_split_prompt_indexes_handles_duplicate_prompt_ids():
     prompts = [
         SimpleNamespace(prompt_id="", criterion_score=1.0),

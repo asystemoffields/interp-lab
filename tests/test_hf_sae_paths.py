@@ -3,10 +3,12 @@ from pathlib import Path
 import pytest
 
 from interp_lab.hf_sae_paths import (
+    SaeFeatureRef,
     build_hf_sae_paths_parser,
     parse_path_pair,
     parse_path_pairs,
     parse_sae_feature_ref,
+    _path_row,
     _random_source_control_refs,
     resolve_sae_feature_refs,
 )
@@ -122,7 +124,87 @@ def _artifact(*, layer: int, latent_dim: int) -> dict:
     }
 
 
-def _card(feature_id: str, layer: int, label: str) -> FeatureCard:
+def test_resolve_sae_feature_refs_records_signed_effect_provenance(tmp_path: Path):
+    # The signed effect only seeds path selection, so the association fallback is
+    # kept -- but each ref must carry its provenance so path-record artifacts never
+    # present a correlational seed as a measured causal effect.
+    artifact = _artifact(layer=24, latent_dim=8)
+    report = InspectionReport(
+        model="m",
+        criterion=Criterion(text="criterion"),
+        cards=[
+            _card("SAE:L24:F3", 24, "measured", causal_effects={"signed_causal_effect": 0.4}),
+            _card("SAE:L24:F5", 24, "proxy", causal_effects={"signed_association": -0.6}),
+        ],
+    )
+    report_path, _ = write_inspection_report(report, tmp_path / "report")
+
+    refs = resolve_sae_feature_refs(
+        explicit_features=["SAE:L24:F6"],
+        report_path=report_path,
+        artifact=artifact,
+        top_k=2,
+        role="source",
+    )
+    by_id = {ref.feature_id: ref for ref in refs}
+
+    assert by_id["SAE:L24:F3"].signed_effect == 0.4
+    assert by_id["SAE:L24:F3"].signed_effect_provenance == "intervention"
+    assert by_id["SAE:L24:F5"].signed_effect == -0.6
+    assert by_id["SAE:L24:F5"].signed_effect_provenance == "association"
+    assert by_id["SAE:L24:F6"].signed_effect is None
+    assert by_id["SAE:L24:F6"].signed_effect_provenance == "none"
+
+
+def test_path_row_metadata_labels_signed_effect_provenance():
+    source = SaeFeatureRef(
+        feature_id="SAE:L12:F1",
+        layer=12,
+        latent_index=1,
+        signed_effect=-0.6,
+        signed_effect_provenance="association",
+    )
+    target = SaeFeatureRef(
+        feature_id="SAE:L24:F2",
+        layer=24,
+        latent_index=2,
+        signed_effect=0.4,
+        signed_effect_provenance="intervention",
+    )
+
+    row = _path_row(
+        model_name="m",
+        criterion="criterion",
+        prompt_id="p1",
+        criterion_score=1.0,
+        source_ref=source,
+        target_ref=target,
+        strength=2.0,
+        pool="mean",
+        baseline_activation=0.1,
+        patched_activation=0.2,
+        baseline_score=None,
+        patched_score=None,
+        source_artifact_path="source.json",
+        target_artifact_path="target.json",
+        target_token_strategy_value="disabled",
+        target_tokens=[],
+        target_token_map={},
+    )
+
+    assert row["metadata"]["source_signed_effect"] == -0.6
+    assert row["metadata"]["source_signed_effect_provenance"] == "association"
+    assert row["metadata"]["target_signed_effect"] == 0.4
+    assert row["metadata"]["target_signed_effect_provenance"] == "intervention"
+
+
+def _card(
+    feature_id: str,
+    layer: int,
+    label: str,
+    *,
+    causal_effects: dict[str, float] | None = None,
+) -> FeatureCard:
     return FeatureCard(
         feature_id=feature_id,
         model="m",
@@ -146,5 +228,7 @@ def _card(feature_id: str, layer: int, label: str) -> FeatureCard:
             decoder_signature=[],
             causal_vector=[],
         ),
-        causal_effects={"signed_causal_effect": 0.1, "strong_causal_score": 0.1},
+        causal_effects=causal_effects
+        if causal_effects is not None
+        else {"signed_causal_effect": 0.1, "strong_causal_score": 0.1},
     )

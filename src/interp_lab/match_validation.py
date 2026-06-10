@@ -516,6 +516,7 @@ def _validate_match(match: CandidateMatch, *, thresholds: dict[str, float]) -> d
     )
     causal_component = _optional_float(components.get("causal"))
     signed_component = _optional_float(components.get("signed_effect"))
+    signed_effect_provenance = _signed_effect_provenance(components)
     signed_effect_delta = _signed_effect_delta(match)
     same_effect_direction = _same_effect_direction(match, thresholds["min_abs_signed_effect"])
     strong_signed_effects = _has_strong_signed_effects(match, thresholds["min_abs_signed_effect"])
@@ -537,6 +538,7 @@ def _validate_match(match: CandidateMatch, *, thresholds: dict[str, float]) -> d
         strong_signed_effects=strong_signed_effects,
         same_effect_direction=same_effect_direction,
         signed_delta_ok=signed_delta_ok,
+        intervention_signed_effects=signed_effect_provenance == "intervention",
     )
     reason_codes = _match_reason_codes(
         match=match,
@@ -548,6 +550,7 @@ def _validate_match(match: CandidateMatch, *, thresholds: dict[str, float]) -> d
         strong_signed_effects=strong_signed_effects,
         same_effect_direction=same_effect_direction,
         signed_delta_ok=signed_delta_ok,
+        signed_effect_provenance=signed_effect_provenance,
         thresholds=thresholds,
     )
     claim_grade = _claim_grade(status)
@@ -570,6 +573,7 @@ def _validate_match(match: CandidateMatch, *, thresholds: dict[str, float]) -> d
         "decoder_component": _optional_round(components.get("decoder")),
         "causal_component": _optional_round(causal_component),
         "signed_effect_component": _optional_round(signed_component),
+        "signed_effect_provenance": signed_effect_provenance,
         "left_signed_effect": _optional_round(match.left_signed_effect),
         "right_signed_effect": _optional_round(match.right_signed_effect),
         "signed_effect_delta": _optional_round(signed_effect_delta),
@@ -588,6 +592,7 @@ def _match_status(
     strong_signed_effects: bool,
     same_effect_direction: bool | None,
     signed_delta_ok: bool,
+    intervention_signed_effects: bool,
 ) -> str:
     if direction_conflict:
         return "contradicted"
@@ -599,7 +604,13 @@ def _match_status(
         and same_effect_direction is True
         and signed_delta_ok
     ):
-        return "validated"
+        # "validated" is a causal-equivalence claim: it requires the aligned signed
+        # effects to be intervention-backed (signed_causal_effect on both sides).
+        # Aligned correlational signed associations -- the records backend's proxy --
+        # cap at needs_causal_evidence, no matter how well they agree.
+        if intervention_signed_effects:
+            return "validated"
+        return "needs_causal_evidence"
     if structural_pass_count >= 2:
         return "needs_causal_evidence"
     if structural_pass_count >= 1:
@@ -618,6 +629,7 @@ def _match_reason_codes(
     strong_signed_effects: bool,
     same_effect_direction: bool | None,
     signed_delta_ok: bool,
+    signed_effect_provenance: str | None,
     thresholds: dict[str, float],
 ) -> list[str]:
     reasons: list[str] = []
@@ -633,7 +645,9 @@ def _match_reason_codes(
         else:
             reasons.append("causal_component_below_threshold")
     if not strong_signed_effects:
-        if match.left_signed_effect is None or match.right_signed_effect is None:
+        if signed_effect_provenance == "mismatch":
+            reasons.append("signed_effect_provenance_mismatch")
+        elif match.left_signed_effect is None or match.right_signed_effect is None:
             reasons.append("missing_signed_effects")
         else:
             reasons.append("signed_effects_below_threshold")
@@ -641,6 +655,10 @@ def _match_reason_codes(
         reasons.append("signed_effect_direction_conflict")
     elif not signed_delta_ok:
         reasons.append("signed_effect_delta_above_threshold")
+    elif signed_effect_provenance != "intervention":
+        # Aligned signed effects, but not intervention-backed on both sides --
+        # this is what blocks the pair from grading "validated".
+        reasons.append("signed_effects_lack_intervention_provenance")
     if reasons:
         return reasons
     if status == "validated":
@@ -667,13 +685,23 @@ def _claim_grade(status: str) -> str:
 def _interpret_status(status: str, reason_codes: list[str]) -> str:
     reasons = set(reason_codes)
     if status == "validated":
-        return "The match preserves high fingerprint similarity and aligned measured signed effects under the current thresholds."
+        return "The match preserves high fingerprint similarity and aligned intervention-measured signed effects under the current thresholds."
     if status == "needs_causal_evidence":
+        if "signed_effects_lack_intervention_provenance" in reasons:
+            return (
+                "The signed effects agree, but both are correlational associations rather than "
+                "intervention measurements; run matched interventions before claiming equivalence."
+            )
+        if "signed_effect_provenance_mismatch" in reasons:
+            return (
+                "One side's signed effect is intervention-measured and the other is a correlational "
+                "proxy, so the signed-effect axis was excluded as incomparable."
+            )
         return "The match has strong structural similarity, but needs aligned causal or signed-effect evidence before treating it as an equivalent feature."
     if status == "plausible":
         return "The match is plausible from the available fingerprints and should be prioritized after stronger candidates."
     if status == "contradicted":
-        return "The features have opposite measured signed effects for this criterion."
+        return "The features have opposite same-provenance signed effects for this criterion."
     if "score_below_threshold" in reasons:
         return "The candidate does not clear the match-score threshold."
     return "The available fingerprint evidence is weak for this candidate."
@@ -684,7 +712,12 @@ def _next_action(claim_grade: str, reason_codes: list[str]) -> str:
     if claim_grade == "validated_equivalent":
         return "Replicate the match on held-out prompts, then include it in cross-model mechanism summaries."
     if claim_grade == "needs_more_evidence":
-        if "missing_signed_effects" in reasons or "causal_component_neutral" in reasons:
+        if reasons & {
+            "missing_signed_effects",
+            "causal_component_neutral",
+            "signed_effects_lack_intervention_provenance",
+            "signed_effect_provenance_mismatch",
+        }:
             return "Run matched interventions or path-patching records for both features on the same criterion."
         if "signed_effect_delta_above_threshold" in reasons:
             return "Repeat interventions with more prompts and compare effect-size calibration."
@@ -899,6 +932,20 @@ def _search_text(item: dict[str, Any]) -> str:
         " ".join(str(reason) for reason in item.get("reason_codes", [])),
     ]
     return " ".join(str(part) for part in parts if part is not None).lower()
+
+
+def _signed_effect_provenance(components: dict[str, float]) -> str | None:
+    """Provenance of the compared signed effects, recorded by matching as component
+    markers (the CandidateMatch schema predates provenance, and components round-trip
+    through JSON). ``None`` means a pre-provenance match report: treated as
+    not-intervention-backed, so it can never grade "validated"."""
+    if "signed_effect_provenance_intervention" in components:
+        return "intervention"
+    if "signed_effect_provenance_association" in components:
+        return "association"
+    if "signed_effect_provenance_mismatch" in components:
+        return "mismatch"
+    return None
 
 
 def _has_strong_signed_effects(match: CandidateMatch, threshold: float) -> bool:

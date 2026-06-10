@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from interp_lab import __version__
+from interp_lab.capabilities import CAPABILITIES_SCHEMA
 from interp_lab.criterion_lab import PRESET_SCHEMA_VERSION
 from interp_lab.demo_sweep import REAL_MODEL_DEMO_SWEEP_SCHEMA
 from interp_lab.env_profile import SCHEMA_VERSION as ENV_PROFILE_SCHEMA
@@ -51,6 +52,7 @@ PUBLIC_API_EXPORTS = [
     "attribution_graph",
     "attribution_graph_summary",
     "build_prompts",
+    "capabilities",
     "check_explanation_consistency",
     "compare",
     "compare_model_families",
@@ -84,6 +86,7 @@ PUBLIC_API_EXPORTS = [
 SCHEMA_CONTRACTS = {
     "attribution_graph": "interp-lab.attribution_graph.v1",
     "attribution_graph_summary": "interp-lab.attribution_graph_summary.v1",
+    "capabilities": CAPABILITIES_SCHEMA,
     "criterion_assay_validation": "interp-lab.criterion_assay_validation.v1",
     "criterion_lab": "interp-lab.criterion_lab.v1",
     "criterion_lab_preset": PRESET_SCHEMA_VERSION,
@@ -116,6 +119,7 @@ PUBLIC_API_SIGNATURES = {
     "attribution_graph": ["report", "out", "markdown_out", "html_out", "path_records"],
     "attribution_graph_summary": ["graph", "out"],
     "build_prompts": ["out", "positive", "negative", "positive_prompt", "negative_prompt"],
+    "capabilities": [],
     "check_explanation_consistency": ["reports", "out", "markdown_out", "html_out", "min_similarity", "max_rank_span", "top_k"],
     "compare": ["left", "right", "out", "top_k"],
     "compare_model_families": ["members", "out", "markdown_out", "html_out", "top_k", "min_score"],
@@ -239,7 +243,7 @@ PUBLIC_API_SIGNATURES = {
     ],
     "validate_attribution_graph": ["graph", "path_records", "out", "graph_out", "require_controls"],
     "validate_criterion_assay": ["preset", "preset_file", "preset_dir", "out"],
-    "validate_hf_sae_paths": ["graph", "model", "dataset", "source_sae", "target_sae", "out"],
+    "validate_hf_sae_paths": ["graph", "model", "dataset", "source_sae", "target_sae", "path_records_out", "out"],
     "validate_matches": ["matches", "out", "html_out", "top_k"],
 }
 

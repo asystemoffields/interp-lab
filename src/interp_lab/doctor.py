@@ -3,12 +3,12 @@ from __future__ import annotations
 import importlib.metadata
 import importlib.util
 import json
-import os
 import platform
 import sys
 from typing import Any
 
 from interp_lab import __version__
+from interp_lab.text_embedding import active_embedder_description
 
 
 def collect_diagnostics() -> dict[str, Any]:
@@ -52,9 +52,18 @@ def collect_diagnostics() -> dict[str, Any]:
             "machine": platform.machine(),
         },
         "checks": checks,
-        "text_embedder": os.environ.get("INTERP_LAB_TEXT_EMBEDDER", "hash (default, lexical)"),
+        "text_embedder": _active_text_embedder(),
         "ok": all(check["ok"] for check in checks if check["required"]),
     }
+
+
+def _active_text_embedder() -> str:
+    # Report the embedder that is actually configured (set_text_embedder /
+    # configure_text_embedder / --text-embedder / env var), not just the env var.
+    try:
+        return active_embedder_description()
+    except (RuntimeError, ValueError) as exc:
+        return f"unavailable ({exc})"
 
 
 def diagnostics_to_text(diagnostics: dict[str, Any]) -> str:

@@ -443,7 +443,15 @@ COMMAND_SPECS: list[dict[str, Any]] = [
             {"key": "run", "flag": "--run", "label": "Run commands", "type": "boolean"},
             {"key": "allow_external", "flag": "--allow-external", "label": "Allow external launchers", "type": "boolean"},
             {"key": "strict", "flag": "--strict", "label": "Require all artifacts", "type": "boolean"},
-            {"key": "out", "flag": "--out", "label": "Sweep report", "default": "reports/real-model-demo-sweep.json"},
+            # No default: verify-only sweeps deliberately do not write unless --out is
+            # set, so prefilling the archived-evidence path would invite clobbering
+            # reports/real-model-demo-sweep.json with a run_commands=false report.
+            {
+                "key": "out",
+                "flag": "--out",
+                "label": "Sweep report",
+                "placeholder": "leave empty to protect archived evidence; --run defaults to reports/real-model-demo-sweep.json",
+            },
         ],
     },
 ]

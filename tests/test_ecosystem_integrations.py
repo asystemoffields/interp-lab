@@ -28,6 +28,8 @@ def test_goodfire_provider_uses_feature_search():
     assert evidence[0].feature_id == "goodfire:42"
     assert evidence[0].label == "formal writing"
     assert evidence[0].metadata["searched_model"] == "variant:meta-llama/Llama-3.1-8B-Instruct"
+    # Goodfire search is correlational; no fabricated causal "specificity".
+    assert evidence[0].causal_effects == {}
 
 
 def test_scope_provider_adds_scope_metadata():

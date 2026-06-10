@@ -30,6 +30,23 @@ Check your local environment:
 interp-lab doctor
 ```
 
+Discover the whole tool surface in one machine-readable call (built for agents):
+
+```bash
+interp-lab capabilities --json
+interp-lab capabilities --out reports/capabilities.json
+```
+
+The payload (`schema_version: interp-lab.capabilities.v1`) carries the tool/runtime stamp, the full structured CLI surface, the Python API contract (exports, schemas, signatures), optional-module availability plus the active text embedder, and the house conventions: JSON-first artifacts with `schema_version`, errors as `interp-lab: error: ...` on stderr with exit 2, `agent_next_actions` entries shaped `{id, title, command, argv, requires}` with `<angle-bracket>` placeholders for run-local artifacts. With `--json` stdout stays pure JSON (`--out` confirmations go to stderr); with no flags it prints a short human summary. The same payload is available from Python as `interp_lab.capabilities()`.
+
+Serve interp-lab tools over the Model Context Protocol:
+
+```bash
+interp-lab mcp
+```
+
+The MCP server speaks newline-delimited JSON-RPC 2.0 over stdio (one JSON object per line; diagnostics on stderr only) and exposes tools wrapping the Python API -- `capabilities`, `doctor`, `inspect`, `compare`, `validate_matches`, `search_features`, `compare_runs`, `check_explanation_consistency`, `attribution_graph`, and `validate_attribution_graph` -- plus the project docs as `interp-lab://docs/<name>` resources. Tools that produce large artifacts require an `out` path and return a compact summary plus the written paths; tool-level failures come back as results with `isError: true` rather than protocol errors.
+
 Check stable-release readiness:
 
 ```bash

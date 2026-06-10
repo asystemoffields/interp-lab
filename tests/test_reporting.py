@@ -237,6 +237,90 @@ def test_inspection_html_renders_searchable_feature_cards(tmp_path):
     assert path.read_text(encoding="utf-8").startswith("<!doctype html>")
 
 
+def test_mechanism_sketch_does_not_present_association_as_measured_causal_change():
+    # A card can cross the strong-effect threshold while carrying only a
+    # correlational signed_association (e.g. imported evidence). The mechanism
+    # sketch's "changes the behavior score" claim and the promoted/suppressed
+    # causal-readout verb are causal statements: they must only be filled by an
+    # intervention-measured signed_causal_effect, never by the association proxy.
+    report = InspectionReport(
+        model="m",
+        criterion=Criterion(text="unit prediction"),
+        cards=[
+            FeatureCard(
+                feature_id="SAE:L5:F1",
+                model="m",
+                layer=5,
+                label="unit tracking latent",
+                explanation="",
+                importance=0.5,
+                association=0.62,
+                specificity=0.4,
+                causal_effect=0.62,
+                stability=0.8,
+                examples=["p1: activation=1.0 | Measured in meters | token[2]='meters'"],
+                source="activation-records",
+                fingerprint=_fingerprint(),
+                causal_effects={"signed_association": 0.62, "strong_causal_score": 0.072},
+                metadata={},
+            )
+        ],
+    )
+
+    markdown = render_inspection_markdown(report)
+
+    assert "changes the behavior score" not in markdown
+    assert "has signed activation association +0.620" in markdown
+    assert "correlational; causal direction untested" in markdown
+    assert "promoted the criterion" not in markdown
+    assert "suppressed the criterion" not in markdown
+    assert "the direction of the effect was not measured" in markdown
+    # The labeled direction line (already provenance-aware) is unchanged.
+    assert "Activation association: promotes criterion (0.620)" in markdown
+
+
+def test_mechanism_sketch_handles_strong_card_without_any_signed_effect():
+    report = InspectionReport(
+        model="m",
+        criterion=Criterion(text="unit prediction"),
+        cards=[
+            FeatureCard(
+                feature_id="SAE:L5:F2",
+                model="m",
+                layer=5,
+                label="unsigned latent",
+                explanation="",
+                importance=0.5,
+                association=0.4,
+                specificity=0.4,
+                causal_effect=0.4,
+                stability=0.8,
+                examples=[],
+                source="activation-records",
+                fingerprint=_fingerprint(),
+                causal_effects={"strong_causal_score": 0.072},
+                metadata={},
+            )
+        ],
+    )
+
+    markdown = render_inspection_markdown(report)
+
+    assert "has no signed effect attached" in markdown
+    assert "changes the behavior score" not in markdown
+
+
+def test_token_from_example_escapes_real_newlines_for_display():
+    # Regression: the escape was written as .replace("\\n", "\\n") -- a no-op -- so
+    # newline tokens were never rendered with the `\n` convention used elsewhere.
+    from interp_lab.reporting import _token_from_example
+
+    assert _token_from_example("p1: activation=2.0 | text | token[3]='\n'") == "\\n"
+    assert _token_from_example("p1: activation=2.0 | text | token[0]='a\nb'") == "a\\nb"
+    # Already-escaped tokens stay untouched.
+    assert _token_from_example("p1: activation=2.0 | text | token[1]='JSON'") == "JSON"
+
+
 def _fingerprint():
     return FeatureFingerprint(
         feature_id="SAE:L24:F8",

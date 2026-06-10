@@ -148,6 +148,7 @@ def export_hf_activation_records(
                     feature_metadata[feature_id] = {
                         "label": f"hidden dimension {dimension} at hidden-state layer {layer}",
                         "layer": layer,
+                        "layer_convention": "hidden_state_index",
                         "source": "hf-hidden-state",
                         "signed_selection_correlation": round(association, 6),
                     }

@@ -18,6 +18,7 @@ from interp_lab.hf_interventions import (
 )
 from interp_lab.hf_loading import add_hf_loading_args, hf_loading_options_from_args, load_hf_text_model
 from interp_lab.hf_records import _pool_hidden_state, load_prompt_records
+from interp_lab.matching import signed_effect_with_provenance
 from interp_lab.reporting import load_inspection_report
 from interp_lab.sae_training import encode_with_artifact
 
@@ -32,6 +33,10 @@ class SaeFeatureRef:
     latent_index: int
     label: str = ""
     signed_effect: float | None = None
+    # Provenance of signed_effect ("intervention" | "association" | "none"). The
+    # signed effect is only a heuristic seed for path selection; recording where it
+    # came from keeps downstream artifacts from presenting an association as measured.
+    signed_effect_provenance: str = "none"
     strong_causal_score: float | None = None
 
 
@@ -128,8 +133,9 @@ def export_hf_sae_path_records(
     score_target_tokens = requested_target_tokens or DEFAULT_TARGET_TOKENS
     target_ids: list[int] = []
     resolved_target_tokens: list[str] = []
+    target_token_map: dict[str, str] = {}
     if score_behavior:
-        target_ids, resolved_target_tokens = resolve_target_token_ids(
+        target_ids, resolved_target_tokens, target_token_map = resolve_target_token_ids(
             model=model,
             tokenizer=tokenizer,
             prompts=prompts,
@@ -219,6 +225,7 @@ def export_hf_sae_path_records(
                                 if score_behavior
                                 else "disabled",
                                 target_tokens=resolved_target_tokens,
+                                target_token_map=target_token_map,
                             )
                             handle.write(json.dumps(row, sort_keys=True) + "\n")
                         for control_ref in control_refs_by_source[source_ref.feature_id]:
@@ -261,6 +268,7 @@ def export_hf_sae_path_records(
                                     if score_behavior
                                     else "disabled",
                                     target_tokens=resolved_target_tokens,
+                                    target_token_map=target_token_map,
                                     control_type="random_source",
                                     control_source_ref=control_ref,
                                 )
@@ -281,17 +289,19 @@ def resolve_sae_feature_refs(
     if report_path is not None:
         report = load_inspection_report(report_path)
         for card in report.cards[:top_k]:
+            # The signed effect only seeds path selection, so an association fallback
+            # is acceptable -- but its provenance is recorded so the path-record
+            # artifact never presents a correlational value as a measured effect.
+            signed_effect, signed_effect_provenance = signed_effect_with_provenance(
+                card.causal_effects, card.metadata
+            )
             ref = parse_sae_feature_ref(
                 card.feature_id,
                 artifact=artifact,
                 role=role,
                 label=card.label,
-                signed_effect=_optional_float(
-                    card.causal_effects.get(
-                        "signed_causal_effect",
-                        card.causal_effects.get("signed_association"),
-                    )
-                ),
+                signed_effect=signed_effect,
+                signed_effect_provenance=signed_effect_provenance,
                 strong_causal_score=_optional_float(card.causal_effects.get("strong_causal_score")),
             )
             selected[ref.feature_id] = ref
@@ -312,6 +322,7 @@ def parse_sae_feature_ref(
     role: str,
     label: str = "",
     signed_effect: float | None = None,
+    signed_effect_provenance: str = "none",
     strong_causal_score: float | None = None,
 ) -> SaeFeatureRef:
     match = SAE_FEATURE_PATTERN.match(feature_id)
@@ -338,6 +349,7 @@ def parse_sae_feature_ref(
         latent_index=latent_index,
         label=label,
         signed_effect=signed_effect,
+        signed_effect_provenance=signed_effect_provenance,
         strong_causal_score=strong_causal_score,
     )
 
@@ -486,6 +498,7 @@ def _path_row(
     target_artifact_path: str | Path,
     target_token_strategy_value: str,
     target_tokens: list[str],
+    target_token_map: dict[str, str],
     control_type: str | None = None,
     control_source_ref: SaeFeatureRef | None = None,
 ) -> dict[str, Any]:
@@ -511,11 +524,14 @@ def _path_row(
             "source_label": source_ref.label,
             "target_label": target_ref.label,
             "source_signed_effect": source_ref.signed_effect,
+            "source_signed_effect_provenance": source_ref.signed_effect_provenance,
             "source_strong_causal_score": source_ref.strong_causal_score,
             "target_signed_effect": target_ref.signed_effect,
+            "target_signed_effect_provenance": target_ref.signed_effect_provenance,
             "target_strong_causal_score": target_ref.strong_causal_score,
             "source_sae": str(source_artifact_path),
             "target_sae": str(target_artifact_path),
+            "resolved_target_token_ids": target_token_map,
             "target_token_strategy": target_token_strategy_value,
             "target_tokens": target_tokens,
         },

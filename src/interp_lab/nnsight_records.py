@@ -71,7 +71,7 @@ def export_nnsight_activation_records(
                             "layer": layer,
                         }
                     )
-                    feature_metadata[feature_id] = {
+                    metadata = {
                         "label": f"{activation_path} dimension {dimension}",
                         "layer": layer,
                         "source": "nnsight",
@@ -79,6 +79,9 @@ def export_nnsight_activation_records(
                         "dimension": dimension,
                         "signed_selection_correlation": round(association, 6),
                     }
+                    if layer is not None:
+                        metadata["layer_convention"] = "hidden_state_index"
+                    feature_metadata[feature_id] = metadata
             handle.write(
                 json.dumps(
                     {
@@ -210,8 +213,14 @@ def _select_dimensions(
 
 
 def _layer_for_path(path: str) -> int | None:
+    """Map an NNsight block path to the HF hidden-state index convention.
+
+    Block ``i`` outputs the residual stream that HF exposes as
+    ``hidden_states[i + 1]``, so block-indexed paths are normalized to
+    ``block_index + 1`` to match L<layer>:D<dim> records from export-hf-records.
+    """
     for pattern in (r"\.h\[(\d+)\]", r"\.layers\[(\d+)\]", r"\.blocks\[(\d+)\]"):
         match = re.search(pattern, path)
         if match:
-            return int(match.group(1))
+            return int(match.group(1)) + 1
     return None

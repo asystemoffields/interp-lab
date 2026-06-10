@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from interp_lab import __version__
+from interp_lab.agent_actions import next_action
 
 
 SCHEMA_VERSION = "interp-lab.env_profile.v1"
@@ -327,24 +328,45 @@ def environment_risk_flags(profile: dict[str, Any]) -> list[dict[str, str]]:
     return flags
 
 
-def environment_agent_next_actions(profile: dict[str, Any]) -> list[dict[str, str]]:
+def environment_agent_next_actions(profile: dict[str, Any]) -> list[dict[str, Any]]:
     suggested = profile["routing"]["suggested_profile"]
     return [
-        {
-            "id": "plan_with_profile",
-            "title": "Use this profile as advisory routing context",
-            "command": "interp-lab plan-scale --from-env --model-params <size> --tokens <tokens> --d-model <width>",
-        },
-        {
-            "id": "choose_route",
-            "title": f"Review route options before launching; suggested starting route is {suggested}",
-            "command": "interp-lab plan-scale --profile <profile> --model-params <size> --tokens <tokens> --d-model <width>",
-        },
-        {
-            "id": "save_profile",
-            "title": "Save this profile when planning from another machine or an agent workflow",
-            "command": "interp-lab profile-env --out reports/env-profile.json --json",
-        },
+        next_action(
+            action_id="plan_with_profile",
+            title="Use this profile as advisory routing context",
+            argv=[
+                "interp-lab",
+                "plan-scale",
+                "--from-env",
+                "--model-params",
+                "<size>",
+                "--tokens",
+                "<tokens>",
+                "--d-model",
+                "<width>",
+            ],
+        ),
+        next_action(
+            action_id="choose_route",
+            title=f"Review route options before launching; suggested starting route is {suggested}",
+            argv=[
+                "interp-lab",
+                "plan-scale",
+                "--profile",
+                "<profile>",
+                "--model-params",
+                "<size>",
+                "--tokens",
+                "<tokens>",
+                "--d-model",
+                "<width>",
+            ],
+        ),
+        next_action(
+            action_id="save_profile",
+            title="Save this profile when planning from another machine or an agent workflow",
+            argv=["interp-lab", "profile-env", "--out", "reports/env-profile.json", "--json"],
+        ),
     ]
 
 

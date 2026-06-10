@@ -134,6 +134,19 @@ def active_embedder_id() -> str:
     return active_embedder().id
 
 
+def active_embedder_description() -> str:
+    """Human-readable name of the embedder actually in effect.
+
+    Reflects programmatic configuration and the ``--text-embedder`` CLI flag, not
+    just the environment variable (used by ``interp-lab doctor``).
+    """
+
+    embedder = active_embedder()
+    if isinstance(embedder, HashEmbedder):
+        return "hash (default, lexical)"
+    return embedder.id
+
+
 def embed_text(text: str) -> list[float]:
     """Embed ``text`` with the active embedder (lexical hash unless configured)."""
 

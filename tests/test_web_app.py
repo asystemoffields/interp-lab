@@ -7,7 +7,7 @@ from pathlib import Path
 
 from interp_lab.cli import build_parser
 from interp_lab.web_server import build_studio_server
-from interp_lab.web_app import command_specs_from_parser, render_web_app_html, write_web_app
+from interp_lab.web_app import COMMAND_SPECS, command_specs_from_parser, render_web_app_html, write_web_app
 
 
 def test_command_specs_cover_cli_subcommands():
@@ -459,3 +459,14 @@ def _wait_for_job(base_url: str, job_id: str, *, token: str):
 
 def _quote(value: str) -> str:
     return urllib.parse.quote(value, safe="")
+
+
+def test_demo_sweep_out_field_does_not_prefill_archived_evidence_path():
+    # Verify-only sweeps deliberately write nothing unless --out is set, so the
+    # Studio form must not prefill the archived-evidence default path (a
+    # run_commands=false sweep would clobber reports/real-model-demo-sweep.json).
+    for specs in (COMMAND_SPECS, command_specs_from_parser(build_parser())):
+        spec = next(item for item in specs if item["id"] == "demo-sweep")
+        out_field = next(field for field in spec["fields"] if field["key"] == "out")
+        assert not out_field.get("default")
+        assert "real-model-demo-sweep" in out_field.get("placeholder", "")

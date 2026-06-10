@@ -7,13 +7,16 @@ import re
 from pathlib import Path
 from typing import Any
 
+from interp_lab.matching import has_intervention_provenance, signed_effect_with_provenance
 from interp_lab.math_utils import cosine, pearson
 from interp_lab.reporting import load_inspection_report
 from interp_lab.schema import FeatureCard, InspectionReport
 
 DEFAULT_COACTIVATION_THRESHOLD = 0.65
 DEFAULT_STRONG_CAUSAL_THRESHOLD = 0.05
-TOKEN_PATTERN = re.compile(r"token\[\d+\]=(['\"])(?P<token>.*?)(?<!\\)\1")
+# DOTALL so a token containing a real newline still parses; _top_tokens escapes it
+# for display. The lookbehind keeps escaped quotes inside the token.
+TOKEN_PATTERN = re.compile(r"token\[\d+\]=(['\"])(?P<token>.*?)(?<!\\)\1", re.DOTALL)
 GENERIC_LABEL_PREFIXES = ("trained sae latent", "latent", "feature")
 
 
@@ -374,10 +377,10 @@ def _feature_node_id(card: FeatureCard) -> str:
 def _criterion_edge(card: FeatureCard, *, criterion_id: str) -> dict[str, Any] | None:
     measured = _has_measured_causal_evidence(card)
     if measured:
-        signed = card.causal_effects.get(
-            "signed_causal_effect",
-            card.causal_effects.get("signed_association"),
-        )
+        # Never fall back to the correlational signed_association here: this edge is
+        # published as type=causal_effect / evidence=measured_intervention, so its
+        # signed effect must be intervention-measured or absent.
+        signed = card.causal_effects.get("signed_causal_effect")
         effect = card.causal_effects.get("criterion", card.causal_effect)
         edge_type = "causal_effect"
         evidence = "measured_intervention"
@@ -411,17 +414,7 @@ def _confidence_interval(card: FeatureCard) -> dict[str, float] | None:
 
 
 def _has_measured_causal_evidence(card: FeatureCard) -> bool:
-    if "signed_causal_effect" in card.causal_effects:
-        return True
-    if float(card.causal_effects.get("intervention_record_count", 0.0) or 0.0) > 0.0:
-        return True
-    interventions = card.metadata.get("interventions")
-    if isinstance(interventions, dict):
-        try:
-            return float(interventions.get("count", 0.0) or 0.0) > 0.0
-        except (TypeError, ValueError):
-            return False
-    return False
+    return has_intervention_provenance(card.causal_effects, card.metadata)
 
 
 def _feature_node_lookup(cards: list[FeatureCard]) -> dict[tuple[str | None, str], str]:
@@ -692,18 +685,43 @@ def _supernodes(
                     "source_feature_id": member.feature_id,
                 }
             )
-        edges.append(
-            {
-                "source": node_id,
-                "target": criterion_id,
-                "type": "aggregate_causal_effect"
-                if any(_has_measured_causal_evidence(member) for member in members)
-                else "aggregate_criterion_association",
-                "signed_effect": round(signed, 6),
-                "strong_causal_score": round(strong, 6),
-                "member_count": len(members),
-            }
-        )
+        # The causal aggregate must only average intervention-backed signed effects;
+        # blending correlational members' signed_association into a
+        # type=aggregate_causal_effect edge would publish correlations as causal.
+        measured_members = [member for member in members if _has_measured_causal_evidence(member)]
+        if measured_members:
+            measured_signed = [
+                float(member.causal_effects["signed_causal_effect"])
+                for member in measured_members
+                if "signed_causal_effect" in member.causal_effects
+            ]
+            edges.append(
+                {
+                    "source": node_id,
+                    "target": criterion_id,
+                    "type": "aggregate_causal_effect",
+                    "evidence": "measured_intervention"
+                    if len(measured_members) == len(members)
+                    else "mixed_intervention_and_association",
+                    "signed_effect": round(_mean(measured_signed), 6) if measured_signed else None,
+                    "strong_causal_score": round(strong, 6),
+                    "member_count": len(members),
+                    "measured_member_count": len(measured_members),
+                }
+            )
+        else:
+            edges.append(
+                {
+                    "source": node_id,
+                    "target": criterion_id,
+                    "type": "aggregate_criterion_association",
+                    "evidence": "activation_criterion_association",
+                    "signed_effect": round(signed, 6),
+                    "strong_causal_score": round(strong, 6),
+                    "member_count": len(members),
+                    "measured_member_count": 0,
+                }
+            )
     return nodes, edges
 
 
@@ -740,7 +758,7 @@ def _top_tokens(card: FeatureCard) -> list[str]:
         match = TOKEN_PATTERN.search(str(example))
         if not match:
             continue
-        token = match.group("token").replace("\\n", "\\n").strip()
+        token = match.group("token").replace("\n", "\\n").strip()
         if token and len(token) <= 32 and token not in tokens:
             tokens.append(token)
     return tokens
@@ -1133,10 +1151,10 @@ def _number(value: Any) -> str:
 
 
 def _signed_effect(card: FeatureCard) -> float:
-    value = card.causal_effects.get("signed_causal_effect")
-    if value is None:
-        value = card.causal_effects.get("signed_association", card.metadata.get("signed_association", 0.0))
-    return float(value)
+    """Best-available signed effect for role/summary heuristics (NOT for causal-typed
+    edges -- those must read signed_causal_effect directly)."""
+    value, _ = signed_effect_with_provenance(card.causal_effects, card.metadata)
+    return float(value) if value is not None else 0.0
 
 
 def _strong_causal_score(card: FeatureCard) -> float:

@@ -82,7 +82,9 @@ def goodfire_feature_to_evidence(feature: Any, *, model: str, rank: int = 1) -> 
         examples=examples,
         activation_signature=activation_signature,
         decoder_signature=decoder_signature,
-        causal_effects={"specificity": 0.5},
+        # Goodfire semantic search returns no causal measurements; emitting a
+        # constant here would render as a measured "Specificity" in reports.
+        causal_effects={},
         source="goodfire",
         metadata=metadata,
     )

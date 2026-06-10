@@ -207,6 +207,7 @@ def intervene_on_features(
     if dry_run:
         return FeatureInterventionResult(records_path=None, plan_path=plan_path, plan=plan, dry_run=True)
 
+    _validate_hookable_spec_layers(specs)
     records_path = export_feature_intervention_records(
         model_name=model_name,
         prompts=prompts,
@@ -231,6 +232,21 @@ def intervene_on_features(
         tokenizer_kwargs=tokenizer_kwargs,
     )
     return FeatureInterventionResult(records_path=records_path, plan_path=plan_path, plan=plan, dry_run=False)
+
+
+def _validate_hookable_spec_layers(specs: list[_FeatureSpec]) -> None:
+    """Reject layer-0 features before the model is loaded.
+
+    Layer 0 is hidden_states[0] (the embedding output); decoder hooks only cover
+    layers 1..n_blocks, so failing late would leave a truncated record file.
+    """
+    offending = sorted({spec.feature_id for spec in specs if spec.layer < 1})
+    if offending:
+        raise ValueError(
+            "Layer 0 features are embedding hidden states and cannot be hooked for interventions: "
+            + ", ".join(offending)
+            + ". Re-export records without layer 0 (e.g. --layers 1+) or drop these features."
+        )
 
 
 def resolve_feature_specs(
@@ -368,7 +384,7 @@ def export_feature_intervention_records(
     )
     requested_target_tokens = target_tokens
     score_target_tokens = requested_target_tokens or DEFAULT_TARGET_TOKENS
-    target_ids, resolved_target_tokens = resolve_target_token_ids(
+    target_ids, resolved_target_tokens, target_token_map = resolve_target_token_ids(
         model=model,
         tokenizer=tokenizer,
         prompts=prompts,
@@ -416,6 +432,7 @@ def export_feature_intervention_records(
                     hidden_size=hidden_size,
                     requested_target_tokens=requested_target_tokens,
                     resolved_target_tokens=resolved_target_tokens,
+                    target_token_map=target_token_map,
                 )
                 for row in rows:
                     handle.write(json.dumps(row, sort_keys=True) + "\n")
@@ -445,6 +462,7 @@ def _evaluate_feature(
     hidden_size: int,
     requested_target_tokens: list[str] | None,
     resolved_target_tokens: list[str],
+    target_token_map: dict[str, str],
 ) -> list[dict[str, Any]]:
     if mode == "ablate":
         rows_by_strength, side_effects_by_strength = _evaluate_ablation(
@@ -463,6 +481,7 @@ def _evaluate_feature(
             max_length=max_length,
             requested_target_tokens=requested_target_tokens,
             resolved_target_tokens=resolved_target_tokens,
+            target_token_map=target_token_map,
         )
     else:
         direction = _direction_for_spec(spec, artifact=artifact, torch=torch, device=device, hidden_size=hidden_size)
@@ -485,6 +504,7 @@ def _evaluate_feature(
             sae_path=sae_path,
             requested_target_tokens=requested_target_tokens,
             resolved_target_tokens=resolved_target_tokens,
+            target_token_map=target_token_map,
         )
     selected_strength, summary = _select_intervention_strength(
         rows_by_strength,
@@ -517,6 +537,7 @@ def _evaluate_ablation(
     max_length: int,
     requested_target_tokens: list[str] | None,
     resolved_target_tokens: list[str],
+    target_token_map: dict[str, str],
 ) -> tuple[dict[float, list[dict[str, Any]]], dict[float, list[float]]]:
     if spec.kind != "hidden":
         raise ValueError("ablation currently supports hidden-dimension features only")
@@ -548,6 +569,7 @@ def _evaluate_ablation(
                     intervention_score=score,
                     metadata={
                         "ablate_value": ablate_value,
+                        "resolved_target_token_ids": target_token_map,
                         "target_token_strategy": target_token_strategy(requested_target_tokens),
                         "target_tokens": resolved_target_tokens,
                     },
@@ -578,6 +600,7 @@ def _evaluate_steering(
     sae_path: str | Path | None,
     requested_target_tokens: list[str] | None,
     resolved_target_tokens: list[str],
+    target_token_map: dict[str, str],
 ) -> tuple[dict[float, list[dict[str, Any]]], dict[float, list[float]]]:
     signed_strengths = [_signed_strength(mode, strength) for strength in strengths]
     rows_by_strength: dict[float, list[dict[str, Any]]] = {strength: [] for strength in signed_strengths}
@@ -610,6 +633,7 @@ def _evaluate_steering(
                         intervention_score=score,
                         metadata={
                             "requested_strength": abs(float(signed_strength)),
+                            "resolved_target_token_ids": target_token_map,
                             "signed_strength": signed_strength,
                             "sae": str(sae_path) if spec.kind == "sae" and sae_path is not None else None,
                             "target_token_strategy": target_token_strategy(requested_target_tokens),

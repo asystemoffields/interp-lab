@@ -20,6 +20,16 @@ class ToyFeatureProvider:
 
     def features_for(self, model: str, criterion: Criterion) -> list[FeatureEvidence]:
         tokens = content_tokens(criterion.text) or ["criterion"]
+        # Criterion defaults both example lists to []; fall back so directly
+        # constructed criteria do not crash with IndexError.
+        positive_example = (
+            criterion.positive_examples[0] if criterion.positive_examples else criterion.text
+        )
+        negative_example = (
+            criterion.negative_examples[0]
+            if criterion.negative_examples
+            else "unrelated neutral text"
+        )
         features: list[FeatureEvidence] = []
         for index in range(self.feature_count):
             token = tokens[index % len(tokens)]
@@ -41,8 +51,8 @@ class ToyFeatureProvider:
                     layer=8 + index % 18,
                     label=label,
                     examples=[
-                        f"Example with {token}: {criterion.positive_examples[0]}",
-                        f"Near miss for {token}: {criterion.negative_examples[0]}",
+                        f"Example with {token}: {positive_example}",
+                        f"Near miss for {token}: {negative_example}",
                     ],
                     activation_signature=activation,
                     decoder_signature=decoder,

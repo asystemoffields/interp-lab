@@ -55,8 +55,38 @@ def test_neuronpedia_payload_maps_to_feature_evidence():
     assert evidence.layer == 6
     assert evidence.label == "measurements in meters or feet"
     assert evidence.decoder_signature == [0.1, -0.2]
-    assert evidence.causal_effects["specificity"] == 0.96
+    # The autointerp explanation score is correlational, not a causal measurement.
+    assert evidence.causal_effects == {}
+    assert evidence.metadata["autointerp_score"] == 0.96
     assert evidence.examples[0].startswith("max_activation=5.000")
+
+
+def test_neuronpedia_payload_tolerates_non_numeric_values():
+    payload = {
+        "modelId": "gpt2-small",
+        "layer": "6-res_scefr-ajt",
+        "index": "650",
+        "pos_values": [1.23, "junk", None, {"nested": True}],
+        "neg_values": ["-0.99"],
+        "activations": [
+            {
+                "tokens": ["The", " radius"],
+                "values": [None, "high", 3],
+            },
+            {
+                "tokens": ["meters"],
+                "values": [],
+                "maxValue": {"unexpected": "object"},
+            },
+        ],
+    }
+
+    evidence = neuronpedia_payload_to_evidence(payload)
+
+    # Non-numeric entries are skipped instead of aborting the conversion.
+    assert 1.23 in evidence.activation_signature
+    assert evidence.examples[0].startswith("max_activation=3.000")
+    assert evidence.examples[1].startswith("max_activation=0.000")
 
 
 def test_neuronpedia_provider_uses_client_and_filters_model():
@@ -96,3 +126,22 @@ def test_load_neuronpedia_feature_refs_supports_text_and_json(tmp_path: Path):
 
     assert load_neuronpedia_feature_refs(text_path) == ["gpt2-small@6-res_scefr-ajt:650"]
     assert load_neuronpedia_feature_refs(json_path) == ["gpt2-small@6-res_scefr-ajt:650"]
+
+
+def test_neuronpedia_payload_tolerates_non_numeric_scalar_stats():
+    # maxActApprox/frac_nonzero can arrive as strings or nested objects from the
+    # API; the signature must coerce them to 0.0 instead of raising and aborting
+    # the whole features_for loop.
+    payload = {
+        "modelId": "gpt2-small",
+        "layer": "6-res_scefr-ajt",
+        "index": "650",
+        "maxActApprox": {"unexpected": "object"},
+        "frac_nonzero": "0.5%",
+        "pos_values": [1.25],
+    }
+
+    evidence = neuronpedia_payload_to_evidence(payload)
+
+    assert evidence.activation_signature[:2] == [0.0, 0.0]
+    assert 1.25 in evidence.activation_signature

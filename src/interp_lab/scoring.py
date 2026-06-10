@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from interp_lab.matching import has_intervention_provenance
 from interp_lab.math_utils import clamp, cosine, mean
 from interp_lab.schema import Criterion, FeatureEvidence
 from interp_lab.text_embedding import embed_text
@@ -7,7 +8,16 @@ from interp_lab.text_embedding import embed_text
 
 def score_feature(evidence: FeatureEvidence, criterion: Criterion) -> dict[str, float]:
     association = _association(evidence, criterion)
-    causal_effect = clamp(float(evidence.causal_effects.get("criterion", 0.0)))
+    # The "criterion" key only counts as causal evidence when intervention provenance
+    # is present (signed_causal_effect / intervention records). The records backend
+    # publishes its correlational score under the same key
+    # ({"criterion": abs(r), "signed_association": r}); without interventions that
+    # Pearson r is already counted on the association axis, so crediting it here too
+    # would double-count it AND surface a correlation as FeatureCard.causal_effect.
+    if has_intervention_provenance(evidence.causal_effects, evidence.metadata):
+        causal_effect = clamp(float(evidence.causal_effects.get("criterion", 0.0)))
+    else:
+        causal_effect = 0.0
     # When the side-effect/control-adjusted causal score is absent, it must default
     # to 0.0 -- NOT to causal_effect -- or the same causal number would be counted
     # twice (0.30 strong + 0.20 causal = 0.50). Likewise an absent specificity must
@@ -47,4 +57,8 @@ def _association(evidence: FeatureEvidence, criterion: Criterion) -> float:
         return clamp(abs(float(signed)))
     criterion_vector = embed_text(criterion.text)
     label_vector = embed_text(" ".join([evidence.label, *evidence.examples]))
-    return (cosine(criterion_vector, label_vector) + 1.0) / 2.0
+    # No measured association: fall back to text similarity, but do NOT unit-map the
+    # cosine -- (cosine+1)/2 hands unrelated hash-text vectors a free ~0.5 baseline
+    # that outranks a measured weak association (0.10). Clamp instead so unrelated
+    # text scores ~0 (mirrors the fingerprint-similarity gating in matching.py).
+    return clamp(cosine(criterion_vector, label_vector))

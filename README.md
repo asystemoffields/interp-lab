@@ -87,6 +87,10 @@ Each fingerprint records the embedder that produced it, and matching refuses to 
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 
+## For AI agents
+
+[`AGENTS.md`](AGENTS.md) is the operating manual for coding agents driving interp-lab: the evidence rules, the canonical `agent_next_actions` shape, and the core loop as runnable commands. `interp-lab capabilities --json` returns the whole surface — command specs, the Python API contract, environment, and conventions — in one machine-readable payload, and `interp-lab mcp` serves the core workflow as Model Context Protocol tools over stdio.
+
 ## Documentation
 
 - **[Full command reference](docs/COMMANDS.md)** — every CLI command and the JSONL data formats (feature dumps, activation records, intervention records).
@@ -103,7 +107,7 @@ interp-lab demo --out reports/demo            # full toy tour (open reports/demo
 interp-lab quickstart                         # guided getting-started walkthrough
 interp-lab inspect ... --csv-out features.csv # ranked features as a spreadsheet
 interp-lab compare-runs --left a/report.json --right b/report.json --out diff.json  # rank/score drift
-interp-lab studio --serve --reports-dir reports   # local browser command-builder + runner
+interp-lab studio --serve --reports-dir reports   # local browser command-builder + runner (persistent job history)
 interp-lab release-check --strict             # stable-release readiness
 ```
 

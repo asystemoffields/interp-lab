@@ -12,6 +12,7 @@ try:
 except ImportError:  # pragma: no cover - exercised on Python 3.10 in CI.
     import tomli as tomllib
 
+from interp_lab.agent_actions import next_action
 from interp_lab.explanation_reports import (
     EXPLANATION_CONSISTENCY_SCHEMA,
     FEATURE_SEARCH_SCHEMA,
@@ -81,8 +82,12 @@ def build_release_readiness_report(root: str | Path = ".") -> dict[str, Any]:
     ready = counts["blocker"] == 0
     next_actions = [
         {
-            "id": check["id"],
-            "title": check["title"],
+            **next_action(
+                action_id=check["id"],
+                title=check["title"],
+                instruction=check["next_action"],
+            ),
+            # Legacy key kept for one release; prefer "instruction".
             "next_action": check["next_action"],
         }
         for check in checks

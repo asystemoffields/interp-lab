@@ -1,11 +1,12 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
 
 from interp_lab.adapters.nla import NlaVerbalizer
 from interp_lab.adapters.toy import ToyInterventionRunner, ToyVerbalizer
-from interp_lab.cli import main
+from interp_lab.cli import build_parser, main
 from interp_lab.explanation_reports import (
     build_explanation_consistency_report,
     build_feature_search_report,
@@ -149,6 +150,40 @@ def test_feature_search_ranks_natural_language_query(tmp_path: Path):
     assert report["results"][0]["agent_next_action"].startswith("Run interp-lab intervene")
 
 
+def test_feature_search_next_action_argv_parses_against_cli(tmp_path: Path):
+    path = _write_report(
+        tmp_path / "report",
+        criterion="successful tool calls",
+        cards=[_card("L1:F1", "tool call syntax", "Tracks valid tool calls with arguments.", 0.9)],
+    )
+
+    report = build_feature_search_report(reports=[path], query="tool calls", top_k=1)
+    result = report["results"][0]
+
+    argv = result["agent_next_action_argv"]
+    filled = ["dummy-path" if re.fullmatch(r"<.+>", str(token)) else str(token) for token in argv]
+    args = build_parser().parse_args(filled)  # exits 2 if the suggested command is not runnable
+    assert args.command == "intervene"
+    assert args.model == "m"
+    assert args.criterion == "successful tool calls"
+    assert args.feature == ["L1:F1"]
+    assert args.report == str(path)
+    assert result["agent_next_action_requires"] == ["scored causal prompt JSONL"]
+
+    # The canonical object mirrors the legacy flat keys (kept for one release).
+    canonical = result["agent_next_actions"][0]
+    assert canonical["id"] == "plan_feature_intervention"
+    assert canonical["title"]
+    assert canonical["argv"] == ["interp-lab", *argv]
+    assert canonical["requires"] == ["scored causal prompt JSONL"]
+    assert "instruction" not in canonical
+
+    # Report-level prose actions: instruction is canonical, description is legacy.
+    report_action = report["agent_next_actions"][0]
+    assert report_action["id"] and report_action["title"]
+    assert report_action["instruction"] == report_action["description"]
+
+
 def test_model_family_comparison_report_summarizes_cross_family_matches(tmp_path: Path):
     gemma = _write_report(
         tmp_path / "gemma",
@@ -204,6 +239,11 @@ def test_text_pivot_match_report_uses_explanations_as_bridge(tmp_path: Path):
     assert report["matches"][0]["right_feature_id"] == "L4:F9"
     assert report["matches"][0]["components"]["text_pivot"] >= 0.9
     assert report["matches"][0]["evidence_grade"] == "text_pivot_with_causal_support"
+    # Canonical per-match action alongside the legacy agent_next_action* keys.
+    match_action = report["matches"][0]["agent_next_actions"][0]
+    assert match_action["id"] == "validate_text_pivot_pair"
+    assert match_action["argv"][:2] == ["interp-lab", "match"]
+    assert match_action["command"].startswith("interp-lab match --left ")
 
 
 def test_text_pivot_does_not_upgrade_label_only_or_association_only_matches(tmp_path: Path):
@@ -569,3 +609,118 @@ def _card(
         fingerprint=build_fingerprint(evidence, Criterion("successful tool calls"), explanation),
         causal_effects=evidence.causal_effects,
     )
+
+
+# =============================================================================
+# Provenance gates for text-pivot signed effects (mirrors matching.py): no free
+# half-match for unmeasured axes, no measured-vs-association comparisons, and no
+# causal-sounding grade from association-vs-association alignment.
+# =============================================================================
+
+
+def _text_pivot_single_match(tmp_path, left_effects, right_effects, **kwargs):
+    left = _write_report(
+        tmp_path / "left",
+        model="left-model",
+        criterion="successful tool calls",
+        cards=[
+            _card(
+                "L1:F1",
+                "tool call syntax",
+                "Represents valid tool-call argument construction.",
+                0.9,
+                model="left-model",
+                causal_effects=left_effects,
+            )
+        ],
+    )
+    right = _write_report(
+        tmp_path / "right",
+        model="right-model",
+        criterion="successful tool calls",
+        cards=[
+            _card(
+                "L1:F2",
+                "tool call syntax",
+                "Represents valid tool-call argument construction.",
+                0.9,
+                model="right-model",
+                causal_effects=right_effects,
+            )
+        ],
+    )
+    report = build_text_pivot_match_report(
+        left_reports=[left], right_reports=[right], top_k=1, per_left=1, **kwargs
+    )
+    return report["matches"][0]
+
+
+def test_text_pivot_missing_signed_effect_is_excluded_not_half_matched(tmp_path: Path):
+    # Neither side carries a signed effect: the axis used to earn a free 0.5
+    # component; it must now be excluded (0.0, no provenance marker).
+    match = _text_pivot_single_match(
+        tmp_path,
+        {"criterion": 0.9},
+        {"criterion": 0.9},
+    )
+
+    assert match["components"]["signed_effect"] == 0.0
+    assert "signed_effect_provenance_intervention" not in match["components"]
+    assert "signed_effect_provenance_association" not in match["components"]
+    assert "signed_effect_provenance_mismatch" not in match["components"]
+
+
+def test_text_pivot_mixed_provenance_signed_effects_are_excluded_not_contradicted(tmp_path: Path):
+    # Measured +0.9 vs correlational -0.9 is incomparable: it must neither be
+    # compared for similarity nor trigger the opposite-direction 0.49 cap.
+    match = _text_pivot_single_match(
+        tmp_path,
+        {"signed_causal_effect": 0.9},
+        {"signed_association": -0.9},
+    )
+
+    assert match["components"]["signed_effect_provenance_mismatch"] == 1.0
+    assert match["components"]["signed_effect"] == 0.0
+    assert match["score"] > 0.49
+
+
+def test_text_pivot_same_provenance_opposite_signed_effects_still_capped(tmp_path: Path):
+    # Two correlational signed effects ARE comparable: opposite directions keep
+    # the contradiction cap (parity with matching.py same-provenance handling).
+    match = _text_pivot_single_match(
+        tmp_path,
+        {"signed_association": 0.9},
+        {"signed_association": -0.9},
+    )
+
+    assert match["components"]["signed_effect_provenance_association"] == 1.0
+    assert match["score"] <= 0.49
+
+
+def test_text_pivot_association_alignment_is_not_causal_support(tmp_path: Path):
+    # Both sides have intervention records attached but only correlational signed
+    # effects: two perfectly aligned Pearson r's must not produce the
+    # causal-sounding "text_pivot_with_causal_support" grade.
+    match = _text_pivot_single_match(
+        tmp_path,
+        {"criterion": 0.9, "signed_association": 0.9, "intervention_record_count": 2.0},
+        {"criterion": 0.9, "signed_association": 0.9, "intervention_record_count": 2.0},
+    )
+
+    assert match["components"]["causal_evidence"] == 1.0
+    assert match["components"]["signed_effect"] >= 0.65
+    assert match["components"]["signed_effect_provenance_association"] == 1.0
+    assert match["evidence_grade"] != "text_pivot_with_causal_support"
+
+
+def test_text_pivot_intervention_alignment_keeps_causal_support(tmp_path: Path):
+    # Intervention-measured signed effects on both sides keep the causal grade
+    # (and the components now record that provenance explicitly).
+    match = _text_pivot_single_match(
+        tmp_path,
+        {"criterion": 0.9, "signed_causal_effect": 0.9, "intervention_record_count": 2.0},
+        {"criterion": 0.9, "signed_causal_effect": 0.9, "intervention_record_count": 2.0},
+    )
+
+    assert match["components"]["signed_effect_provenance_intervention"] == 1.0
+    assert match["evidence_grade"] == "text_pivot_with_causal_support"

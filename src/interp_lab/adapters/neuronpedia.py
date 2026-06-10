@@ -159,7 +159,7 @@ def neuronpedia_payload_to_evidence(
     explanations = _explanations(payload)
     label = _best_label(payload, explanations)
     examples = _activation_examples(payload.get("activations", []), examples_per_feature)
-    specificity = _best_explanation_score(explanations)
+    autointerp_score = _best_explanation_score(explanations)
     activation_signature = _activation_signature(payload)
     decoder_signature = _number_list(payload.get("vector", [])) or _number_list(
         payload.get("decoder_weights_dist", [])
@@ -175,6 +175,10 @@ def neuronpedia_payload_to_evidence(
         "neg_tokens": payload.get("neg_str", []),
         "neg_values": payload.get("neg_values", []),
         "explanations": explanations,
+        # Autointerp explanation-fidelity score. This measures how well the text
+        # explanation predicts activations -- it is not a causal measurement, so
+        # it must not go into causal_effects.
+        "autointerp_score": autointerp_score,
     }
     return FeatureEvidence(
         feature_id=ref.feature_id,
@@ -184,7 +188,7 @@ def neuronpedia_payload_to_evidence(
         examples=examples,
         activation_signature=activation_signature,
         decoder_signature=decoder_signature,
-        causal_effects={"specificity": specificity} if specificity else {},
+        causal_effects={},
         source="neuronpedia",
         metadata=metadata,
     )
@@ -247,19 +251,21 @@ def _activation_examples(raw_activations: Any, limit: int) -> list[str]:
         if not isinstance(item, dict):
             continue
         tokens = [str(token) for token in item.get("tokens", [])]
-        values = [float(value) for value in item.get("values", [])]
+        values = _number_list(item.get("values", []))
         if not tokens:
             continue
-        max_value = max(values) if values else float(item.get("maxValue", 0.0) or 0.0)
+        max_value = max(values) if values else _coerce_float(item.get("maxValue"))
         text = "".join(tokens).replace("\n", "\\n")
         rendered.append(f"max_activation={max_value:.3f} | {text[:500]}")
     return rendered
 
 
 def _activation_signature(payload: dict[str, Any]) -> list[float]:
+    # _coerce_float: a non-numeric API payload value (string, dict, list) must not
+    # raise and abort the whole features_for loop.
     values = [
-        float(payload.get("maxActApprox") or 0.0),
-        float(payload.get("frac_nonzero") or 0.0),
+        _coerce_float(payload.get("maxActApprox")),
+        _coerce_float(payload.get("frac_nonzero")),
     ]
     values.extend(_number_list(payload.get("pos_values", []))[:20])
     values.extend(_number_list(payload.get("neg_values", []))[:20])
@@ -280,6 +286,14 @@ def _number_list(raw_values: Any) -> list[float]:
         return []
     values = []
     for value in raw_values:
-        if value is not None:
+        # Skip nulls, strings, and nested objects from the API instead of
+        # raising and aborting the whole features_for loop.
+        if isinstance(value, (int, float)):
             values.append(float(value))
     return values
+
+
+def _coerce_float(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return 0.0

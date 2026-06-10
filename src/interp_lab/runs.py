@@ -65,11 +65,19 @@ def run_config_file(options: RunOptions, *, command_runner: CommandRunner) -> in
     config_path = options.config_path
     config = load_run_config(config_path)
     config_dir = config_path.resolve().parent
-    run_dir = Path(str(config.get("out", config.get("run_dir", "reports/run"))))
+    user_variables = {key: str(value) for key, value in (options.variables or {}).items()}
+    # Render the `out` value first (user --var values + config_dir) so a templated
+    # out like "reports/${name}" derives the real run_dir: the manifest lands next to
+    # the step outputs and {run_dir} in config strings expands to the rendered path.
+    rendered_out = _render_value(
+        str(config.get("out", config.get("run_dir", "reports/run"))),
+        {"config_dir": str(config_dir), **user_variables},
+    )
+    run_dir = Path(rendered_out)
     variables = {
         "config_dir": str(config_dir),
         "run_dir": str(run_dir),
-        **{key: str(value) for key, value in (options.variables or {}).items()},
+        **user_variables,
     }
     rendered_config = _render_value(config, variables)
     steps = _steps_from_config(rendered_config)

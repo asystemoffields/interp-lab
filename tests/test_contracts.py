@@ -32,6 +32,22 @@ def test_public_api_signature_contract_is_current():
         assert expected_parameters == list(dict.fromkeys(expected_parameters)), function_name
 
 
+def test_public_api_signature_contract_lists_every_required_parameter():
+    # Drift guard: a contract entry that omits a no-default parameter describes a
+    # call signature that cannot succeed (e.g. validate_hf_sae_paths missing
+    # path_records_out). Every required parameter must appear in the contract.
+    for function_name, expected_parameters in PUBLIC_API_SIGNATURES.items():
+        function = getattr(interp_lab, function_name)
+        for parameter_name, parameter in inspect.signature(function).parameters.items():
+            if parameter.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                continue
+            if parameter.default is not inspect.Parameter.empty:
+                continue
+            assert parameter_name in expected_parameters, (
+                f"{function_name} contract omits required parameter {parameter_name!r}"
+            )
+
+
 def test_public_api_contract_covers_full_stable_workflow_signatures():
     for function_name in ("inspect", "intervene", "train_sae"):
         assert PUBLIC_API_SIGNATURES[function_name] == list(inspect.signature(getattr(interp_lab, function_name)).parameters)

@@ -9,11 +9,15 @@ import sys
 from pathlib import Path
 
 from interp_lab import __version__
+from interp_lab.matching import signed_effect_with_provenance
 from interp_lab.schema import INSPECTION_REPORT_SCHEMA, MATCH_REPORT_SCHEMA, InspectionReport, MatchReport
 
 PROMOTING_THRESHOLD = 0.05
 SMALL_EFFECT_THRESHOLD = 0.02
-TOKEN_PATTERN = re.compile(r"token\[\d+\]=(['\"])(?P<token>.*?)(?<!\\)\1")
+# DOTALL so tokens containing a literal newline still match and get escaped for
+# display by _token_from_example (the same `\n` -> `\\n` convention as
+# _target_token_sample).
+TOKEN_PATTERN = re.compile(r"token\[\d+\]=(['\"])(?P<token>.*?)(?<!\\)\1", re.DOTALL)
 GENERIC_LABEL_PREFIXES = ("trained sae latent", "latent", "feature")
 
 
@@ -648,9 +652,21 @@ def _mechanism_sketch_lines(report: InspectionReport) -> list[str]:
     if top_causal:
         lines.append("Causal candidates:")
         for card in top_causal[:4]:
+            # "changes the behavior score" is a causal claim: only an intervention-
+            # measured signed effect may fill it. A correlational signed_association
+            # is reported as exactly that, never as a measured behavior change.
+            signed, provenance = signed_effect_with_provenance(card.causal_effects, card.metadata)
+            if provenance == "intervention":
+                effect_text = f"changes the behavior score by {signed:+.3f} on average"
+            elif provenance == "association":
+                effect_text = (
+                    f"has signed activation association {signed:+.3f} "
+                    "(correlational; causal direction untested)"
+                )
+            else:
+                effect_text = "has no signed effect attached"
             lines.append(
-                f"- {_feature_ref(card)} ({_display_label(card)}) changes the behavior score by "
-                f"{_signed_effect(card):+.3f} on average "
+                f"- {_feature_ref(card)} ({_display_label(card)}) {effect_text} "
                 f"(strong causal score {float(card.causal_effects.get('strong_causal_score', 0.0)):.3f})."
             )
         lines.append("")
@@ -762,11 +778,6 @@ def _feature_ref(card) -> str:
     return f"{card.feature_id}{layer}"
 
 
-def _signed_effect(card) -> float:
-    value = card.causal_effects.get("signed_causal_effect")
-    if value is None:
-        value = card.causal_effects.get("signed_association", card.metadata.get("signed_association", 0.0))
-    return float(value)
 
 
 def _activation_themes(cards) -> list[tuple[str, int]]:
@@ -785,7 +796,7 @@ def _token_from_example(example: str) -> str:
     match = TOKEN_PATTERN.search(str(example))
     if not match:
         return ""
-    token = match.group("token").replace("\\n", "\\n").strip()
+    token = match.group("token").replace("\n", "\\n").strip()
     if not token or len(token) > 32:
         return ""
     return token
@@ -836,13 +847,21 @@ def _card_interpretation_lines(card) -> list[str]:
     elif _use_stored_explanation(card.explanation):
         lines.append(card.explanation)
     strong = float(card.causal_effects.get("strong_causal_score", 0.0))
-    signed = _signed_effect(card)
+    signed, signed_provenance = signed_effect_with_provenance(card.causal_effects, card.metadata)
     if strong >= PROMOTING_THRESHOLD:
-        verb = "promoted" if signed > 0 else "suppressed"
-        lines.append(
-            f"Causal readout: steering or ablating this feature {verb} the criterion "
-            f"with strong causal score {strong:.3f}."
-        )
+        if signed_provenance == "intervention":
+            # "promoted"/"suppressed" is a measured causal direction; it must never
+            # be borrowed from a correlational signed_association.
+            verb = "promoted" if signed > 0 else "suppressed"
+            lines.append(
+                f"Causal readout: steering or ablating this feature {verb} the criterion "
+                f"with strong causal score {strong:.3f}."
+            )
+        else:
+            lines.append(
+                f"Causal readout: steering or ablating this feature changed the criterion "
+                f"with strong causal score {strong:.3f}; the direction of the effect was not measured."
+            )
     elif _has_measured_intervention(card):
         lines.append(
             f"Causal readout: tested interventions produced a small or uncertain effect "

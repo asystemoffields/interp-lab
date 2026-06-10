@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import heapq
+from typing import Any
 
 from interp_lab.math_utils import clamp, cosine
 from interp_lab.schema import CandidateMatch, FeatureCard, FeatureFingerprint
@@ -18,6 +19,47 @@ DEFAULT_WEIGHTS = {
 # ranking layer and the validation layer agree on what counts as a real signed
 # effect (otherwise a pair can score high here yet be graded "contradicted").
 SIGNED_EFFECT_DIRECTION_MIN = 0.02
+
+
+def signed_effect_with_provenance(
+    causal_effects: dict[str, float],
+    metadata: dict[str, Any] | None = None,
+) -> tuple[float | None, str]:
+    """Shared provenance-aware signed-effect accessor.
+
+    Used by scoring, matching, match validation, and graphs so correlational values
+    never silently leak onto causal-labeled axes. Returns ``(value, provenance)``
+    where provenance is ``"intervention"`` when the signed effect was measured by
+    interventions (``signed_causal_effect``), ``"association"`` when it is a
+    correlational proxy (``signed_association``), and ``"none"`` when no signed
+    effect is present. Callers must never blend the two provenances on one axis.
+    """
+    if "signed_causal_effect" in causal_effects:
+        return float(causal_effects["signed_causal_effect"]), "intervention"
+    if "signed_association" in causal_effects:
+        return float(causal_effects["signed_association"]), "association"
+    if metadata is not None and metadata.get("signed_association") is not None:
+        return float(metadata["signed_association"]), "association"
+    return None, "none"
+
+
+def has_intervention_provenance(
+    causal_effects: dict[str, float],
+    metadata: dict[str, Any] | None = None,
+) -> bool:
+    """True when the evidence/card carries any real intervention measurement."""
+    if "signed_causal_effect" in causal_effects:
+        return True
+    if float(causal_effects.get("intervention_record_count", 0.0) or 0.0) > 0.0:
+        return True
+    if metadata is not None:
+        interventions = metadata.get("interventions")
+        if isinstance(interventions, dict):
+            try:
+                return float(interventions.get("count", 0.0) or 0.0) > 0.0
+            except (TypeError, ValueError):
+                return False
+    return False
 
 
 def fingerprint_similarity(
@@ -86,12 +128,25 @@ def match_feature_cards(
     for left in left_cards:
         for right in right_cards:
             score, components = fingerprint_similarity(left.fingerprint, right.fingerprint, weights=weights)
-            left_signed = _signed_effect(left)
-            right_signed = _signed_effect(right)
+            left_signed, left_provenance = signed_effect_with_provenance(left.causal_effects, left.metadata)
+            right_signed, right_provenance = signed_effect_with_provenance(right.causal_effects, right.metadata)
             if left_signed is not None and right_signed is not None:
-                signed_component = _signed_effect_similarity(left_signed, right_signed)
-                components["signed_effect"] = round(signed_component, 6)
-                score = _score_with_signed_effect(score, signed_component, left_signed, right_signed)
+                if left_provenance == right_provenance:
+                    signed_component = _signed_effect_similarity(left_signed, right_signed)
+                    components["signed_effect"] = round(signed_component, 6)
+                    # Record which key the compared signed effects came from, so the
+                    # validation layer can require intervention provenance before
+                    # grading a pair "validated".
+                    components[f"signed_effect_provenance_{left_provenance}"] = 1.0
+                    score = _score_with_signed_effect(score, signed_component, left_signed, right_signed)
+                else:
+                    # Mixed provenance: a measured causal effect must never be compared
+                    # against a correlational proxy -- neither for similarity credit nor
+                    # for an opposite-direction cap/contradiction. Tag and exclude the
+                    # axis instead of publishing incomparable signed effects.
+                    components["signed_effect_provenance_mismatch"] = 1.0
+                    left_signed = None
+                    right_signed = None
             if score >= min_score:
                 match = CandidateMatch(
                     left_feature_id=left.feature_id,
@@ -121,13 +176,6 @@ def _vectors_comparable(left: list[float], right: list[float]) -> bool:
 
 def _to_unit(value: float) -> float:
     return clamp((value + 1.0) / 2.0)
-
-
-def _signed_effect(card: FeatureCard) -> float | None:
-    for key in ("signed_causal_effect", "signed_association"):
-        if key in card.causal_effects:
-            return float(card.causal_effects[key])
-    return None
 
 
 def _signed_effect_similarity(left: float, right: float) -> float:

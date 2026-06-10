@@ -230,22 +230,44 @@ def _report_actions(report: InspectionReport) -> list[dict[str, Any]]:
     return actions
 
 
-def _action(
+def next_action(
     *,
     action_id: str,
     title: str,
-    argv: list[str],
-    requires: list[str],
+    argv: list[str] | None = None,
+    instruction: str | None = None,
+    requires: list[str] | None = None,
 ) -> dict[str, Any]:
-    return {
-        "id": action_id,
-        "title": title,
-        "argv": argv,
-        "command": _format_command(argv),
-        "requires": requires,
-    }
+    """Build a canonical ``agent_next_actions`` entry.
+
+    The canonical shape, shared by every report surface that emits
+    ``agent_next_actions``:
+
+    - ``id`` and ``title`` are always present.
+    - Runnable CLI suggestions carry BOTH ``command`` (a shlex-quoted string) and
+      ``argv`` (the same tokens as a list). Run-local values the emitter cannot
+      know use ``<angle-bracket>`` placeholders.
+    - Prose-only guidance carries ``instruction`` instead of ``command``/``argv``.
+    - ``requires`` (optional) lists prerequisite artifacts for the action.
+    """
+    if (argv is None) == (instruction is None):
+        raise ValueError("next_action needs exactly one of argv or instruction")
+    action: dict[str, Any] = {"id": action_id, "title": title}
+    if argv is not None:
+        action["argv"] = [str(item) for item in argv]
+        action["command"] = format_command(argv)
+    else:
+        action["instruction"] = str(instruction)
+    if requires:
+        action["requires"] = list(requires)
+    return action
 
 
-def _format_command(argv: list[str]) -> str:
+def format_command(argv: list[str]) -> str:
     return " ".join(shlex.quote(str(item)) for item in argv)
+
+
+# Backwards-compatible aliases for pre-2.3 internal callers.
+_action = next_action
+_format_command = format_command
 

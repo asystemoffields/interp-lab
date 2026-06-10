@@ -124,6 +124,8 @@ def _match_report() -> MatchReport:
                     "decoder": 0.79,
                     "causal": 0.78,
                     "signed_effect": 0.99,
+                    # "validated" requires intervention-backed signed effects.
+                    "signed_effect_provenance_intervention": 1.0,
                 },
                 left_label="evaluation awareness",
                 right_label="evaluation awareness",
@@ -157,6 +159,7 @@ def _match_report() -> MatchReport:
                     "decoder": 0.7,
                     "causal": 0.76,
                     "signed_effect": 0.75,
+                    "signed_effect_provenance_intervention": 1.0,
                 },
                 left_label="promotes criterion",
                 right_label="suppresses criterion",

@@ -1,5 +1,9 @@
+import contextlib
 import json
+import sys
+import types
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -7,6 +11,7 @@ from interp_lab.hf_records import (
     PromptRecord,
     build_prompt_dataset,
     build_prompt_records,
+    export_hf_activation_records,
     load_prompt_records,
     parse_layers,
     prepare_sae_prompt_datasets,
@@ -20,10 +25,14 @@ from interp_lab.hf_contrast import (
 )
 from interp_lab.hf_interventions import (
     _register_gpt2_hidden_ablations,
+    _target_token_ids,
     append_hf_group_activation_record,
     parse_target_tokens,
+    resolve_target_token_ids,
     target_token_strategy,
 )
+from interp_lab.nnsight_records import _layer_for_path, export_nnsight_activation_records
+from interp_lab.transformerlens_records import _layer_for_hook, export_transformerlens_activation_records
 
 
 def test_parse_layers_supports_ranges():
@@ -354,6 +363,261 @@ def test_final_hidden_layer_steering_hooks_final_layer_norm():
     assert len(model.transformer.ln_f.hooks) == 1
     handle.remove()
     assert model.transformer.ln_f.removed == 1
+
+
+def test_target_token_ids_score_the_first_content_piece():
+    tokenizer = _MultiPieceTokenizer()
+
+    # " centimeters" splits into [" cent", "imeters"]; the next-token behavior
+    # score can only observe the FIRST piece.
+    assert _target_token_ids(tokenizer, [" centimeters"]) == [101]
+    # SentencePiece-style lone-space first piece is skipped for the content piece.
+    assert _target_token_ids(tokenizer, [" metres"]) == [202]
+    # Single-piece targets are unchanged.
+    assert _target_token_ids(tokenizer, [" meters"]) == [7]
+
+
+def test_resolve_target_token_ids_records_id_to_token_mapping():
+    tokenizer = _MultiPieceTokenizer()
+
+    target_ids, resolved_tokens, token_map = resolve_target_token_ids(
+        model=None,
+        tokenizer=tokenizer,
+        prompts=[],
+        target_tokens=[" centimeters", " meters"],
+        device="cpu",
+        max_length=8,
+    )
+
+    assert target_ids == [7, 101]
+    assert resolved_tokens == [" centimeters", " meters"]
+    assert token_map == {"7": " meters", "101": " cent"}
+
+
+def test_nnsight_and_transformerlens_layers_use_hidden_state_convention():
+    # Block i's output is hidden_states[i + 1] in HF terms.
+    assert _layer_for_path("transformer.h[6].output[0]") == 7
+    assert _layer_for_path("model.layers[2].output") == 3
+    assert _layer_for_path("lm_head.output") is None
+    assert _layer_for_hook("blocks.6.hook_resid_post") == 7
+    assert _layer_for_hook("blocks.6.hook_resid_pre") == 6
+    assert _layer_for_hook("hook_embed") is None
+
+
+def test_export_nnsight_records_normalizes_layers_to_hidden_state_convention(tmp_path: Path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "torch", types.ModuleType("torch"))
+    monkeypatch.setitem(sys.modules, "nnsight", types.ModuleType("nnsight"))
+    dataset = _write_prompts(tmp_path)
+    out = tmp_path / "nnsight.jsonl"
+    model = _FakeNnsightModel([[[2.0, 0.0]], [[0.0, 1.0]]])
+
+    export_nnsight_activation_records(
+        model_name="m",
+        dataset_path=dataset,
+        out_path=out,
+        activation_paths=["transformer.h[0].output[0]"],
+        features_per_path=1,
+        model_factory=lambda name: model,
+    )
+
+    row = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+    feature = row["features"][0]
+    assert feature["layer"] == 1
+    metadata = row["feature_metadata"][feature["feature_id"]]
+    assert metadata["layer"] == 1
+    assert metadata["layer_convention"] == "hidden_state_index"
+
+
+def test_export_transformerlens_records_normalizes_layers_to_hidden_state_convention(tmp_path: Path, monkeypatch):
+    fake_torch = types.ModuleType("torch")
+    fake_torch.no_grad = contextlib.nullcontext
+    fake_tl = types.ModuleType("transformer_lens")
+    fake_tl.HookedTransformer = _FakeHookedTransformer
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformer_lens", fake_tl)
+    dataset = _write_prompts(tmp_path)
+    out = tmp_path / "tl.jsonl"
+
+    export_transformerlens_activation_records(
+        model_name="m",
+        dataset_path=dataset,
+        out_path=out,
+        hook_names=["blocks.1.hook_resid_post"],
+        features_per_hook=1,
+    )
+
+    row = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+    feature = row["features"][0]
+    assert feature["layer"] == 2
+    metadata = row["feature_metadata"][feature["feature_id"]]
+    assert metadata["layer"] == 2
+    assert metadata["layer_convention"] == "hidden_state_index"
+
+
+def test_export_hf_activation_records_marks_layer_convention(tmp_path: Path, monkeypatch):
+    fake_torch = SimpleNamespace(no_grad=contextlib.nullcontext)
+    monkeypatch.setattr("interp_lab.hf_records._optional_import", lambda name, message: fake_torch)
+    monkeypatch.setattr(
+        "interp_lab.hf_records.load_hf_text_model",
+        lambda **kwargs: (_FakeHfTokenizer(), _FakeHfModel(), "cpu"),
+    )
+    dataset = _write_prompts(tmp_path)
+    out = tmp_path / "hf.jsonl"
+
+    export_hf_activation_records(
+        model_name="m",
+        dataset_path=dataset,
+        out_path=out,
+        layers=[2],
+        features_per_layer=1,
+    )
+
+    row = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+    feature = row["features"][0]
+    assert feature["feature_id"].startswith("L2:D")
+    metadata = row["feature_metadata"][feature["feature_id"]]
+    assert metadata["layer"] == 2
+    assert metadata["layer_convention"] == "hidden_state_index"
+
+
+def _write_prompts(tmp_path: Path) -> Path:
+    dataset = tmp_path / "prompts.jsonl"
+    dataset.write_text(
+        json.dumps({"prompt_id": "pos", "text": "a", "criterion_score": 1.0})
+        + "\n"
+        + json.dumps({"prompt_id": "neg", "text": "b", "criterion_score": 0.0})
+        + "\n",
+        encoding="utf-8",
+    )
+    return dataset
+
+
+class _MultiPieceTokenizer:
+    _pieces = {
+        " centimeters": [101, 102],
+        " metres": [201, 202],
+        " meters": [7],
+    }
+    _decoded = {7: " meters", 101: " cent", 102: "imeters", 201: " ", 202: "metres"}
+
+    def encode(self, text, add_special_tokens=False):
+        return list(self._pieces.get(text, []))
+
+    def decode(self, ids):
+        return "".join(self._decoded.get(token_id, "") for token_id in ids)
+
+
+class _FakeActivation:
+    """Minimal (seq, dim) tensor stand-in for nnsight/TL pooling."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def detach(self):
+        return self
+
+    def cpu(self):
+        return self
+
+    @property
+    def shape(self):
+        return (len(self._rows), len(self._rows[0]))
+
+    def reshape(self, first, second):
+        assert second == -1
+        return self
+
+    def __getitem__(self, index):
+        return _FakeVector(self._rows[index])
+
+
+class _FakeVector:
+    def __init__(self, values):
+        self._values = values
+
+    def tolist(self):
+        return list(self._values)
+
+    def detach(self):
+        return self
+
+    def cpu(self):
+        return self
+
+
+class _FakeSaved:
+    def __init__(self):
+        self.value = None
+
+    def save(self):
+        return self
+
+
+class _FakeNnsightModel:
+    def __init__(self, values_per_prompt):
+        self._values = list(values_per_prompt)
+        self._saved = _FakeSaved()
+        self.transformer = SimpleNamespace(h=[SimpleNamespace(output=[self._saved])])
+
+    def trace(self, text, **kwargs):
+        self._saved.value = _FakeActivation(self._values.pop(0))
+        return contextlib.nullcontext()
+
+
+class _FakeHookedTransformer:
+    def __init__(self):
+        self.cfg = SimpleNamespace(n_layers=2)
+        self._activations = [_FakeActivation([[2.0, 0.0]]), _FakeActivation([[0.0, 1.0]])]
+
+    @classmethod
+    def from_pretrained(cls, model_name, device="cpu"):
+        return cls()
+
+    def eval(self):
+        return self
+
+    def to_tokens(self, text, prepend_bos=True):
+        return text
+
+    def run_with_cache(self, tokens, names_filter=None, remove_batch_dim=False):
+        return None, {"blocks.1.hook_resid_post": self._activations.pop(0)}
+
+
+class _FakeHfTokenizer:
+    def __call__(self, text, return_tensors="pt", truncation=True, max_length=128):
+        return {"input_ids": _FakeEncodedTensor()}
+
+
+class _FakeEncodedTensor:
+    def to(self, device):
+        return self
+
+
+class _FakeHfModel:
+    def __init__(self):
+        self._hidden_per_call = [
+            [_FakeHidden([[0.0, 0.0]]), _FakeHidden([[1.0, 0.0]]), _FakeHidden([[2.0, 0.0]])],
+            [_FakeHidden([[0.0, 0.0]]), _FakeHidden([[0.0, 1.0]]), _FakeHidden([[0.0, 2.0]])],
+        ]
+
+    def __call__(self, output_hidden_states=True, use_cache=False, **encoded):
+        return SimpleNamespace(hidden_states=self._hidden_per_call.pop(0))
+
+
+class _FakeHidden:
+    """(batch=1, seq, dim) tensor stand-in for hf_records pooling."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    @property
+    def shape(self):
+        return (1, len(self._rows), len(self._rows[0]))
+
+    def __getitem__(self, index):
+        batch, token_index = index
+        assert batch == 0
+        return _FakeVector(self._rows[token_index])
 
 
 class _FakeGpt2Model:

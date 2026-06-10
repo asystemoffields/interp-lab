@@ -1,9 +1,12 @@
+import argparse
 import json
 from pathlib import Path
 
+import pytest
+
 import interp_lab
-from interp_lab.cli import main
-from interp_lab.demo_sweep import build_demo_sweep_report, render_demo_sweep_text
+from interp_lab.cli import build_parser, main
+from interp_lab.demo_sweep import _planned_command, build_demo_sweep_report, render_demo_sweep_text
 
 
 def test_demo_sweep_reports_missing_artifacts(tmp_path: Path):
@@ -29,6 +32,19 @@ def test_demo_sweep_reports_missing_artifacts(tmp_path: Path):
     assert report["status"] == "incomplete"
     assert report["demos"][0]["artifact_summary"]["missing"] == 3
     assert "INCOMPLETE" in render_demo_sweep_text(report)
+
+    # Next actions are canonical objects (not the pre-2.3 plain strings): id+title
+    # always, plus exactly one of command/instruction; manifest-authored strings
+    # are coerced.
+    demo_actions = {action["id"]: action for action in report["demos"][0]["agent_next_actions"]}
+    assert demo_actions["run_demo_sweep"]["argv"] == ["interp-lab", "demo-sweep", "--run"]
+    assert demo_actions["generate_missing_artifacts"]["instruction"]
+    assert demo_actions["manifest_note_1"]["title"] == "Archive outputs."
+    for action in [*report["agent_next_actions"], *report["demos"][0]["agent_next_actions"]]:
+        assert action["id"] and action["title"]
+        assert ("command" in action) != ("instruction" in action)
+    # The text view renders the first action's title, not a raw dict.
+    assert "{'" not in render_demo_sweep_text(report)
 
 
 def test_demo_sweep_passes_when_expected_artifacts_exist(tmp_path: Path):
@@ -82,6 +98,56 @@ def test_demo_sweep_runs_internal_commands_and_skips_external_by_default(tmp_pat
     assert report["status"] == "incomplete"
     assert report["demos"][0]["command_summary"]["skipped"] == 1
     assert report["demos"][0]["command_summary"]["blocked"] == 1
+
+
+def test_every_cli_command_is_classified_internal():
+    # Regression: the old hand-maintained allowlist drifted from the CLI, so
+    # commands like demo-sweep or search-features were skipped as "external" (or
+    # exec'd as nonexistent binaries under --allow-external).
+    choices: set[str] = set()
+    for action in build_parser()._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            choices.update(action.choices)
+    assert choices
+
+    for name in sorted(choices):
+        record = _planned_command({"name": name, "argv": [name, "--help"]})
+        assert record["kind"] == "internal", name
+
+    prefixed = _planned_command({"name": "sweep", "argv": ["interp-lab", "demo-sweep", "--run"]})
+    assert prefixed["kind"] == "internal"
+    external = _planned_command({"name": "modal", "argv": ["modal", "run", "examples/remote.py"]})
+    assert external["kind"] == "external"
+
+
+def test_verify_only_sweep_does_not_clobber_archived_default_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    _write_demo_manifest(tmp_path)
+    archived = tmp_path / "reports" / "real-model-demo-sweep.json"
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    archived.write_text('{"archived": true}\n', encoding="utf-8")
+
+    exit_code = main(["demo-sweep", "--repo-root", str(tmp_path)])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "demo sweep" in out  # results are still printed
+    assert "Wrote" not in out  # but nothing is written without --out
+    assert json.loads(archived.read_text(encoding="utf-8")) == {"archived": True}
+
+
+def test_run_sweep_writes_default_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.chdir(tmp_path)
+    _write_demo_manifest(tmp_path)
+
+    exit_code = main(["demo-sweep", "--repo-root", str(tmp_path), "--run"])
+
+    default_out = tmp_path / "reports" / "real-model-demo-sweep.json"
+    report = json.loads(default_out.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert report["run_commands"] is True
 
 
 def test_demo_sweep_preflights_required_inputs(tmp_path: Path):

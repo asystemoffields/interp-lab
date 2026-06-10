@@ -513,6 +513,10 @@ def _validation_reason_codes(
     if reasons:
         return reasons
     if status == "robust":
+        # With require_controls=False a path can grade robust with zero control rows;
+        # the reason code must not claim a control comparison that never happened.
+        if control_count == 0:
+            return ["passed_effect_and_sign_thresholds_no_controls"]
         return ["passed_effect_control_and_sign_thresholds"]
     if status == "suggestive":
         return ["passed_suggestive_effect_and_sign_thresholds"]
@@ -522,6 +526,11 @@ def _validation_reason_codes(
 def _interpret_status(status: str, reason_codes: list[str] | None = None) -> str:
     reasons = set(reason_codes or [])
     if status == "robust":
+        if "passed_effect_and_sign_thresholds_no_controls" in reasons:
+            return (
+                "The path replicated with a consistent-sign target-latent effect, but no control "
+                "records were run, so control separation is unverified."
+            )
         return "The path replicated with a target-latent effect that beat controls and kept a consistent sign."
     if status == "suggestive":
         return "The path has measurable evidence but should be repeated with more prompts or stronger controls."

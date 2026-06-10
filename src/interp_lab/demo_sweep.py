@@ -13,41 +13,42 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
+from interp_lab.agent_actions import next_action
 from interp_lab.release_check import REAL_MODEL_DEMO_SCHEMA, _validate_real_model_demo_manifest
 
 REAL_MODEL_DEMO_SWEEP_SCHEMA = "interp-lab.real_model_demo_sweep.v1"
 
-INTERNAL_COMMANDS = {
-    "build-prompts",
-    "criterion-lab",
-    "demo",
-    "doctor",
-    "export-attribution-graph",
-    "export-hf-contrast",
-    "export-hf-interventions",
-    "export-hf-records",
-    "export-hf-sae-paths",
-    "export-nnsight-records",
-    "export-transformerlens-records",
-    "init-run",
-    "inspect",
-    "intervene",
-    "match",
-    "plan-scale",
-    "prepare-sae-prompts",
-    "profile-env",
-    "publish-hf-artifact",
-    "release-check",
-    "run",
-    "studio",
-    "summarize-attribution-graph",
-    "train-sae",
-    "validate-assay",
-    "validate-attribution-graph",
-    "validate-hf-sae-paths",
-    "validate-matches",
-    "web-app",
-}
+DEFAULT_SWEEP_OUT = "reports/real-model-demo-sweep.json"
+
+_INTERNAL_COMMANDS_CACHE: frozenset[str] | None = None
+
+
+def _internal_commands() -> frozenset[str]:
+    """Internal subcommand names derived from the live CLI parser.
+
+    Deriving the set from build_parser() (instead of a hand-maintained allowlist)
+    means a new CLI command can never be misclassified as an external binary.
+    """
+    global _INTERNAL_COMMANDS_CACHE
+    if _INTERNAL_COMMANDS_CACHE is None:
+        from interp_lab.cli import build_parser  # local import: cli imports this module
+
+        names: set[str] = set()
+        for action in build_parser()._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                names.update(action.choices)
+        _INTERNAL_COMMANDS_CACHE = frozenset(names)
+    return _INTERNAL_COMMANDS_CACHE
+
+
+def _command_kind(raw_argv: list[str], normalized: list[str]) -> str:
+    # Anything invoked through the interp-lab entry point is internal by definition;
+    # the prefix is stripped before exec, so it must never reach subprocess.run.
+    if raw_argv and raw_argv[0] == "interp-lab":
+        return "internal"
+    if normalized and normalized[0] in _internal_commands():
+        return "internal"
+    return "external"
 
 CommandRunner = Callable[[list[str]], int]
 
@@ -97,8 +98,12 @@ def build_demo_sweep_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--out",
-        default="reports/real-model-demo-sweep.json",
-        help="Output JSON sweep report path.",
+        default=None,
+        help=(
+            f"Output JSON sweep report path. Defaults to {DEFAULT_SWEEP_OUT} with --run; "
+            "verify-only sweeps print results but only write when --out is set, so they "
+            "never clobber archived release evidence."
+        ),
     )
     parser.add_argument("--json", action="store_true", help="Print the machine-readable report.")
     parser.add_argument(
@@ -124,7 +129,13 @@ def run_demo_sweep_from_args(
         command_timeout_seconds=args.command_timeout_seconds,
         command_runner=command_runner,
     )
-    path = Path(args.out) if args.out else None
+    out = args.out
+    if out is None and args.run:
+        # Only --run sweeps fall back to the archival default path: a verify-only
+        # sweep with run_commands=false would overwrite release evidence that
+        # release-check then flags as a blocker.
+        out = DEFAULT_SWEEP_OUT
+    path = Path(out) if out else None
     if path is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -166,7 +177,13 @@ def build_demo_sweep_report(
                 "detail": f"No demo manifests matched: {', '.join(sorted(selected))}",
                 "commands": [],
                 "artifacts": [],
-                "agent_next_actions": ["Check --demo values against manifest id, stem, or filename."],
+                "agent_next_actions": [
+                    next_action(
+                        action_id="fix_demo_selection",
+                        title="Fix the --demo selection",
+                        instruction="Check --demo values against manifest id, stem, or filename.",
+                    )
+                ],
             }
         )
     counts = _status_counts(demo_reports)
@@ -234,9 +251,27 @@ def render_demo_sweep_text(report: dict[str, Any]) -> str:
             lines.append(f"  {detail}")
         next_actions = demo.get("agent_next_actions") or []
         if next_actions:
-            lines.append(f"  Next: {next_actions[0]}")
+            lines.append(f"  Next: {_action_line(next_actions[0])}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _action_line(action: Any) -> str:
+    """Render one agent next action for the text view.
+
+    Pre-2.3 sweep reports stored plain strings; current reports store canonical
+    {id, title, command|instruction} objects. Both render cleanly.
+    """
+    if isinstance(action, dict):
+        label = str(action.get("title") or action.get("id") or "")
+        command = action.get("command")
+        instruction = action.get("instruction")
+        if command:
+            return f"{label} ({command})"
+        if instruction and instruction != label:
+            return f"{label}. {instruction}"
+        return label
+    return str(action)
 
 
 def _build_single_demo_report(
@@ -257,7 +292,13 @@ def _build_single_demo_report(
             "detail": detail,
             "commands": [],
             "artifacts": [],
-            "agent_next_actions": ["Fix the manifest schema before running the demo."],
+            "agent_next_actions": [
+                next_action(
+                    action_id="fix_manifest_schema",
+                    title="Fix the manifest schema before running the demo",
+                    instruction=f"Fix the manifest schema before running the demo: {detail}",
+                )
+            ],
         }
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     commands = []
@@ -345,7 +386,7 @@ def _run_or_skip_command(
 ) -> dict[str, Any]:
     raw_argv = list(command["argv"])
     normalized = _normalize_argv(raw_argv)
-    kind = "internal" if normalized and normalized[0] in INTERNAL_COMMANDS else "external"
+    kind = _command_kind(raw_argv, normalized)
     base = {
         "name": command["name"],
         "argv": raw_argv,
@@ -460,7 +501,7 @@ def _planned_command(command: dict[str, Any]) -> dict[str, Any]:
         "name": command["name"],
         "argv": raw_argv,
         "normalized_argv": normalized,
-        "kind": "internal" if normalized and normalized[0] in INTERNAL_COMMANDS else "external",
+        "kind": _command_kind(raw_argv, normalized),
         "status": "planned",
         "detail": "Command execution was not requested.",
     }
@@ -477,7 +518,7 @@ def _blocked_command(
         "name": command["name"],
         "argv": raw_argv,
         "normalized_argv": normalized,
-        "kind": "internal" if normalized and normalized[0] in INTERNAL_COMMANDS else "external",
+        "kind": _command_kind(raw_argv, normalized),
         "status": "blocked",
         "detail": detail,
     }
@@ -621,42 +662,120 @@ def _demo_next_actions(
     artifact_summary: dict[str, int],
     command_summary: dict[str, int],
     run: bool,
-) -> list[str]:
+) -> list[dict[str, Any]]:
     if status == "passed":
         return [
-            "Archive this manifest, the sweep report, and the listed artifacts together.",
-            *payload.get("agent_next_actions", [])[:2],
+            next_action(
+                action_id="archive_demo_evidence",
+                title="Archive this demo's evidence",
+                instruction="Archive this manifest, the sweep report, and the listed artifacts together.",
+            ),
+            *_manifest_actions(payload),
         ]
     actions = []
     if input_summary["missing"]:
-        actions.append("Add or correct the missing required inputs before running this demo.")
+        actions.append(
+            next_action(
+                action_id="add_missing_inputs",
+                title="Add or correct the missing required inputs",
+                instruction="Add or correct the missing required inputs before running this demo.",
+            )
+        )
     if not run:
-        actions.append("Re-run this sweep with --run when dependencies and credentials are ready.")
+        actions.append(
+            next_action(
+                action_id="run_demo_sweep",
+                title="Re-run this sweep with --run when dependencies and credentials are ready",
+                argv=["interp-lab", "demo-sweep", "--run"],
+            )
+        )
     if command_summary["skipped"]:
-        actions.append("Use --allow-external for trusted external launchers such as Modal.")
+        actions.append(
+            next_action(
+                action_id="allow_external_commands",
+                title="Use --allow-external for trusted external launchers such as Modal",
+                argv=["interp-lab", "demo-sweep", "--run", "--allow-external"],
+            )
+        )
     if command_summary["blocked"]:
-        actions.append("Run blocked steps after the skipped launcher has produced its expected artifacts.")
+        actions.append(
+            next_action(
+                action_id="run_blocked_steps",
+                title="Run the blocked steps after the skipped launcher finishes",
+                instruction="Run blocked steps after the skipped launcher has produced its expected artifacts.",
+            )
+        )
     if artifact_summary["missing"]:
-        actions.append("Generate the missing expected artifacts, then repeat the sweep.")
-    actions.extend(payload.get("agent_next_actions", [])[:2])
+        actions.append(
+            next_action(
+                action_id="generate_missing_artifacts",
+                title="Generate the missing expected artifacts",
+                instruction="Generate the missing expected artifacts, then repeat the sweep.",
+            )
+        )
+    actions.extend(_manifest_actions(payload))
     return actions
 
 
-def _sweep_next_actions(overall_status: str, demos: list[dict[str, Any]], run: bool) -> list[str]:
+def _manifest_actions(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Coerce manifest-authored next actions (historically plain strings) to the
+    canonical {id, title, instruction} shape."""
+    actions: list[dict[str, Any]] = []
+    for index, item in enumerate(payload.get("agent_next_actions", [])[:2], start=1):
+        if isinstance(item, dict) and item.get("id") and item.get("title"):
+            actions.append(item)
+            continue
+        text = str(item)
+        actions.append(
+            next_action(action_id=f"manifest_note_{index}", title=text, instruction=text)
+        )
+    return actions
+
+
+def _sweep_next_actions(overall_status: str, demos: list[dict[str, Any]], run: bool) -> list[dict[str, Any]]:
     if overall_status == "passed":
         return [
-            "Archive reports/real-model-demo-sweep.json with the produced manifests, reports, graphs, and notes.",
-            "Run interp-lab release-check --strict after the stable classifier change is prepared.",
+            next_action(
+                action_id="archive_sweep_report",
+                title="Archive the sweep report with its evidence",
+                instruction=(
+                    "Archive reports/real-model-demo-sweep.json with the produced manifests, "
+                    "reports, graphs, and notes."
+                ),
+            ),
+            next_action(
+                action_id="run_release_check",
+                title="Run the strict release check after the stable classifier change is prepared",
+                argv=["interp-lab", "release-check", "--strict"],
+            ),
         ]
     actions = []
     if not run:
-        actions.append("Run interp-lab demo-sweep --run after installing the optional dependencies needed by selected demos.")
+        actions.append(
+            next_action(
+                action_id="run_demo_sweep",
+                title="Run the sweep with command execution after installing the optional dependencies needed by selected demos",
+                argv=["interp-lab", "demo-sweep", "--run"],
+            )
+        )
     missing = [demo.get("id") for demo in demos if demo.get("artifact_summary", {}).get("missing", 0)]
     if missing:
-        actions.append(f"Produce missing artifacts for: {', '.join(str(item) for item in missing if item)}.")
+        actions.append(
+            next_action(
+                action_id="produce_missing_artifacts",
+                title="Produce the missing expected artifacts",
+                instruction=f"Produce missing artifacts for: {', '.join(str(item) for item in missing if item)}.",
+            )
+        )
     failed = [demo.get("id") or demo.get("manifest_path") for demo in demos if demo.get("status") == "failed"]
     if failed:
-        actions.append(f"Fix failed demos: {', '.join(str(item) for item in failed if item)}.")
+        actions.append(
+            next_action(
+                action_id="fix_failed_demos",
+                title="Fix the failed demos",
+                instruction=f"Fix failed demos: {', '.join(str(item) for item in failed if item)}.",
+            )
+        )
     return actions
 
 

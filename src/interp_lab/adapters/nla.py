@@ -104,7 +104,15 @@ def _load_records(source: str | Path | dict[str, Any] | list[dict[str, Any]]) ->
         if not path.exists():
             raise FileNotFoundError(f"NLA explanation file not found: {path}")
         if path.suffix.lower() == ".jsonl":
-            rows = [json.loads(line) for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
+            rows = []
+            for line_number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), start=1):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    rows.append(json.loads(stripped))
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"{path}:{line_number}: invalid JSON: {exc.msg}") from exc
             return _records_from_rows(rows)
         payload = json.loads(path.read_text(encoding="utf-8-sig"))
         return _load_records(payload)

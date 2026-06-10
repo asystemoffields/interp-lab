@@ -3,7 +3,9 @@ import json
 import re
 
 from interp_lab.cli import main
+from interp_lab.doctor import collect_diagnostics
 from interp_lab.runs import _input_file_records
+from interp_lab.text_embedding import configure_text_embedder, reset_text_embedder, set_text_embedder
 
 
 def test_quickstart_and_tutorial_alias_print_guide(capsys):
@@ -201,6 +203,33 @@ def test_doctor_command_reports_environment(capsys):
     output = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert output["tool"] == "interp-lab"
+
+
+def test_doctor_reports_programmatically_configured_text_embedder():
+    # Regression: doctor used to read only INTERP_LAB_TEXT_EMBEDDER and ignored the
+    # embedder actually configured (e.g. via the --text-embedder flag).
+    class _FakeEmbedder:
+        id = "st-fake-mini"
+        dimensions = 4
+
+        def embed(self, text: str) -> list[float]:
+            return [0.0] * self.dimensions
+
+    set_text_embedder(_FakeEmbedder())
+    try:
+        assert collect_diagnostics()["text_embedder"] == "st-fake-mini"
+    finally:
+        reset_text_embedder()
+
+
+def test_doctor_reports_flag_configured_embedder_over_env_var(monkeypatch):
+    monkeypatch.setenv("INTERP_LAB_TEXT_EMBEDDER", "st:never-loaded")
+    try:
+        # What main() does when the user passes --text-embedder hash.
+        configure_text_embedder("hash")
+        assert collect_diagnostics()["text_embedder"] == "hash (default, lexical)"
+    finally:
+        reset_text_embedder()
 
 
 def test_build_prompts_command_writes_prompt_jsonl(tmp_path: Path, capsys):
@@ -759,6 +788,39 @@ def test_run_config_steps_support_template_variables(tmp_path: Path):
     assert (run_dir / "demo" / "matches.json").exists()
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["outputs"][0]["path"] == str((run_dir / "demo").resolve())
+
+
+def test_run_config_renders_templated_out_before_deriving_run_dir(tmp_path: Path, monkeypatch):
+    # Regression: run_dir was taken from config["out"] before --var substitution, so
+    # the manifest landed in a literal "reports/${name}/" directory and {run_dir}
+    # expanded to the unrendered template.
+    monkeypatch.chdir(tmp_path)
+    config = tmp_path / "run.json"
+    config.write_text(
+        json.dumps(
+            {
+                "out": "reports/${name}",
+                "steps": [
+                    {
+                        "name": "demo",
+                        "command": "demo",
+                        "args": {"out": "{run_dir}/demo"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["run", str(config), "--var", "name=myrun"])
+
+    run_dir = tmp_path / "reports" / "myrun"
+    assert exit_code == 0
+    assert (run_dir / "demo" / "matches.json").exists()
+    assert not (tmp_path / "reports" / "${name}").exists()
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["run_dir"] == "reports/myrun"
+    assert manifest["config"]["steps"][0]["args"]["out"] == "reports/myrun/demo"
 
 
 def test_run_config_list_args_record_outputs(tmp_path: Path):

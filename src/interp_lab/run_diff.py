@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from interp_lab.agent_actions import next_action
 from interp_lab.explanation_reports import WrittenJsonMarkdown
 from interp_lab.reporting import load_inspection_report
 from interp_lab.schema import FeatureCard, InspectionReport
@@ -141,19 +142,34 @@ def _interpret(summary: dict[str, Any], criterion_match: bool, model_match: bool
 
 def _next_actions(added: list[dict[str, Any]], dropped: list[dict[str, Any]]) -> list[dict[str, Any]]:
     actions = [
-        {
-            "id": "inspect_top_movers",
-            "title": "Open the markdown diff to read the biggest movers and added/dropped features",
-            "command": "python -c \"from pathlib import Path; print(Path('<run-diff.md>').read_text(encoding='utf-8'))\"",
-        }
+        next_action(
+            action_id="inspect_top_movers",
+            title="Open the markdown diff to read the biggest movers and added/dropped features",
+            instruction=(
+                "Read the markdown diff written next to this JSON (<run-diff.md>) for the "
+                "biggest movers and the added/dropped feature lists."
+            ),
+            requires=["run diff markdown"],
+        )
     ]
     if added or dropped:
         actions.append(
-            {
-                "id": "stabilize_run",
-                "title": "If this was a reproducibility check, broaden prompts or fix the seed to stabilize the feature set",
-                "command": "interp-lab inspect --model <model> --criterion <criterion> --backend <backend> --out <out>",
-            }
+            next_action(
+                action_id="stabilize_run",
+                title="If this was a reproducibility check, broaden prompts or fix the seed to stabilize the feature set",
+                argv=[
+                    "interp-lab",
+                    "inspect",
+                    "--model",
+                    "<model>",
+                    "--criterion",
+                    "<criterion>",
+                    "--backend",
+                    "<backend>",
+                    "--out",
+                    "<out>",
+                ],
+            )
         )
     return actions
 
@@ -230,6 +246,12 @@ def export_run_diff_report(
     right_report = load_inspection_report(right)
     report = build_run_diff_report(left_report, right_report)
     if out is None:
+        # --markdown-out alone still writes the markdown summary; only the JSON
+        # artifact needs an --out path.
+        if markdown_out is not None:
+            markdown_path = Path(markdown_out)
+            markdown_path.parent.mkdir(parents=True, exist_ok=True)
+            markdown_path.write_text(render_run_diff_markdown(report), encoding="utf-8")
         return report
     json_path = Path(out)
     json_path.parent.mkdir(parents=True, exist_ok=True)

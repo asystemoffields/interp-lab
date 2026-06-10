@@ -3,6 +3,123 @@
 All notable changes to interp-lab are documented here. This project adheres to
 [semantic versioning](https://semver.org/).
 
+## 2.3.0 — evidence-integrity hardening & agent ergonomics
+
+A full re-audit of the codebase (four independent review passes) found that
+correlational `signed_association` values could still leak onto causal-labeled
+axes through several doors the 2.1.0 rigor pass missed, plus a set of
+agent-facing surfaces that had drifted from the executable truth. This release
+closes all of them, then builds out the agent-facing surface: a single
+discovery endpoint, a Model Context Protocol server, one canonical
+next-action schema across every report type, and an `AGENTS.md` operating
+manual. The suite grew from 272 to 362 tests.
+
+### Added — for AI agents
+
+- **`interp-lab capabilities [--json] [--out FILE]`** / **`interp_lab.capabilities()`**
+  — one discovery payload (`interp-lab.capabilities.v1`): the full structured
+  CLI surface (37 commands with options), the public Python API contract,
+  optional-module availability, and the tool's conventions (JSON-first
+  outputs, error shape, next-action schema, placeholder convention).
+- **`interp-lab mcp`** — a pure-stdlib Model Context Protocol server over
+  stdio exposing ten tools (`capabilities`, `doctor`, `inspect`, `compare`,
+  `validate_matches`, `search_features`, `compare_runs`,
+  `check_explanation_consistency`, `attribution_graph`,
+  `validate_attribution_graph`) plus README/COMMANDS/AGENTS docs as
+  resources. Artifact-producing tools write to disk and return compact
+  summaries with paths. Client config: `{"command": "interp-lab", "args": ["mcp"]}`.
+- **One canonical `agent_next_actions` shape everywhere**:
+  `{id, title, command?+argv?, instruction?, requires?}` — runnable actions
+  carry both a shlex-quoted `command` and its `argv`; prose guidance carries
+  `instruction`. Previously four different shapes existed across inspection,
+  run-diff, env-profile, release-check, demo-sweep, and explanation reports.
+  Legacy keys (`next_action`, `description`, flat `agent_next_action*`) are
+  still emitted for this release; demo-sweep's plain strings are now objects.
+  A meta-test generates every report type and asserts shape conformance and
+  that every embedded argv parses against the real CLI parser.
+- **`AGENTS.md`** — the operating manual for agents driving interp-lab:
+  evidence philosophy (provenance semantics, claim grades, what not to
+  claim), discovery, MCP setup, conventions, and the core inspect →
+  intervene → re-inspect → match → validate loop as runnable commands.
+  Linked from a new "For AI agents" README section.
+
+### Fixed — evidence integrity
+
+- **Purely correlational matches can no longer grade `validated`/`validated_equivalent`.**
+  Match components now carry signed-effect provenance markers
+  (`signed_effect_provenance_intervention` / `_association`); `validate-matches`
+  requires intervention provenance for `validated` and caps association-only
+  (and legacy pre-provenance) pairs at `needs_causal_evidence` with reason code
+  `signed_effects_lack_intervention_provenance`.
+- **Mixed-provenance signed effects are never compared.** A measured
+  `signed_causal_effect` on one side is no longer blended with a correlational
+  `signed_association` on the other — no opposite-direction cap, no
+  `contradicted_effect` from a correlation. Shared provenance-aware accessors
+  (`signed_effect_with_provenance`, `has_intervention_provenance`) now back
+  scoring, matching, graphs, and match validation.
+- **`score_feature` no longer double-counts association-proxy evidence as
+  causal.** The `criterion` key feeds the causal axis (and
+  `FeatureCard.causal_effect`) only with intervention provenance; records-backend
+  cards without interventions now report `causal_effect = 0.0`.
+- **The text-cosine association fallback lost its free ~0.5 baseline** — a
+  no-evidence card no longer outranks a measured-but-weak one.
+- **Graph edges labeled `measured_intervention` never carry a correlational
+  signed effect** (no `signed_association` fallback in the measured branch), and
+  supernode `aggregate_causal_effect` edges average intervention-backed members
+  only (with `measured_member_count` + `evidence` fields).
+- **Goodfire and Neuronpedia adapters no longer fabricate `specificity`.**
+  Goodfire's constant `0.5` is gone; Neuronpedia's autointerp explanation score
+  moved to `metadata["autointerp_score"]` where it belongs.
+- **`validate-attribution-graph --allow-missing-controls` is honest about it**:
+  robust paths with zero control records get reason code
+  `passed_effect_and_sign_thresholds_no_controls` and matching interpretation
+  text instead of claiming they "beat controls".
+- **`t_critical` is no longer overconfident at small df for non-0.95
+  confidence**: exact two-sided tables for 0.90 and 0.99 (df 1–30), conservative
+  round-up for uncovered confidences below df 10 (0.95 behavior unchanged).
+
+### Fixed — intervention & export correctness
+
+- **Multi-piece target tokens are scored on the first BPE piece, not the last**
+  (`" centimeters"` now measures P(" cent"), not P("imeters")), with the
+  resolved id→token mapping recorded in row metadata
+  (`resolved_target_token_ids`).
+- **Fallback-dictionary SAE artifacts encode exactly what their metrics
+  describe** (`encoder_bias = -l1_coefficient`; metrics derived through
+  `encode_with_artifact`).
+- **`train-sae --method auto` no longer silently downgrades to the fallback
+  dictionary** on a broken torch install; torch availability is detected up
+  front, training errors propagate, and the auto fallback prints an advisory.
+- **Layer-0 (embedding) features are rejected up front** in intervention
+  exports, before model load — no more truncated JSONL after a late crash.
+- **Cross-backend layer numbering is unified**: nnsight/TransformerLens
+  resid-post exports now use the HF `hidden_states` convention
+  (block *i* → layer *i*+1) and all three backends stamp
+  `layer_convention: hidden_state_index` in feature metadata.
+
+### Fixed — agent surfaces & artifacts
+
+- **`search-features` next actions are runnable**: the embedded `intervene`
+  argv now includes the required `--model`/`--criterion`/`--dataset`/`--out`
+  arguments (placeholder convention matching inspection-report actions), plus a
+  new `agent_next_action_requires` field. A new meta-test asserts every emitted
+  next-action argv parses against the real CLI parser.
+- **`public_api_contract()` lists every required parameter** (added
+  `validate_hf_sae_paths`'s `path_records_out`), enforced by a new
+  introspection meta-test.
+- **`interp-lab run` writes its manifest into the rendered output directory**
+  when `out` contains `--var` templates (no more literal `reports/${name}/`).
+- **The demo-sweep internal-command allowlist is derived from the CLI parser**
+  (eight commands had drifted out of it), and verify-only `demo-sweep` no longer
+  clobbers the archived release-evidence report at the default `--out`.
+- **`doctor` reports the actually-configured text embedder** (flag and
+  programmatic configuration included, not just the env var), and
+  `compare-runs --markdown-out` works without `--out`.
+- Newline-containing tokens render escaped (`\n`) in report and graph token
+  displays; toy backend tolerates criteria without examples; Neuronpedia adapter
+  skips non-numeric API values instead of crashing; NLA JSONL errors include
+  `file:line` context.
+
 ## 2.2.0 — usability, robustness & new tools
 
 This release makes interp-lab easier to pick up and harder to crash, demonstrates

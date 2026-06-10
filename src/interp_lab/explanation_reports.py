@@ -5,11 +5,13 @@ import html
 import itertools
 import json
 import math
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from interp_lab.matching import match_feature_cards
+from interp_lab.agent_actions import next_action
+from interp_lab.matching import match_feature_cards, signed_effect_with_provenance
 from interp_lab.math_utils import clamp, cosine
 from interp_lab.reporting import load_inspection_report
 from interp_lab.schema import FeatureCard, InspectionReport, utc_now_iso
@@ -313,6 +315,25 @@ def build_feature_search_report(
             )
             if score < min_score:
                 continue
+            # Like agent_actions.py, emit a command that actually parses against the
+            # CLI: intervene requires --model/--dataset/--criterion/--out, so run-local
+            # artifacts the search cannot know are marked as <placeholder> tokens and
+            # documented in the requires list.
+            intervene_argv = [
+                "intervene",
+                "--model",
+                card.model,
+                "--criterion",
+                report.criterion.text,
+                "--dataset",
+                "<causal-prompts.jsonl>",
+                "--report",
+                item["path"],
+                "--feature",
+                card.feature_id,
+                "--out",
+                "<interventions.jsonl>",
+            ]
             results.append(
                 {
                     "feature_id": card.feature_id,
@@ -330,16 +351,20 @@ def build_feature_search_report(
                     "causal_effect": card.causal_effect,
                     "source": card.source,
                     "matched_terms": sorted(set(content_tokens(query)) & set(content_tokens(_card_search_text(card)))),
+                    # Legacy flat keys kept for one release; prefer agent_next_actions.
                     "agent_next_action": (
-                        f"Run interp-lab intervene --report {item['path']} --feature {card.feature_id} "
-                        "to test amplification or suppression."
+                        f"Run interp-lab {_format_command(intervene_argv)} "
+                        "(fill the <placeholders>) to test amplification or suppression."
                     ),
-                    "agent_next_action_argv": [
-                        "intervene",
-                        "--report",
-                        item["path"],
-                        "--feature",
-                        card.feature_id,
+                    "agent_next_action_argv": intervene_argv,
+                    "agent_next_action_requires": ["scored causal prompt JSONL"],
+                    "agent_next_actions": [
+                        next_action(
+                            action_id="plan_feature_intervention",
+                            title="Plan a causal test for this search hit (fill the <placeholders>)",
+                            argv=["interp-lab", *intervene_argv],
+                            requires=["scored causal prompt JSONL"],
+                        )
                     ],
                 }
             )
@@ -357,10 +382,11 @@ def build_feature_search_report(
         },
         "results": kept,
         "agent_next_actions": [
-            {
-                "id": "inspect_top_search_hits",
-                "description": "Review high scoring explanation matches, then run causal interventions before treating a hit as behaviorally responsible.",
-            }
+            _prose_action(
+                "inspect_top_search_hits",
+                "Review the top search hits before acting on them",
+                "Review high scoring explanation matches, then run causal interventions before treating a hit as behaviorally responsible.",
+            )
         ],
     }
 
@@ -886,7 +912,7 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
     decoder = _unit_cosine(left.fingerprint.decoder_signature, right.fingerprint.decoder_signature, neutral=0.5)
     causal = _causal_component(left, right)
     rank = _rank_component(left_item["rank"], right_item["rank"], left_item["total"], right_item["total"])
-    signed = _signed_component(left, right)
+    signed, signed_provenance = _signed_component(left, right)
     text_pivot = max(explanation, label, examples)
     text_source = _text_pivot_source(
         {
@@ -896,15 +922,21 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
         }
     )
     causal_evidence = 1.0 if _has_intervention_evidence(left) and _has_intervention_evidence(right) else 0.0
-    score = clamp(
+    weighted = (
         0.38 * text_pivot
         + 0.17 * explanation
         + 0.13 * causal
         + 0.10 * activation
         + 0.07 * decoder
         + 0.10 * rank
-        + 0.05 * signed
     )
+    if signed is not None:
+        score = clamp(weighted + 0.05 * signed)
+    else:
+        # No comparable signed-effect pair (a side is missing, or measured-vs-
+        # association): exclude the axis and renormalize the remaining weights
+        # instead of crediting a free 0.5 half-match (mirrors matching.py).
+        score = clamp(weighted / 0.95)
     if _opposite_signed_effects(left, right):
         score = min(score, 0.49)
     components = {
@@ -918,8 +950,13 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
         "causal": round(causal, 6),
         "causal_evidence": causal_evidence,
         "rank": round(rank, 6),
-        "signed_effect": round(signed, 6),
+        "signed_effect": 0.0 if signed is None else round(signed, 6),
     }
+    if signed_provenance != "none":
+        # Record which provenance the compared signed effects came from (or that the
+        # pair was excluded for mixed provenance) so the grade below -- and any
+        # downstream reader -- can tell a measured comparison from a correlational one.
+        components[f"signed_effect_provenance_{signed_provenance}"] = 1.0
     return {
         "left_feature_id": left.feature_id,
         "right_feature_id": right.feature_id,
@@ -936,6 +973,7 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
         "evidence_grade": _text_pivot_grade(components, min_text_score=min_text_score),
         "text_pivot_source": text_source,
         "matched_terms": sorted(set(content_tokens(_card_search_text(left))) & set(content_tokens(_card_search_text(right)))),
+        # Legacy flat keys kept for one release; prefer agent_next_actions.
         "agent_next_action": (
             f"Validate with interp-lab match --left {left_item['path']} --right {right_item['path']} "
             "followed by interp-lab validate-matches."
@@ -947,7 +985,18 @@ def _text_pivot_match(left_item: dict[str, Any], right_item: dict[str, Any], *, 
             "--right",
             right_item["path"],
         ],
+        "agent_next_actions": [
+            next_action(
+                action_id="validate_text_pivot_pair",
+                title="Re-match these reports, then run validate-matches before treating the pair as equivalent",
+                argv=["interp-lab", "match", "--left", left_item["path"], "--right", right_item["path"]],
+            )
+        ],
     }
+
+
+def _format_command(argv: list[str]) -> str:
+    return " ".join(shlex.quote(str(item)) for item in argv)
 
 
 def _card_search_text(card: FeatureCard) -> str:
@@ -986,27 +1035,36 @@ def _rank_component(left_rank: int, right_rank: int, left_total: int, right_tota
     return clamp(1.0 - abs(left_position - right_position))
 
 
-def _signed_component(left: FeatureCard, right: FeatureCard) -> float:
-    left_signed = _signed_effect(left)
-    right_signed = _signed_effect(right)
+def _signed_component(left: FeatureCard, right: FeatureCard) -> tuple[float | None, str]:
+    """Provenance-gated signed-effect alignment (mirrors matching.py).
+
+    Returns ``(component, provenance)``. The component is only computed when BOTH
+    sides carry a signed effect of the SAME, real provenance: a missing side returns
+    ``(None, "none")`` and a measured-vs-association pair returns ``(None,
+    "mismatch")`` so the axis is excluded and renormalized instead of earning the
+    old free 0.5 half-match, and an intervention-measured effect is never compared
+    against a correlational proxy.
+    """
+    left_signed, left_provenance = signed_effect_with_provenance(left.causal_effects, left.metadata)
+    right_signed, right_provenance = signed_effect_with_provenance(right.causal_effects, right.metadata)
     if left_signed is None or right_signed is None:
-        return 0.5
-    return clamp(1.0 - abs(left_signed - right_signed) / 2.0)
+        return None, "none"
+    if left_provenance != right_provenance:
+        return None, "mismatch"
+    return clamp(1.0 - abs(left_signed - right_signed) / 2.0), left_provenance
 
 
 def _opposite_signed_effects(left: FeatureCard, right: FeatureCard) -> bool:
-    left_signed = _signed_effect(left)
-    right_signed = _signed_effect(right)
+    left_signed, left_provenance = signed_effect_with_provenance(left.causal_effects, left.metadata)
+    right_signed, right_provenance = signed_effect_with_provenance(right.causal_effects, right.metadata)
     if left_signed is None or right_signed is None:
         return False
+    # Mixed provenance is incomparable, not a contradiction: a measured causal
+    # effect must never be graded against a correlational proxy (mirrors the
+    # provenance-mismatch exclusion in matching.match_feature_cards).
+    if left_provenance != right_provenance:
+        return False
     return left_signed * right_signed < 0 and min(abs(left_signed), abs(right_signed)) >= 0.05
-
-
-def _signed_effect(card: FeatureCard) -> float | None:
-    for key in ("signed_causal_effect", "signed_association"):
-        if key in card.causal_effects:
-            return float(card.causal_effects[key])
-    return None
 
 
 def _has_intervention_evidence(card: FeatureCard) -> bool:
@@ -1036,6 +1094,9 @@ def _text_pivot_grade(components: dict[str, float], *, min_text_score: float) ->
         and components["causal_evidence"] >= 1.0
         and components["causal"] >= 0.65
         and components["signed_effect"] >= 0.65
+        # A causal-sounding grade needs intervention-measured signed effects on
+        # BOTH sides; two aligned correlational proxies are not causal support.
+        and components.get("signed_effect_provenance_intervention", 0.0) >= 1.0
     ):
         return "text_pivot_with_causal_support"
     if components["explanation"] >= min_text_score and components["activation"] >= 0.65:
@@ -1137,19 +1198,33 @@ def _family_pair_summaries(pairwise: list[dict[str, Any]]) -> list[dict[str, Any
     return rows
 
 
+def _prose_action(action_id: str, title: str, instruction: str) -> dict[str, str]:
+    """Canonical prose-only action plus the legacy ``description`` key.
+
+    ``description`` is kept for one release for pre-2.3 consumers; prefer
+    ``instruction``.
+    """
+    return {
+        **next_action(action_id=action_id, title=title, instruction=instruction),
+        "description": instruction,
+    }
+
+
 def _consistency_actions(summary: dict[str, Any]) -> list[dict[str, str]]:
     if summary["explanation_drift_count"] or summary["rank_drift_count"]:
         return [
-            {
-                "id": "review_drifting_explanations",
-                "description": "Inspect drifted features, then add paraphrase reports or causal interventions for features that remain important.",
-            }
+            _prose_action(
+                "review_drifting_explanations",
+                "Review the drifting explanations",
+                "Inspect drifted features, then add paraphrase reports or causal interventions for features that remain important.",
+            )
         ]
     return [
-        {
-            "id": "validate_consistent_features",
-            "description": "Use the consistent shared features as candidates for intervention and cross-model validation.",
-        }
+        _prose_action(
+            "validate_consistent_features",
+            "Validate the consistent shared features",
+            "Use the consistent shared features as candidates for intervention and cross-model validation.",
+        )
     ]
 
 
@@ -1158,43 +1233,56 @@ def _family_actions(pairwise: list[dict[str, Any]]) -> list[dict[str, str]]:
     if strong:
         pair = strong[0]
         return [
-            {
-                "id": "validate_cross_family_matches",
-                "description": (
-                    "Run interp-lab match and validate-matches on the strongest cross-family pair: "
-                    f"{pair['left_report']} and {pair['right_report']}."
-                ),
-            }
+            _prose_action(
+                "validate_cross_family_matches",
+                "Validate the strongest cross-family matches",
+                "Run interp-lab match and validate-matches on the strongest cross-family pair: "
+                f"{pair['left_report']} and {pair['right_report']}.",
+            )
         ]
     return [
-        {
-            "id": "collect_more_family_evidence",
-            "description": "Add intervention-backed reports or aligned criteria before claiming model-family transfer.",
-        }
+        _prose_action(
+            "collect_more_family_evidence",
+            "Collect more model-family evidence",
+            "Add intervention-backed reports or aligned criteria before claiming model-family transfer.",
+        )
     ]
 
 
 def _text_pivot_actions(matches: list[dict[str, Any]]) -> list[dict[str, str]]:
     if any(item["evidence_grade"] == "text_pivot_with_causal_support" for item in matches):
         return [
-            {
-                "id": "validate_text_pivot_matches",
-                "description": "Run match validation and targeted interventions for the strongest text-pivot pairs before treating them as equivalent features.",
-            }
+            _prose_action(
+                "validate_text_pivot_matches",
+                "Validate the strongest text-pivot matches",
+                "Run match validation and targeted interventions for the strongest text-pivot pairs before treating them as equivalent features.",
+            )
         ]
     if matches:
         return [
-            {
-                "id": "collect_causal_support_for_text_matches",
-                "description": "Use text-pivot candidates to choose features for intervention records, then rerun the report with causal evidence.",
-            }
+            _prose_action(
+                "collect_causal_support_for_text_matches",
+                "Collect causal support for the text-pivot candidates",
+                "Use text-pivot candidates to choose features for intervention records, then rerun the report with causal evidence.",
+            )
         ]
     return [
-        {
-            "id": "broaden_text_pivot_inputs",
-            "description": "Add richer NLA explanations, activation records, or related reports before repeating text-pivot matching.",
-        }
+        _prose_action(
+            "broaden_text_pivot_inputs",
+            "Broaden the text-pivot inputs",
+            "Add richer NLA explanations, activation records, or related reports before repeating text-pivot matching.",
+        )
     ]
+
+
+def _action_text(action: dict[str, str]) -> str:
+    return str(
+        action.get("instruction")
+        or action.get("command")
+        or action.get("description")
+        or action.get("title")
+        or ""
+    )
 
 
 def _actions_markdown(actions: list[dict[str, str]]) -> list[str]:
@@ -1202,13 +1290,13 @@ def _actions_markdown(actions: list[dict[str, str]]) -> list[str]:
         return []
     lines = ["", "## Agent Next Actions"]
     for action in actions:
-        lines.append(f"- {action['id']}: {action['description']}")
+        lines.append(f"- {action['id']}: {_action_text(action)}")
     return lines
 
 
 def _analysis_html(title: str, body: str, report: dict[str, Any]) -> str:
     actions = "".join(
-        f"<li><strong>{_h(action['id'])}</strong>: {_h(action['description'])}</li>"
+        f"<li><strong>{_h(action['id'])}</strong>: {_h(_action_text(action))}</li>"
         for action in report.get("agent_next_actions", [])
     )
     payload = _h(json.dumps(report, indent=2, sort_keys=True))

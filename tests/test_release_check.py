@@ -42,3 +42,16 @@ def test_release_check_strict_fails_for_incomplete_repo(tmp_path: Path, capsys):
     capsys.readouterr()
 
     assert exit_code == 1
+
+
+def test_release_check_next_actions_use_canonical_shape_with_legacy_key(tmp_path: Path):
+    report = build_release_readiness_report(tmp_path)  # empty repo -> blockers
+
+    assert report["agent_next_actions"]
+    for action in report["agent_next_actions"]:
+        assert action["id"] and action["title"]
+        # Prose guidance lives in "instruction"; the pre-2.3 "next_action" key is
+        # kept alongside for one release.
+        assert action["instruction"]
+        assert action["next_action"] == action["instruction"]
+        assert "command" not in action and "argv" not in action

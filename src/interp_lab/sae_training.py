@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import importlib.util
 import json
 import math
 import random
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -457,7 +459,13 @@ def train_sae(
     if method_key not in {"auto", "torch", "fallback"}:
         raise ValueError("method must be one of: auto, torch, fallback")
     if method_key in {"auto", "torch"}:
-        try:
+        torch_available = _torch_is_available()
+        if method_key == "torch" and not torch_available:
+            raise RuntimeError("PyTorch is required for --method torch")
+        if torch_available:
+            # Run training outside any ImportError guard: a broken torch install
+            # or a mid-training ImportError should surface, not silently produce
+            # a fallback-dictionary artifact.
             return _train_torch_sae(
                 matrix,
                 latent_dim=latent_dim,
@@ -473,9 +481,10 @@ def train_sae(
                 seed=seed,
                 device=device,
             )
-        except ImportError:
-            if method_key == "torch":
-                raise RuntimeError("PyTorch is required for --method torch")
+        print(
+            "PyTorch is not installed; train-sae --method auto is using the fallback dictionary trainer.",
+            file=sys.stderr,
+        )
     return _train_fallback_dictionary(
         matrix,
         latent_dim=latent_dim,
@@ -665,7 +674,7 @@ def export_hf_sae_interventions(
         model_kwargs=model_kwargs,
         tokenizer_kwargs=tokenizer_kwargs,
     )
-    target_ids, resolved_target_tokens = resolve_target_token_ids(
+    target_ids, resolved_target_tokens, target_token_map = resolve_target_token_ids(
         model=model,
         tokenizer=tokenizer,
         prompts=prompts,
@@ -729,6 +738,7 @@ def export_hf_sae_interventions(
                                     "intervention_score": intervention_score,
                                     "metadata": {
                                         "behavior_score": "target_token_probability_mass",
+                                        "resolved_target_token_ids": target_token_map,
                                         "signed_association": round(signed_association, 8),
                                         "steer_sign": sign,
                                         "steer_strength": strength,
@@ -1128,23 +1138,33 @@ def _train_fallback_dictionary(
             direction = [rng.gauss(0.0, 1.0) for _ in range(input_dim)]
             direction = _normalize(direction)
         directions.append(direction)
-    activations = []
-    for row in centered:
-        raw_hidden = [
-            sum(value * weight for value, weight in zip(row, direction)) - l1_coefficient
-            for direction in directions
-        ]
-        activations.append(
-            _apply_sparsity_list(
-                raw_hidden,
-                sparsity=sparsity,
-                top_k=top_k,
-                jump_threshold=jump_threshold,
-            )
-        )
+    # Build the artifact first and derive every metric from encode_with_artifact
+    # so the stored encoder (weights, bias, sparsity config) and the reported
+    # metrics cannot diverge. The l1 soft shrinkage lives in encoder_bias.
+    artifact = _artifact(
+        matrix,
+        method="fallback-dictionary",
+        latent_dim=latent_dim,
+        mean_vector=_round_list(mean_vector),
+        encoder_weight=_round_matrix(directions),
+        encoder_bias=[-l1_coefficient] * latent_dim,
+        decoder_weight=_round_matrix(directions),
+        metrics={},
+        config={
+            "seed": seed,
+            "l1_coefficient": l1_coefficient,
+            "sparsity": sparsity,
+            "top_k": top_k,
+            "jump_threshold": jump_threshold,
+            "validation_fraction": validation_fraction,
+            "dead_latent_threshold": dead_latent_threshold,
+        },
+    )
+    activations = encode_with_artifact(matrix.values, artifact)
+    decoder_rows = artifact["decoder_weight"]
     reconstruction = [
         [
-            sum(hidden_value * direction[dimension] for hidden_value, direction in zip(hidden, directions))
+            sum(hidden_value * decoder_row[dimension] for hidden_value, decoder_row in zip(hidden, decoder_rows))
             for dimension in range(input_dim)
         ]
         for hidden in activations
@@ -1172,35 +1192,18 @@ def _train_fallback_dictionary(
         for index, firing_rate in enumerate(firing_rates)
         if firing_rate <= dead_latent_threshold
     ]
-    return _artifact(
-        matrix,
-        method="fallback-dictionary",
-        latent_dim=latent_dim,
-        mean_vector=_round_list(mean_vector),
-        encoder_weight=_round_matrix(directions),
-        encoder_bias=[0.0] * latent_dim,
-        decoder_weight=_round_matrix(directions),
-        metrics={
-            "reconstruction_mse": round(reconstruction_mse, 8),
-            "train_reconstruction_mse": round(train_mse, 8),
-            "validation_reconstruction_mse": round(validation_mse, 8) if validation_mse is not None else None,
-            "average_l0": round(average_l0, 6),
-            "latent_activation_mean": _round_list([mean(column) for column in zip(*activations)]),
-            "latent_firing_rate": _round_list(firing_rates),
-            "dead_latent_count": len(dead_latents),
-            "dead_latent_indices": dead_latents,
-            "active_latent_fraction": round(1.0 - len(dead_latents) / max(1, latent_dim), 6),
-        },
-        config={
-            "seed": seed,
-            "l1_coefficient": l1_coefficient,
-            "sparsity": sparsity,
-            "top_k": top_k,
-            "jump_threshold": jump_threshold,
-            "validation_fraction": validation_fraction,
-            "dead_latent_threshold": dead_latent_threshold,
-        },
-    )
+    artifact["metrics"] = {
+        "reconstruction_mse": round(reconstruction_mse, 8),
+        "train_reconstruction_mse": round(train_mse, 8),
+        "validation_reconstruction_mse": round(validation_mse, 8) if validation_mse is not None else None,
+        "average_l0": round(average_l0, 6),
+        "latent_activation_mean": _round_list([mean(column) for column in zip(*activations)]),
+        "latent_firing_rate": _round_list(firing_rates),
+        "dead_latent_count": len(dead_latents),
+        "dead_latent_indices": dead_latents,
+        "active_latent_fraction": round(1.0 - len(dead_latents) / max(1, latent_dim), 6),
+    }
+    return artifact
 
 
 def _artifact(
@@ -1426,15 +1429,6 @@ def _score_prompt(
     return round(float(probabilities[target_ids].sum().detach().cpu().item()), 8)
 
 
-def _target_token_ids(tokenizer: Any, target_tokens: list[str]) -> list[int]:
-    token_ids: set[int] = set()
-    for token in target_tokens:
-        ids = tokenizer.encode(token, add_special_tokens=False)
-        if ids:
-            token_ids.add(int(ids[-1]))
-    return sorted(token_ids)
-
-
 def _row_prompt_id(row: MatrixRow) -> str:
     if row.token_index is None:
         return row.prompt_id
@@ -1453,6 +1447,13 @@ def _optional_import(name: str, message: str):
         return importlib.import_module(name)
     except ImportError as exc:
         raise ImportError(message) from exc
+
+
+def _torch_is_available() -> bool:
+    try:
+        return importlib.util.find_spec("torch") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def _resolve_layer(layer: int | None, hidden_state_count: int) -> int:

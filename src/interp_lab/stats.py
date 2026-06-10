@@ -23,10 +23,21 @@ import math
 import random
 from collections.abc import Sequence
 
-# Two-sided Student-t critical values at 95% confidence, indexed by degrees of
-# freedom. Small df is exactly where the toolkit operates (a few prompts), and it
-# is exactly where t diverges most from the normal z, so we keep an exact table
-# for df 1..30 and fall back to a Cornish-Fisher expansion beyond that.
+# Two-sided Student-t critical values, indexed by degrees of freedom. Small df is
+# exactly where the toolkit operates (a few prompts), and it is exactly where t
+# diverges most from the normal z AND where the Cornish-Fisher expansion below is
+# badly anti-conservative (df=1 at 99%: 28.47 vs the true 63.66). So we keep exact
+# tables for the confidences this toolkit uses (0.90/0.95/0.99) at df 1..30 and
+# only fall back to the expansion beyond that, where it is accurate.
+_T_TABLE_90 = {
+    1: 6.314, 2: 2.920, 3: 2.353, 4: 2.132, 5: 2.015,
+    6: 1.943, 7: 1.895, 8: 1.860, 9: 1.833, 10: 1.812,
+    11: 1.796, 12: 1.782, 13: 1.771, 14: 1.761, 15: 1.753,
+    16: 1.746, 17: 1.740, 18: 1.734, 19: 1.729, 20: 1.725,
+    21: 1.721, 22: 1.717, 23: 1.714, 24: 1.711, 25: 1.708,
+    26: 1.706, 27: 1.703, 28: 1.701, 29: 1.699, 30: 1.697,
+}
+
 _T_TABLE_95 = {
     1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
     6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
@@ -35,6 +46,19 @@ _T_TABLE_95 = {
     21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
     26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
 }
+
+_T_TABLE_99 = {
+    1: 63.657, 2: 9.925, 3: 5.841, 4: 4.604, 5: 4.032,
+    6: 3.707, 7: 3.499, 8: 3.355, 9: 3.250, 10: 3.169,
+    11: 3.106, 12: 3.055, 13: 3.012, 14: 2.977, 15: 2.947,
+    16: 2.921, 17: 2.898, 18: 2.878, 19: 2.861, 20: 2.845,
+    21: 2.831, 22: 2.819, 23: 2.807, 24: 2.797, 25: 2.787,
+    26: 2.779, 27: 2.771, 28: 2.763, 29: 2.756, 30: 2.750,
+}
+
+# Ordered low-to-high so "round the confidence UP to the nearest covered level"
+# (the conservative fallback for uncovered confidences at small df) is a scan.
+_T_TABLES = ((0.90, _T_TABLE_90), (0.95, _T_TABLE_95), (0.99, _T_TABLE_99))
 
 _Z_95 = 1.959964
 
@@ -73,11 +97,30 @@ def _inverse_normal_cdf(p: float) -> float:
 
 
 def t_critical(df: int, confidence: float = 0.95) -> float:
-    """Two-sided Student-t critical value for ``df`` degrees of freedom."""
+    """Two-sided Student-t critical value for ``df`` degrees of freedom.
+
+    Exact table values for confidences 0.90/0.95/0.99 at df 1..30. For other
+    confidences at df < 10 -- where the Cornish-Fisher expansion is badly
+    anti-conservative -- the confidence is rounded UP to the nearest tabulated
+    level (a wider, conservative interval); confidences above 0.99 are clamped to
+    the 0.99 table there (documented limitation: still far closer than the
+    expansion). Everything else uses the expansion, which is accurate at
+    moderate-to-large df.
+    """
     if df < 1:
         raise ValueError("degrees of freedom must be >= 1")
-    if abs(confidence - 0.95) < 1e-9 and df in _T_TABLE_95:
-        return _T_TABLE_95[df]
+    exact_table = None
+    for level, table in _T_TABLES:
+        if abs(confidence - level) < 1e-9:
+            exact_table = table
+            break
+    if exact_table is not None and df in exact_table:
+        return exact_table[df]
+    if exact_table is None and df < 10:
+        for level, table in _T_TABLES:
+            if confidence <= level + 1e-9:
+                return table[df]
+        return _T_TABLE_99[df]
     z = _Z_95 if abs(confidence - 0.95) < 1e-9 else _inverse_normal_cdf(1 - (1 - confidence) / 2)
     # Cornish-Fisher expansion of the t-quantile in terms of the normal quantile.
     g1 = (z ** 3 + z) / 4.0

@@ -1,6 +1,6 @@
 """Public Python API for interp-lab."""
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 
 from interp_lab.schema import (
     CandidateMatch,
@@ -36,6 +36,7 @@ from interp_lab.api import (
     attribution_graph,
     attribution_graph_summary,
     build_prompts,
+    capabilities,
     check_explanation_consistency,
     compare,
     compare_model_families,
@@ -91,6 +92,7 @@ __all__ = [
     "attribution_graph",
     "attribution_graph_summary",
     "build_prompts",
+    "capabilities",
     "check_explanation_consistency",
     "compare",
     "compare_model_families",

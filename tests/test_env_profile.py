@@ -24,6 +24,12 @@ def test_collect_environment_profile_is_sanitized_and_routable(tmp_path: Path):
     assert profile["environment_flags"]["GOODFIRE_API_KEY"] == {"present": False}
     assert profile["routing"]["options"]
     assert profile["agent_next_actions"]
+    for action in profile["agent_next_actions"]:
+        # Canonical shape: id+title always; these are runnable, so argv+command.
+        assert action["id"] and action["title"]
+        assert action["argv"][0] == "interp-lab"
+        assert action["command"].startswith("interp-lab ")
+        assert "instruction" not in action
 
 
 def test_environment_routing_prefers_detected_gpu():
